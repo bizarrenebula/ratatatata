@@ -128,17 +128,18 @@ function ink(c,col,lw){c.strokeStyle=col||'rgba(10,8,10,.75)';c.lineWidth=lw||2;
 
 /* ==================== INPUT ==================== */
 var NAMES=['left','right','up','down','jump','fire','nade','swap','start','pause'];
-var kb={},tc={},inp={},prev={};
+var kb={},tc={},inp={},prev={},keyPulse=false,anyKey=false;
 var KEYS={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',
   KeyA:'left',KeyD:'right',KeyW:'up',KeyS:'down',KeyZ:'jump',Space:'jump',KeyK:'jump',
   KeyX:'fire',KeyJ:'fire',KeyC:'nade',KeyL:'nade',ShiftLeft:'swap',KeyQ:'swap',
   Enter:'start',KeyR:'start',KeyP:'pause',Escape:'pause'};
 window.addEventListener('keydown',function(e){var n=KEYS[e.code];
-  if(n){kb[n]=true;initAudio();e.preventDefault();}});
+  if(!e.repeat){keyPulse=true;initAudio();}
+  if(n){kb[n]=true;e.preventDefault();}});
 window.addEventListener('keyup',function(e){var n=KEYS[e.code];if(n){kb[n]=false;e.preventDefault();}});
 window.addEventListener('blur',function(){var i;for(i=0;i<NAMES.length;i++){kb[NAMES[i]]=false;tc[NAMES[i]]=false;}
   stick.ax=0;stick.ay=0;});
-function poll(){var i,n;for(i=0;i<NAMES.length;i++){n=NAMES[i];prev[n]=inp[n];inp[n]=!!(kb[n]||tc[n]);}}
+function poll(){var i,n;anyKey=keyPulse;keyPulse=false;for(i=0;i<NAMES.length;i++){n=NAMES[i];prev[n]=inp[n];inp[n]=!!(kb[n]||tc[n]);}}
 function pressed(n){return inp[n]&&!prev[n];}
 function anyButtonPressed(){for(var i=0;i<NAMES.length;i++)if(pressed(NAMES[i]))return true;return false;}
 
@@ -3397,7 +3398,7 @@ function drawTitle(){
   comicCaption('NOW THE RAT BROS ARE COMING FOR PAYBACK.',w/2,logoY+ry+72,
     Math.min(13,w*0.019),true);
   // The brothers hold the sewer mouth back-to-back, covering both approaches.
-  var heroY=h*0.735,heroGap=Math.min(39,w*0.056),heroScale=Math.min(1.72,h/325);
+  var heroY=h*0.78,heroGap=Math.min(44,w*0.063),heroScale=Math.min(1.95,h/285);
   var savedBro=P.bro,savedWeapon=P.weapon,savedFire=P.fireT,ha=titleHeroAction(0),hb=titleHeroAction(205);
   var swapSpan=180,swapAt=130,swapLocal=tick%swapSpan,swapBlock=Math.floor(tick/swapSpan);
   var sideNow=swapBlock%2?-1:1,swapMix=swapLocal<swapAt?0:clamp((swapLocal-swapAt)/(swapSpan-swapAt),0,1);
@@ -3416,8 +3417,7 @@ function drawTitle(){
   g.restore();
   P.bro=savedBro;P.weapon=savedWeapon;P.fireT=savedFire;
   if(Math.floor(tick/26)%2===0)
-    txt('PRESS  B  /  FIRE  TO START',w/2,h*0.84,Math.min(22,w*0.052),'#efe6d2','center');
-  txt('HI '+('0000000'+hiScore).slice(-7),w/2,h*0.96,Math.min(14,w*0.034),'#4d5a45','center');
+    txt('PRESS ANY KEY TO CONTINUE',w/2,h*0.88,Math.min(22,w*0.052),'#efe6d2','center');
 }
 function drawSelect(){
   var w=view.cssW,h=view.cssH,i,mobile=matchMedia('(pointer:coarse)').matches;
@@ -3651,7 +3651,7 @@ function updateCamera(){
 }
 function step(){
   tick++;poll();
-  var anyStart=pressed('start')||pressed('fire')||pressed('jump')||tapped;
+  var anyStart=anyKey||anyButtonPressed()||tapped;
   if(state==='TITLE'){ if(anyStart){Music.menu();SFX.start();state='SELECT';stateT=0;tapped=false;} return; }
   if(state==='SELECT'){
     if(pressed('left')&&selIdx!==0){selIdx=0;SFX.selectMove();}
@@ -3685,8 +3685,13 @@ function step(){
       else{
         P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.h=42;P.inB=null;P.doorT=0;
         var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;
-        for(var ei=enemies.length-1;ei>=0;ei--)
-          if(Math.abs(enemies[ei].x-sp.x)<300){burst(enemies[ei].x+12,enemies[ei].y+12,'#7a7a7a',6,3);enemies.splice(ei,1);}
+        for(var ei=enemies.length-1;ei>=0;ei--){
+          var nearby=enemies[ei];
+          // Never erase enemies required to unlock the stage during respawn cleanup.
+          if(!nearby.miniBoss&&!nearby.objective&&Math.abs(nearby.x-sp.x)<300){
+            burst(nearby.x+12,nearby.y+12,'#7a7a7a',6,3);enemies.splice(ei,1);
+          }
+        }
         if(WEAPONS[P.weapon].ammo!==Infinity&&P.ammo<=0)equipWeapon('scratch');
         P.nades=Math.max(P.nades,3);ebullets=[];nades=[];
         state='PLAY';
@@ -3697,7 +3702,8 @@ function step(){
   if(state==='CLEAR'){stateT++;if(stateT>150)startStage(stage+1);return;}
   if(state==='GAMEOVER'||state==='WIN'){
     stateT++;
-    if(stateT>60&&(pressed('start')||pressed('fire')||pressed('jump'))){
+    if(stateT>60&&(anyKey||anyButtonPressed()||tapped)){
+      tapped=false;
       if(score>hiScore)hiScore=score;Music.menu();state='TITLE';stateT=0;
     }
     return;
@@ -3798,9 +3804,9 @@ function render(){
   if(state==='PAUSE')overlay('PAUSED','','PRESS START','#e8c25a');
   if(state==='DEAD')overlay('SQUEAK!','a brother down','','#e05a4a');
   if(state==='CLEAR')overlay('STAGE CLEAR','+'+(1000+stage*250)+' PTS','','#8fbf6a');
-  if(state==='GAMEOVER')overlay('GAME OVER','SCORE '+score,'PRESS FIRE','#e05a4a');
+  if(state==='GAMEOVER')overlay('GAME OVER','SCORE '+score,'PRESS ANY KEY','#e05a4a');
   if(state==='WIN'){
-    overlay('P.C.U.-9 IS SCRAP','FINAL SCORE '+score,'PRESS FIRE','#e8c25a');
+    overlay('P.C.U.-9 IS SCRAP','FINAL SCORE '+score,'PRESS ANY KEY','#e8c25a');
     txt('the sewer belongs to the brothers again',view.cssW/2,view.cssH*0.44+92,
       Math.min(14,view.cssW*0.034),'#8fbf6a','center');
   }
