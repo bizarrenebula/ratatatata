@@ -972,7 +972,9 @@ function equipWeapon(wep,ammo){
   if(!P.weapons)P.weapons=['scratch'];
   if(P.weapons.indexOf(wep)<0)P.weapons.push(wep);
   if(!P.weaponAmmo)P.weaponAmmo={scratch:Infinity};
-  if(ammo!==undefined)P.weaponAmmo[wep]=Math.max(P.weaponAmmo[wep]||0,ammo);
+  // Intrinsically unlimited weapons can never inherit or retain a finite pickup count.
+  if(WEAPONS[wep].ammo===Infinity)P.weaponAmmo[wep]=Infinity;
+  else if(ammo!==undefined)P.weaponAmmo[wep]=Math.max(P.weaponAmmo[wep]||0,ammo);
   else if(P.weaponAmmo[wep]===undefined)P.weaponAmmo[wep]=WEAPONS[wep].ammo;
   P.weapon=wep;P.ammo=P.weaponAmmo[wep];P.cd=Math.max(P.cd,5);
 }
@@ -3199,13 +3201,8 @@ function txt(s,x,y,size,col,align,font){
 function comicCaption(s,x,y,size,quiet){
   var font=size+'px Impact,"Arial Narrow Bold",sans-serif';
   g.save();g.font=font;g.textAlign='center';
-  var textW=g.measureText(s).width,padX=Math.max(10,size*.7),boxW=Math.min(view.cssW*.94,textW+padX*2);
-  var boxH=Math.max(17,size*1.3),boxX=x-boxW/2,boxY=y-size*.88;
-  g.shadowColor='rgba(0,0,0,.72)';g.shadowBlur=8;g.shadowOffsetY=3;
-  g.fillStyle=quiet?'rgba(5,10,12,.82)':'rgba(8,13,15,.9)';rr(g,boxX,boxY,boxW,boxH,4);g.fill();
-  g.shadowColor='transparent';g.strokeStyle=quiet?'rgba(190,205,195,.22)':'rgba(220,230,216,.32)';g.lineWidth=1;
-  rr(g,boxX+.5,boxY+.5,boxW-1,boxH-1,4);g.stroke();
-  g.fillStyle=quiet?'#d5ddd4':'#f2eee2';g.fillText(s,x,y);
+  g.shadowColor='rgba(0,0,0,.96)';g.shadowBlur=Math.max(5,size*.45);g.shadowOffsetY=Math.max(2,size*.14);
+  g.fillStyle=quiet?'#e8ece8':'#ffffff';g.fillText(s,x,y);
   g.textAlign='left';g.restore();
 }
 var _vigG=null,_vigK='';
@@ -3369,7 +3366,7 @@ function drawTitle(){
   comicCaption('NOW THE RAT BROS ARE COMING FOR PAYBACK.',w/2,logoY+ry+72,
     Math.min(13,w*0.019),true);
   // The brothers hold the sewer mouth back-to-back, covering both approaches.
-  var heroY=h*0.715,heroGap=Math.min(31,w*0.045),heroScale=Math.min(1.42,h/390);
+  var heroY=h*0.735,heroGap=Math.min(39,w*0.056),heroScale=Math.min(1.72,h/325);
   var savedBro=P.bro,savedWeapon=P.weapon,savedFire=P.fireT,ha=titleHeroAction(0),hb=titleHeroAction(205);
   var swapSpan=180,swapAt=130,swapLocal=tick%swapSpan,swapBlock=Math.floor(tick/swapSpan);
   var sideNow=swapBlock%2?-1:1,swapMix=swapLocal<swapAt?0:clamp((swapLocal-swapAt)/(swapSpan-swapAt),0,1);
@@ -3389,8 +3386,6 @@ function drawTitle(){
   P.bro=savedBro;P.weapon=savedWeapon;P.fireT=savedFire;
   if(Math.floor(tick/26)%2===0)
     txt('PRESS  B  /  FIRE  TO START',w/2,h*0.84,Math.min(22,w*0.052),'#efe6d2','center');
-  txt('MOVE: WASD / ARROWS  \u2022  ROLL: MOVE + DOWN / AIR + DOWN  \u2022  JUMP: Z / SPACE  \u2022  FIRE: X  \u2022  GRENADE: HOLD C  \u2022  SWAP: Q',
-    w/2,h*0.91,Math.min(12,w*0.0155),'#9aa58f','center','Arial,sans-serif');
   txt('HI '+('0000000'+hiScore).slice(-7),w/2,h*0.96,Math.min(14,w*0.034),'#4d5a45','center');
 }
 function drawSelect(){
@@ -3416,8 +3411,12 @@ function drawSelect(){
     txt(B.perk,cx+cw/2,cy+ch*0.975,Math.min(10.5,cw*0.072),sel?'#8fbf6a':'#5c6b4a','center');
     txt('HP '+B.maxHp,cx+cw/2,cy+20,Math.min(15,cw*0.10),'#cfc4ad','center');
   }
+  txt('MOVE: WASD / ARROWS  \u2022  JUMP: Z / SPACE  \u2022  FIRE: X  \u2022  GRENADE: HOLD C',
+    w/2,h*.775,Math.min(12,w*.021),'#aeb8a5','center','Arial,sans-serif');
+  txt('ROLL: MOVE + DOWN / AIR + DOWN  \u2022  SWAP: Q',
+    w/2,h*.805,Math.min(12,w*.021),'#8f9b87','center','Arial,sans-serif');
   if(mobile){
-    var bw=w*.40,bh=Math.min(46,h*.09),bx=(w-bw)/2,by=h*.79;
+    var bw=w*.40,bh=Math.min(42,h*.075),bx=(w-bw)/2,by=h*.835;
     g.fillStyle='rgba(201,162,74,.13)';rr(g,bx,by,bw,bh,9);g.fill();
     g.strokeStyle='rgba(232,194,90,.68)';g.lineWidth=2;rr(g,bx+.5,by+.5,bw-1,bh-1,9);g.stroke();
     txt('CLICK HERE TO START',w/2,by+bh*.66,Math.min(17,w*.038),'#efe6d2','center');
