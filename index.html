@@ -276,9 +276,11 @@ function padTouch(e){
      brother, which is what makes strafing and 360 aim independent. */
   tc.left = moveStick.ax<-DZ; tc.right= moveStick.ax>DZ;
   tc.up   = moveStick.ay<-DZ; tc.down = moveStick.ay>DZ;
-  /* Jump wants a deliberate straight-up push, not the incidental up you get
-     from steering diagonally, so it needs the vertical axis to dominate. */
-  tc.upjump = moveStick.ay<-0.62&&Math.abs(moveStick.ay)>Math.abs(moveStick.ax)*1.25;
+  /* Jump wants a deliberate upward push, not the incidental up you get from
+     steering, so the vertical axis has to dominate — but only just, because an
+     up-and-back diagonal is how you ask for a backward leap. How far past the
+     threshold the thumb sits is the jump's power (see stickUpThrottle). */
+  tc.upjump = moveStick.ay<-0.55&&Math.abs(moveStick.ay)>Math.abs(moveStick.ax);
   /* Aim stick doubles as the trigger. */
   mobileAutoFire = Math.hypot(aimStick.ax,aimStick.ay)>AUTOFIRE_MIN;
   tc.fire = tc.fire||mobileAutoFire;
@@ -586,8 +588,8 @@ function makePlayer(b){
   P={bro:b,x:80,y:300,vx:0,vy:0,w:P_W*charScale,h:P_STAND*charScale,facing:1,onGround:false,prone:false,
      hp:B.maxHp,maxHp:B.maxHp,weapon:'scratch',weapons:['scratch'],weaponAmmo:{scratch:Infinity},ammo:Infinity,nades:4,cd:0,inv:90,jumpHold:0,
      jumps:0,coyote:0,anim:0,dead:false,checkX:80,checkY:300,swapCd:0,fireT:0,lean:0,
-     inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,
-     rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,
+     inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,rollPow:1,
+     rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,airBoost:0,jumpLock:0,
      interiorFade:0,exitFocus:0,entryLock:0,stair:null,stairT:0,ladder:null,dropT:0};
 }
 
@@ -1048,7 +1050,7 @@ function startStage(n){
   P.x=60;P.y=380;P.vx=0;P.vy=0;P.inv=110;P.dead=false;P.checkX=60;P.checkY=380;
   P.inB=null;P.doorT=0;P.atDoor=null;P.nadeReady=false;P.nadeCharge=0;
   P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.stair=null;P.stairT=0;P.ladder=null;P.dropT=0;
-  P.jumpHold=0;
+  P.jumpHold=0;P.airBoost=0;P.jumpLock=0;
   cam.x=0;cam.shake=0;cam.zoom=1;
   if(level.boss)spawnBoss();
   makeMotes();
@@ -1305,6 +1307,35 @@ function autoAimTarget(base){
 /* Touch controls run the twin-stick rules: the right thumb owns facing outright,
    the left one only ever moves. */
 function twinStick(){return matchMedia('(pointer:coarse)').matches;}
+/* ---- analogue launch (touch only) ----
+   The move stick is the throttle for both halves of the dodge gesture: how far
+   the thumb sits from the centre of the well decides how high and how far a
+   jump carries, and how fast and how long a roll runs. Sideways lean picks the
+   direction, so an up-and-back or down-and-back push leaps or dives backwards
+   while the aim stick keeps the gun on target. */
+var STICK_FLOOR=0.30, STICK_FULL=0.92;
+function coarsePointer(){return matchMedia('(pointer:coarse)').matches;}
+function stickThrottle(mag){return clamp((mag-STICK_FLOOR)/(STICK_FULL-STICK_FLOOR),0,1);}
+function stickUpThrottle(){return coarsePointer()?stickThrottle(Math.max(0,-moveStick.ay)):0;}
+function stickDownThrottle(){return coarsePointer()?stickThrottle(Math.max(0,moveStick.ay)):0;}
+/* A jump fired with the stick idle — the JUMP button on its own — keeps the
+   familiar tap-hop that hold-to-rise then extends. Any upward push replaces
+   that with its own analogue power instead, from a nudge-high hop to a
+   full-height leap, plus the sideways lunge that gives the jump its reach. */
+function jumpLaunch(B){
+  if(!coarsePointer())return {vy:B.jump,hold:0,lunge:0};
+  var t=stickUpThrottle();
+  if(t<=0)return {vy:B.jump*0.70,hold:14,lunge:0};
+  return {vy:B.jump*(0.70+0.30*t),hold:0,lunge:moveStick.ax*t*B.speed*1.8};
+}
+/* scale lets the double jump reuse the launch at a fraction of its strength. */
+function applyJumpLaunch(jl,scale){
+  P.vy=jl.vy*(scale||1);P.jumpHold=scale?Math.round(jl.hold*0.8):jl.hold;
+  if(jl.lunge){P.vx=jl.lunge*(scale||1);P.airBoost=Math.abs(P.vx);}
+}
+/* Roll power runs off the downward push the same way, so a light crouch-flick
+   is a short shuffle and a full press is a committed dive. */
+function rollPower(){return coarsePointer()?0.78+0.34*stickDownThrottle():1;}
 function aimVector(){
   var ax=P.facing,ay=0,mobile=matchMedia('(pointer:coarse)').matches;
   /* On mobile the right stick owns aim outright — raw, not the smoothed value
@@ -1581,7 +1612,7 @@ function updateStairTraversal(B){
   }
   fl=P.stair.flight;
   if(pressed('jump')){
-    P.stair=null;P.vy=matchMedia('(pointer:coarse)').matches?B.jump*.70:B.jump;P.jumpHold=14;P.onGround=false;P.jumps=1;P.coyote=0;SFX.jump();
+    P.stair=null;applyJumpLaunch(jumpLaunch(B));P.onGround=false;P.jumps=1;P.coyote=0;P.jumpLock=7;SFX.jump();
     updateBuildingState();return true;
   }
   var flightSign=fl.highX>=fl.lowX?1:-1;
@@ -1630,6 +1661,7 @@ function updatePlayer(){
   if(P.swapCd>0)P.swapCd--;
   if(P.fireT>0)P.fireT--;
   if(P.rollCd>0)P.rollCd--;
+  if(P.jumpLock>0)P.jumpLock--;
   if(P.dropT>0)P.dropT--;
   if(P.entryLock>0){P.entryLock--;P.vx*=.72;}
   if(pressed('swap')&&P.swapCd<=0){
@@ -1649,13 +1681,19 @@ function updatePlayer(){
   }
   if(P.onGround&&P.rollAir)P.rollAir=false;
   if(P.onGround&&P.rollT<=0)P.airRollUsed=false;
+  // A lunging jump's extra reach is spent the moment the feet are back down.
+  if(P.onGround)P.airBoost=0;
   var groundRoll=P.onGround&&(inp.left||inp.right||Math.abs(P.vx)>0.8);
   var airRoll=!P.onGround&&!P.airRollUsed;
   if(!dropNow&&P.rollT<=0&&P.rollCd<=0&&!P.atDoor&&pressed('down')&&(groundRoll||airRoll)){
     P.rollDir=inp.left?-1:inp.right?1:(Math.abs(P.vx)>.2?(P.vx<0?-1:1):P.facing);
-    P.rollAir=airRoll;P.rollMax=airRoll?20:24;P.rollT=P.rollMax;P.facing=P.rollDir;
-    if(airRoll){P.airRollUsed=true;P.vx=P.rollDir*Math.max(Math.abs(P.vx),B.big?3.8:4.4);}
-    else P.vx=P.rollDir*(B.big?5.4:6.3);
+    P.rollPow=rollPower();
+    P.rollAir=airRoll;P.rollMax=Math.round((airRoll?20:24)*P.rollPow);P.rollT=P.rollMax;
+    /* Twin-stick keeps facing on the aim thumb, so a roll away from the gun
+       reads as the backward dive it is instead of spinning the brother round. */
+    if(!twinStick())P.facing=P.rollDir;
+    if(airRoll){P.airRollUsed=true;P.vx=P.rollDir*Math.max(Math.abs(P.vx),(B.big?3.8:4.4)*P.rollPow);}
+    else P.vx=P.rollDir*(B.big?5.4:6.3)*P.rollPow;
     SFX.roll();
     burst(P.x+P.w/2,P.y+P.h,'#9b8d72',7,2.2);
   }
@@ -1666,11 +1704,13 @@ function updatePlayer(){
   if(th!==P.h){P.y+=(P.h-th);P.h=th;}
   if(tw!==P.w){P.x+=(P.w-tw)/2;P.w=tw;}
   var acc=P.onGround?(clearanceCrouch?0.52:0.85):0.55;
-  var maxS=rolling?(B.big?5.4:6.3):B.speed*(clearanceCrouch?0.42:(P.prone?0:1));
+  var maxS=rolling?(B.big?5.4:6.3)*P.rollPow:B.speed*(clearanceCrouch?0.42:(P.prone?0:1));
+  // A lunging jump owns the air until it lands, so its reach survives the walk cap.
+  if(!rolling&&!P.onGround&&!clearanceCrouch&&P.airBoost>maxS)maxS=P.airBoost;
   if(rolling){
     P.rollT--;
-    if(P.rollAir)P.vx=P.rollDir*Math.max(B.big?3.8:4.4,Math.abs(P.vx)*.992);
-    else P.vx=P.rollDir*(B.big?5.4:6.3)*(0.72+0.28*P.rollT/P.rollMax);
+    if(P.rollAir)P.vx=P.rollDir*Math.max((B.big?3.8:4.4)*P.rollPow,Math.abs(P.vx)*.992);
+    else P.vx=P.rollDir*(B.big?5.4:6.3)*P.rollPow*(0.72+0.28*P.rollT/P.rollMax);
     if(!P.rollAir&&P.rollT%6===0)addPart(P.x+P.w/2,P.y+P.h,rnd(-1,1),rnd(-1.6,-.3),'#8f8069',16,2.5,.18);
     if(P.rollT<=0)P.rollCd=18;
   } else if(inp.left&&(!P.prone||clearanceCrouch)){P.vx-=acc;if(!twinStick())P.facing=-1;}
@@ -1690,11 +1730,19 @@ function updatePlayer(){
      wherever climbing is possible and as jump everywhere else. */
   var stickJump=pressed('upjump')&&!P.ladder&&!P.stair&&!P.atDoor;
   if(!rolling&&(pressed('jump')||stickJump)&&!dropNow){
-    if(P.onGround||P.coyote>0){P.vy=matchMedia('(pointer:coarse)').matches?B.jump*.70:B.jump;P.jumpHold=14;P.jumps=1;P.coyote=0;SFX.jump();}
-    else if(B.dbl&&P.jumps<2){P.vy=B.jump*0.72;P.jumpHold=11;P.jumps=2;SFX.jump();
+    /* Both triggers read the same analogue launch, so tapping JUMP with the
+       stick held up-and-back leaps backwards exactly like the stick gesture. */
+    var jl=jumpLaunch(B);
+    if(P.onGround||P.coyote>0){applyJumpLaunch(jl);P.jumps=1;P.coyote=0;P.jumpLock=7;SFX.jump();}
+    /* Button and stick both being jump means a single eager gesture can raise
+       two edges a frame apart; the lock keeps that from eating the double jump
+       before the brother has even left the ground. */
+    else if(B.dbl&&P.jumps<2&&P.jumpLock<=0){applyJumpLaunch(jl,0.72);P.jumps=2;P.jumpLock=7;SFX.jump();
       burst(P.x+P.w/2,P.y+P.h,'#cfe8ff',10,2.5);}
   }
-  if(matchMedia('(pointer:coarse)').matches&&P.jumpHold>0&&P.vy<0){
+  /* The hold-to-rise boost only belongs to the stick-idle tap-hop; an analogue
+     launch has already been given its full height and clears jumpHold. */
+  if(coarsePointer()&&P.jumpHold>0&&P.vy<0){
     if(inp.jump){P.vy-=.26;P.jumpHold--;}else {P.vy*=.68;P.jumpHold=0;}
   }
   P.vy+=0.52;if(P.vy>15)P.vy=15;
@@ -4011,10 +4059,17 @@ function drawSelect(){
     txt(B.perk,cx+cw/2,cy+ch*0.975,Math.min(10.5,cw*0.072),sel?'#8fbf6a':'#5c6b4a','center');
     txt('HP '+B.maxHp,cx+cw/2,cy+20,Math.min(15,cw*0.10),'#cfc4ad','center');
   }
-  txt('MOVE: WASD / ARROWS  \u2022  JUMP: Z / SPACE  \u2022  FIRE: X  \u2022  GRENADE: HOLD C',
-    w/2,h*.775,Math.min(12,w*.021),'#aeb8a5','center','Arial,sans-serif');
-  txt('ROLL: MOVE + DOWN / AIR + DOWN  \u2022  SWAP: Q',
-    w/2,h*.805,Math.min(12,w*.021),'#8f9b87','center','Arial,sans-serif');
+  if(mobile){
+    txt('LEFT STICK: UP JUMPS, DOWN ROLLS  \u2022  RIGHT STICK AIMS + FIRES',
+      w/2,h*.775,Math.min(12,w*.021),'#aeb8a5','center','Arial,sans-serif');
+    txt('PUSH FURTHER FOR A BIGGER LEAP  \u2022  PUSH BACK TO GO BACKWARDS',
+      w/2,h*.805,Math.min(12,w*.021),'#8f9b87','center','Arial,sans-serif');
+  } else {
+    txt('MOVE: WASD / ARROWS  \u2022  JUMP: Z / SPACE  \u2022  FIRE: X  \u2022  GRENADE: HOLD C',
+      w/2,h*.775,Math.min(12,w*.021),'#aeb8a5','center','Arial,sans-serif');
+    txt('ROLL: MOVE + DOWN / AIR + DOWN  \u2022  SWAP: Q',
+      w/2,h*.805,Math.min(12,w*.021),'#8f9b87','center','Arial,sans-serif');
+  }
   if(mobile){
     var bw=w*.40,bh=Math.min(42,h*.075),bx=(w-bw)/2,by=h*.835;
     g.fillStyle='rgba(201,162,74,.13)';rr(g,bx,by,bw,bh,9);g.fill();
@@ -4093,7 +4148,7 @@ function drawPad(){
   pg.setTransform(DPR,0,0,DPR,0,0);
   pg.clearRect(0,0,w,h);
   // Floating mobile controls: low-contrast until touched, bright enough to read over action.
-  drawFloatStick(moveStick,'MOVE  ·  ↑ JUMP',false);
+  drawFloatStick(moveStick,'MOVE  ·  ↑ JUMP  ·  ↓ ROLL',false);
   drawFloatStick(aimStick,'AIM  ·  PUSH = FIRE',true);
   for(i=0;i<BTNS.length;i++){
     var mb=BTNS[i],pressedAlpha=mb.p?.32:.14;
@@ -4271,7 +4326,7 @@ function step(){
     if(stateT>90){
       if(lives<=0){state='GAMEOVER';stateT=0;if(score>hiScore)hiScore=score;}
       else{
-        P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
+        P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.airBoost=0;P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
         var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;
         for(var ei=enemies.length-1;ei>=0;ei--){
           var nearby=enemies[ei];
