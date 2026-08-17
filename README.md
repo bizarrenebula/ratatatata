@@ -26,7 +26,7 @@ Then open <http://localhost:8000>.
 | Start / restart | Enter or R |
 | Pause | P or Escape |
 
-On compatible phones, touch controls float over the full-screen landscape game: an analog stick on the left, four action buttons on the right, and pause in the upper-left corner.
+On compatible phones, touch controls float over the full-screen landscape game: an analog movement/aim stick on the left, four action buttons on the right, a vertical weapon swiper at the far-right edge, and pause in the upper-left corner. Tap Jump for a short hop or hold it for a higher jump. Aim assistance can be switched on or off on the character-select screen.
 
 ## Project structure
 
@@ -46,7 +46,7 @@ The current implementation intentionally remains in one HTML file so this initia
 
 - Responsive Canvas 2D rendering and mobile arcade controls
 - Two switchable characters with different movement and combat stats
-- Pistol, machine gun, shotgun, flamethrower, bat, and grenades
+- Starting claw/bite combat plus collectible knives, pistols, machine guns, shotguns, flamethrowers, bazookas, and grenades
 - Procedural stage layouts, platforms, enterable buildings, and pickups
-- Mouse, bat, weasel, and cat enemies plus a final boss
+- Mouse, bat, weasel, cat, and machine-gun lizard enemies plus a final boss
 - Eleven visual stage themes, particles, lighting, camera shake, and synthesized sound effects
