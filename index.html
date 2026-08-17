@@ -139,7 +139,10 @@ function ell(c,x,y,rx,ry){c.beginPath();c.ellipse(x,y,Math.abs(rx),Math.abs(ry),
 function ink(c,col,lw){c.strokeStyle=col||'rgba(10,8,10,.75)';c.lineWidth=lw||2;c.stroke();}
 
 /* ==================== INPUT ==================== */
-var NAMES=['left','right','up','down','jump','fire','nade','swap','start','pause'];
+/* upjump is a synthetic control: a decisive upward push of the move stick,
+   kept separate from `up` so climbing (which tolerates diagonals) and jumping
+   (which must not fire when you merely angle the stick) can use the same axis. */
+var NAMES=['left','right','up','down','jump','upjump','fire','nade','swap','start','pause'];
 var kb={},tc={},inp={},prev={},keyPulse=false,anyKey=false;
 var KEYS={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',
   KeyA:'left',KeyD:'right',KeyW:'up',KeyS:'down',KeyZ:'jump',Space:'jump',KeyK:'jump',
@@ -164,12 +167,18 @@ var aimStick ={cx:0,cy:0,r:0,ax:0,ay:0,vx:0,vy:0,id:-1};
 /* Weapon switching is a swipe across the brother himself. shown counts down the
    frames the gallery stays up over his head after the last drag. */
 var wepSwipe={id:-1,lastX:0,shown:0}, WEAPON_SWIPE_PX=34;
+/* Shooting is the aim stick's job and jumping is the move stick's, so the only
+   buttons left are the occasional ones: grenades on the left, and a jump button
+   on the right kept for crouch-drops (down + jump cannot be expressed by one
+   stick) and for jumping while stood at a ladder. */
 var BTNS=[
-  {n:'fire', l:'B', sub:'FIRE',  x:0,y:0,r:0,p:0,hue:'#e2402f',side:'L'},
   {n:'nade', l:'C', sub:'BOMB',  x:0,y:0,r:0,p:0,hue:'#e8b23a',side:'L'},
   {n:'jump', l:'A', sub:'JUMP',  x:0,y:0,r:0,p:0,hue:'#e2402f',side:'R'},
   {n:'swap', l:'D', sub:'SWAP',  x:0,y:0,r:0,p:0,hue:'#e8b23a',side:'R'}
 ];
+/* Push the aim stick past this and the weapon fires; a lighter push only turns
+   and aims, so you can face a threat without burning ammo. */
+var AUTOFIRE_MIN=0.55, mobileAutoFire=false;
 var SMALL=[
   {n:'start',l:'START',x:0,y:0,r:0,p:0},
   {n:'pause',l:'PAUSE',x:0,y:0,r:0,p:0}
@@ -188,11 +197,10 @@ function layoutPad(){
   /* Buttons sit clear above the ring of the stick their thumb shares:
      fire + bomb over the move stick, jump + swap over the aim stick. */
   var by=moveStick.cy-r-br*1.45;
-  BTNS[0].x=moveStick.cx+br*1.45; BTNS[0].y=by;              // FIRE
-  BTNS[1].x=moveStick.cx-br*1.55; BTNS[1].y=by+br*0.62;      // BOMB
-  BTNS[2].x=aimStick.cx-br*1.45;  BTNS[2].y=by;              // JUMP
-  BTNS[3].x=aimStick.cx+br*1.55;  BTNS[3].y=by+br*0.62;      // SWAP
-  BTNS[0].r=br;BTNS[1].r=br*0.86;BTNS[2].r=br;BTNS[3].r=br*0.86;
+  BTNS[0].x=moveStick.cx+br*0.2;  BTNS[0].y=by;              // BOMB
+  BTNS[1].x=aimStick.cx-br*1.45;  BTNS[1].y=by;              // JUMP
+  BTNS[2].x=aimStick.cx+br*1.55;  BTNS[2].y=by+br*0.62;      // SWAP
+  BTNS[0].r=br;BTNS[1].r=br;BTNS[2].r=br*0.86;
   SMALL[0].r=0;SMALL[1].r=0;
 }
 /* The pad canvas covers the whole viewport, so it — not the game canvas —
@@ -258,6 +266,12 @@ function padTouch(e){
      brother, which is what makes strafing and 360 aim independent. */
   tc.left = moveStick.ax<-DZ; tc.right= moveStick.ax>DZ;
   tc.up   = moveStick.ay<-DZ; tc.down = moveStick.ay>DZ;
+  /* Jump wants a deliberate straight-up push, not the incidental up you get
+     from steering diagonally, so it needs the vertical axis to dominate. */
+  tc.upjump = moveStick.ay<-0.62&&Math.abs(moveStick.ay)>Math.abs(moveStick.ax)*1.25;
+  /* Aim stick doubles as the trigger. */
+  mobileAutoFire = Math.hypot(aimStick.ax,aimStick.ay)>AUTOFIRE_MIN;
+  tc.fire = tc.fire||mobileAutoFire;
 }
 ['touchstart','touchmove','touchend','touchcancel'].forEach(function(n){
   pcv.addEventListener(n,padTouch,{passive:false});
@@ -1278,6 +1292,11 @@ function autoAimTarget(base){
   }
   return best;
 }
+/* True while the aim stick is pushed: the right thumb, not the direction of
+   travel, decides which way the brother is turned. */
+function aimOwnsFacing(){
+  return matchMedia('(pointer:coarse)').matches&&Math.hypot(aimStick.ax,aimStick.ay)>0.24;
+}
 function aimVector(){
   var ax=P.facing,ay=0,mobile=matchMedia('(pointer:coarse)').matches;
   /* On mobile the right stick owns aim outright — raw, not the smoothed value
@@ -1573,7 +1592,7 @@ function updateStairTraversal(B){
   }
   // Stair traversal owns movement, but never suppresses combat input.
   var stairWeapon=WEAPONS[P.weapon],stairBite=pressed('fire')&&tryBite();
-  if(!stairBite&&inp.fire&&(stairWeapon.auto||pressed('fire')))fireWeapon();
+  if(!stairBite&&inp.fire&&(stairWeapon.auto||mobileAutoFire||pressed('fire')))fireWeapon();
   updateBuildingState();
   return true;
 }
@@ -1642,13 +1661,22 @@ function updatePlayer(){
     else P.vx=P.rollDir*(B.big?5.4:6.3)*(0.72+0.28*P.rollT/P.rollMax);
     if(!P.rollAir&&P.rollT%6===0)addPart(P.x+P.w/2,P.y+P.h,rnd(-1,1),rnd(-1.6,-.3),'#8f8069',16,2.5,.18);
     if(P.rollT<=0)P.rollCd=18;
-  } else if(inp.left&&(!P.prone||clearanceCrouch)){P.vx-=acc;P.facing=-1;}
-  else if(inp.right&&(!P.prone||clearanceCrouch)){P.vx+=acc;P.facing=1;}
+  } else if(inp.left&&(!P.prone||clearanceCrouch)){P.vx-=acc;if(!aimOwnsFacing())P.facing=-1;}
+  else if(inp.right&&(!P.prone||clearanceCrouch)){P.vx+=acc;if(!aimOwnsFacing())P.facing=1;}
   else P.vx*=P.onGround?0.72:0.90;
+  /* Twin-stick strafing: with the aim stick live, the body turns to face where
+     you are shooting, not where you are walking, so you can back away from a
+     fight without turning your gun away from it. */
+  if(aimOwnsFacing()&&Math.abs(aimStick.ax)>0.2)P.facing=aimStick.ax<0?-1:1;
   P.vx=clamp(P.vx,-maxS,maxS);
   P.lean=lerp(P.lean,clamp(P.vx/B.speed,-1,1),0.2);
   if(P.onGround)P.coyote=7;else if(P.coyote>0)P.coyote--;
-  if(!rolling&&pressed('jump')&&!dropNow){
+  /* Up on the move stick jumps — but only once the contextual climbs have had
+     their turn. Ladders and stairs return out of updatePlayer above this line
+     when they engage, and a door is checked explicitly, so "up" reads as climb
+     wherever climbing is possible and as jump everywhere else. */
+  var stickJump=pressed('upjump')&&!P.ladder&&!P.stair&&!P.atDoor;
+  if(!rolling&&(pressed('jump')||stickJump)&&!dropNow){
     if(P.onGround||P.coyote>0){P.vy=matchMedia('(pointer:coarse)').matches?B.jump*.70:B.jump;P.jumpHold=14;P.jumps=1;P.coyote=0;SFX.jump();}
     else if(B.dbl&&P.jumps<2){P.vy=B.jump*0.72;P.jumpHold=11;P.jumps=2;SFX.jump();
       burst(P.x+P.w/2,P.y+P.h,'#cfe8ff',10,2.5);}
@@ -1665,8 +1693,13 @@ function updatePlayer(){
   if(P.y>600)killPlayer();
   var w=WEAPONS[P.weapon];
   if(!rolling){
+    /* Held auto-fire has no rising edge, so semi-autos would otherwise fire a
+       single shot per push; their own cooldown is what paces them here. The
+       bite stays on the rising edge only — rolling it into held fire made the
+       brother melee forever whenever an enemy was close, and tryBite turns him
+       to face his target, which would wrestle the aim stick for facing. */
     var bit=pressed('fire')&&tryBite();
-    if(!bit&&inp.fire&&(w.auto||pressed('fire')))fireWeapon();
+    if(!bit&&inp.fire&&(w.auto||mobileAutoFire||pressed('fire')))fireWeapon();
   }
   if(!P.nadeReady&&!rolling&&pressed('nade')&&P.nades>0){
     P.nadeReady=true;P.nadeCharge=0;P.nadeTier=0;tone(260,0.06,'triangle',0.025,390);
@@ -3997,9 +4030,16 @@ function drawFloatStick(s,label,isAim){
   s.vx=lerp(s.vx,s.ax,.35);s.vy=lerp(s.vy,s.ay,.35);
   var sx=s.cx,sy=s.cy,R=s.r,kx=sx+s.vx*R*.48,ky=sy+s.vy*R*.48;
   var live=Math.hypot(s.ax,s.ay)>.24;
-  pg.fillStyle='rgba(5,8,10,.20)';ell(pg,sx,sy,R,R);pg.fill();
-  pg.strokeStyle=live?'rgba(255,220,125,.46)':'rgba(225,235,238,.25)';
-  pg.lineWidth=2;ell(pg,sx,sy,R,R);pg.stroke();
+  var firing=isAim&&Math.hypot(s.ax,s.ay)>AUTOFIRE_MIN;
+  pg.fillStyle=firing?'rgba(60,12,8,.26)':'rgba(5,8,10,.20)';ell(pg,sx,sy,R,R);pg.fill();
+  pg.strokeStyle=firing?'rgba(255,120,90,.75)':live?'rgba(255,220,125,.46)':'rgba(225,235,238,.25)';
+  pg.lineWidth=firing?3:2;ell(pg,sx,sy,R,R);pg.stroke();
+  if(isAim){
+    /* The band between "aiming" and "firing" is worth showing: inside it you can
+       turn to face a threat without spending ammo. */
+    pg.strokeStyle='rgba(255,140,110,.22)';pg.lineWidth=1;
+    ell(pg,sx,sy,R*AUTOFIRE_MIN,R*AUTOFIRE_MIN);pg.stroke();
+  }
   if(isAim){
     /* A full-circle tick ring and a live bearing line sell the 360 aim. */
     pg.strokeStyle='rgba(225,235,238,.16)';pg.lineWidth=1;
@@ -4023,8 +4063,8 @@ function drawPad(){
   pg.setTransform(DPR,0,0,DPR,0,0);
   pg.clearRect(0,0,w,h);
   // Floating mobile controls: low-contrast until touched, bright enough to read over action.
-  drawFloatStick(moveStick,'MOVE',false);
-  drawFloatStick(aimStick,'AIM',true);
+  drawFloatStick(moveStick,'MOVE  ·  ↑ JUMP',false);
+  drawFloatStick(aimStick,'AIM  ·  PUSH = FIRE',true);
   for(i=0;i<BTNS.length;i++){
     var mb=BTNS[i],pressedAlpha=mb.p?.32:.14;
     pg.fillStyle='rgba(12,16,18,'+pressedAlpha+')';ell(pg,mb.x,mb.y,mb.r,mb.r);pg.fill();

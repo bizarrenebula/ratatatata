@@ -30,16 +30,18 @@ On compatible phones, twin sticks float over the full-screen landscape game:
 
 | Control | Position | Does |
 | --- | --- | --- |
-| Move stick | bottom left | Left/right walks; up/down takes stairs and ladders |
-| Aim stick | bottom right | Aims the weapon through a full 360°, independent of movement |
-| Fire, Bomb | above the move stick | Shoot and throw grenades |
-| Jump, Swap | above the aim stick | Tap Jump for a short hop, hold it for a higher one |
+| Move stick | bottom left | Left/right walks; a straight push up jumps, or climbs where stairs or a door are in reach; down crouches |
+| Aim stick | bottom right | Aims through a full 360°, and **fires by itself** once pushed past the inner ring — a lighter push turns and aims without spending ammo |
+| Bomb | above the move stick | Hold to charge a grenade, release to throw |
+| Jump, Swap | above the aim stick | Jump button covers crouch-drops (down + jump), which one stick cannot express |
 | Weapon change | on the character | Swipe left/right across the brother; the gallery appears over his head |
 | Pause | upper-left corner | |
 
-Each stick owns the area around its own well, so walking still works when the
-camera parks the brother on top of the move stick. Aim assistance can be
-switched on or off on the character-select screen.
+Neither thumb has to leave its stick to move, aim or shoot. While the aim stick
+is pushed it also decides which way the brother faces, so you can retreat left
+while still shooting right. Each stick owns the area around its own well, so
+walking still works when the camera parks the brother on top of the move stick.
+Aim assistance can be switched on or off on the character-select screen.
 
 ## Project structure
 
