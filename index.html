@@ -153,7 +153,7 @@ window.addEventListener('keydown',function(e){var n=KEYS[e.code];
   if(n){kb[n]=true;e.preventDefault();}});
 window.addEventListener('keyup',function(e){var n=KEYS[e.code];if(n){kb[n]=false;e.preventDefault();}});
 window.addEventListener('blur',function(){var i;for(i=0;i<NAMES.length;i++){kb[NAMES[i]]=false;tc[NAMES[i]]=false;}
-  moveStick.ax=0;moveStick.ay=0;aimStick.ax=0;aimStick.ay=0;wepSwipe.id=-1;});
+  moveStick.ax=0;moveStick.ay=0;aimStick.ax=0;aimStick.ay=0;wepSwipe.id=-1;padOwner={};});
 function poll(){var i,n;anyKey=keyPulse;keyPulse=false;for(i=0;i<NAMES.length;i++){n=NAMES[i];prev[n]=inp[n];inp[n]=!!(kb[n]||tc[n]);}}
 function pressed(n){return inp[n]&&!prev[n];}
 function anyButtonPressed(){for(var i=0;i<NAMES.length;i++)if(pressed(NAMES[i]))return true;return false;}
@@ -167,6 +167,10 @@ var aimStick ={cx:0,cy:0,r:0,ax:0,ay:0,vx:0,vy:0,id:-1};
 /* Weapon switching is a swipe across the brother himself. shown counts down the
    frames the gallery stays up over his head after the last drag. */
 var wepSwipe={id:-1,lastX:0,shown:0}, WEAPON_SWIPE_PX=34;
+/* touch identifier -> what that finger is driving ('move' | 'aim' | 'swipe' |
+   button index). Ownership is decided once, when the finger lands, and held
+   until it lifts. */
+var padOwner={};
 /* Shooting is the aim stick's job and jumping is the move stick's, so the only
    buttons left are the occasional ones: grenades on the left, and a jump button
    on the right kept for crouch-drops (down + jump cannot be expressed by one
@@ -222,43 +226,49 @@ function stepWeaponSwipe(t){
      the brother's head moves the same way the thumb does. */
   if(Math.abs(dx)>=WEAPON_SWIPE_PX){cycleWeapon(dx<0?1:-1);wepSwipe.lastX=t.clientX;}
 }
+/* Decides what a NEW touch belongs to. Only ever called on the frame a finger
+   first lands; after that the touch keeps its owner (see padOwner) so dragging
+   a thumb up out of a stick well cannot press the button sitting above it. */
+function claimTouch(t,x,y){
+  var k;
+  for(k=0;k<BTNS.length;k++){
+    var b=BTNS[k];
+    if(Math.hypot(x-b.x,y-b.y)<b.r*1.32)return k;
+  }
+  /* Each stick owns the area around its own well, tested before the character,
+     because the camera regularly parks the brother on top of the move stick. */
+  if(Math.hypot(x-moveStick.cx,y-moveStick.cy)<moveStick.r*1.35)return 'move';
+  if(Math.hypot(x-aimStick.cx,y-aimStick.cy)<aimStick.r*1.35)return 'aim';
+  if(wepSwipe.id<0&&touchOnPlayer(t)){
+    wepSwipe.id=t.identifier;wepSwipe.lastX=t.clientX;wepSwipe.shown=90;return 'swipe';
+  }
+  return (x<pad.cssW*0.5)?'move':'aim';
+}
 function padTouch(e){
   e.preventDefault(); initAudio();if(!landscapeAsked)requestLandscape();
   var i,k; for(k=0;k<NAMES.length;k++) tc[NAMES[k]]=false;
   for(k=0;k<BTNS.length;k++)BTNS[k].p=0;
   SMALL[0].p=0;SMALL[1].p=0;
-  var mx=0,my=0,mHeld=false,ax=0,ay=0,aHeld=false,swipeAlive=false;
+  var mx=0,my=0,mHeld=false,ax=0,ay=0,aHeld=false,seen={};
   var r=pcv.getBoundingClientRect();
   for(i=0;i<e.touches.length;i++){
-    var t=e.touches[i];
+    var t=e.touches[i],id=t.identifier;
     var x=(t.clientX-r.left)/r.width*pad.cssW, y=(t.clientY-r.top)/r.height*pad.cssH;
-    // 1. a weapon swipe already in progress keeps its own finger
-    if(wepSwipe.id>=0&&t.identifier===wepSwipe.id){swipeAlive=true;stepWeaponSwipe(t);continue;}
-    // 2. buttons win over the sticks they sit above
-    var got=false;
-    for(k=0;k<BTNS.length;k++){
-      var b=BTNS[k];
-      if(Math.hypot(x-b.x,y-b.y)<b.r*1.32){tc[b.n]=true;b.p=1;got=true;break;}
-    }
-    if(got)continue;
-    /* 3. each stick owns the area around its own well. This has to be tested
-       before the character, because the camera regularly parks the brother
-       right on top of the move stick — without this, walking would be eaten by
-       the weapon swipe exactly when the player is trying to walk. */
-    var near=(Math.hypot(x-moveStick.cx,y-moveStick.cy)<moveStick.r*1.35)?moveStick:
-             (Math.hypot(x-aimStick.cx,y-aimStick.cy)<aimStick.r*1.35)?aimStick:null;
-    // 4. a fresh touch on the brother, clear of both wells, claims the gallery
-    if(!near&&wepSwipe.id<0&&touchOnPlayer(t)){
-      wepSwipe.id=t.identifier;wepSwipe.lastX=t.clientX;wepSwipe.shown=90;
-      swipeAlive=true;continue;
-    }
-    // 5. anything else drives the stick on its half of the screen
-    var s=near||((x<pad.cssW*0.5)?moveStick:aimStick);
+    seen[id]=1;
+    if(!(id in padOwner))padOwner[id]=claimTouch(t,x,y);
+    var own=padOwner[id];
+    if(own==='swipe'){stepWeaponSwipe(t);continue;}
+    if(typeof own==='number'){var b2=BTNS[own];tc[b2.n]=true;b2.p=1;continue;}
+    var s=(own==='aim')?aimStick:moveStick;
     var dx=x-s.cx, dy=y-s.cy, d=Math.hypot(dx,dy)||1, m=Math.min(1,d/(s.r*1.15));
     if(s===moveStick){mx=dx/d*m; my=dy/d*m; mHeld=true;}
     else {ax=dx/d*m; ay=dy/d*m; aHeld=true;}
   }
-  if(!swipeAlive)wepSwipe.id=-1;
+  for(var oid in padOwner){
+    if(seen[oid])continue;
+    if(padOwner[oid]==='swipe')wepSwipe.id=-1;
+    delete padOwner[oid];
+  }
   moveStick.ax=mHeld?mx:0; moveStick.ay=mHeld?my:0;
   aimStick.ax =aHeld?ax:0; aimStick.ay =aHeld?ay:0;
   var DZ=0.34;
@@ -577,7 +587,7 @@ function makePlayer(b){
      hp:B.maxHp,maxHp:B.maxHp,weapon:'scratch',weapons:['scratch'],weaponAmmo:{scratch:Infinity},ammo:Infinity,nades:4,cd:0,inv:90,jumpHold:0,
      jumps:0,coyote:0,anim:0,dead:false,checkX:80,checkY:300,swapCd:0,fireT:0,lean:0,
      inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,
-     rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,nadeTier:0,
+     rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,
      interiorFade:0,exitFocus:0,entryLock:0,stair:null,stairT:0,ladder:null,dropT:0};
 }
 
@@ -1036,7 +1046,7 @@ function startStage(n){
   decals=[];flashes=[];lights=[];marks=[];
   var i;for(i=0;i<level.items.length;i++)items.push(level.items[i]);
   P.x=60;P.y=380;P.vx=0;P.vy=0;P.inv=110;P.dead=false;P.checkX=60;P.checkY=380;
-  P.inB=null;P.doorT=0;P.atDoor=null;P.nadeReady=false;P.nadeCharge=0;P.nadeTier=0;
+  P.inB=null;P.doorT=0;P.atDoor=null;P.nadeReady=false;P.nadeCharge=0;
   P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.stair=null;P.stairT=0;P.ladder=null;P.dropT=0;
   P.jumpHold=0;
   cam.x=0;cam.shake=0;cam.zoom=1;
@@ -1292,11 +1302,9 @@ function autoAimTarget(base){
   }
   return best;
 }
-/* True while the aim stick is pushed: the right thumb, not the direction of
-   travel, decides which way the brother is turned. */
-function aimOwnsFacing(){
-  return matchMedia('(pointer:coarse)').matches&&Math.hypot(aimStick.ax,aimStick.ay)>0.24;
-}
+/* Touch controls run the twin-stick rules: the right thumb owns facing outright,
+   the left one only ever moves. */
+function twinStick(){return matchMedia('(pointer:coarse)').matches;}
 function aimVector(){
   var ax=P.facing,ay=0,mobile=matchMedia('(pointer:coarse)').matches;
   /* On mobile the right stick owns aim outright — raw, not the smoothed value
@@ -1374,16 +1382,20 @@ function fireWeapon(){
   else SFX.shoot();
   P.vx-=aim.x*(P.weapon==='spread'?0.7:0.15);
 }
+/* Grenades charge smoothly rather than through three fixed steps. Let go
+   straight away and the brother lobs one just past his feet; hold and the throw
+   stretches out continuously, topping out after NADE_CHARGE_MAX frames. */
+var NADE_CHARGE_MAX=90;   // 1.5s at the fixed 60Hz step
 function grenadeVelocity(charge){
-  var tier=charge>=180?2:charge>=20?1:0,up=inp.up?1:0;
-  var speeds=up?[2.2,2.9,3.5]:[3.4,5.2,7.0],lifts=up?[-8.5,-9.8,-11]:[-5.6,-6.6,-7.5];
-  return {tier:tier,vx:P.facing*speeds[tier],vy:lifts[tier]};
+  var t=clamp((charge||0)/NADE_CHARGE_MAX,0,1),up=!!inp.up;
+  var minS=up?2.2:3.4, maxS=up?3.5:7.0, minL=up?-8.5:-5.6, maxL=up?-11:-7.5;
+  return {power:t,vx:P.facing*lerp(minS,maxS,t),vy:lerp(minL,maxL,t)};
 }
 function throwNade(charge){
   if(P.nades<=0)return;
   P.nades--;var v=grenadeVelocity(charge||0);
-  nades.push({x:P.x+P.w/2,y:P.y+8,vx:v.vx,vy:v.vy,life:80,r:7,mine:true,sp:0,tier:v.tier});
-  tone(380,0.08,'triangle',0.04,660);
+  nades.push({x:P.x+P.w/2,y:P.y+8,vx:v.vx,vy:v.vy,life:80,r:7,mine:true,sp:0,power:v.power});
+  tone(340+300*v.power,0.08,'triangle',0.04,660+420*v.power);
 }
 function solidFor(p,o){
   if(p.dead||(p.obstacle&&p.obstacle.dead))return false;
@@ -1661,13 +1673,14 @@ function updatePlayer(){
     else P.vx=P.rollDir*(B.big?5.4:6.3)*(0.72+0.28*P.rollT/P.rollMax);
     if(!P.rollAir&&P.rollT%6===0)addPart(P.x+P.w/2,P.y+P.h,rnd(-1,1),rnd(-1.6,-.3),'#8f8069',16,2.5,.18);
     if(P.rollT<=0)P.rollCd=18;
-  } else if(inp.left&&(!P.prone||clearanceCrouch)){P.vx-=acc;if(!aimOwnsFacing())P.facing=-1;}
-  else if(inp.right&&(!P.prone||clearanceCrouch)){P.vx+=acc;if(!aimOwnsFacing())P.facing=1;}
+  } else if(inp.left&&(!P.prone||clearanceCrouch)){P.vx-=acc;if(!twinStick())P.facing=-1;}
+  else if(inp.right&&(!P.prone||clearanceCrouch)){P.vx+=acc;if(!twinStick())P.facing=1;}
   else P.vx*=P.onGround?0.72:0.90;
-  /* Twin-stick strafing: with the aim stick live, the body turns to face where
-     you are shooting, not where you are walking, so you can back away from a
-     fight without turning your gun away from it. */
-  if(aimOwnsFacing()&&Math.abs(aimStick.ax)>0.2)P.facing=aimStick.ax<0?-1:1;
+  /* Twin-stick strafing: on touch controls the move stick only ever walks the
+     brother forwards or backwards — which way his body is turned belongs to the
+     aim stick alone, so retreating never swings the gun off target. With the
+     aim stick centred he simply holds his last heading. */
+  if(twinStick()&&Math.abs(aimStick.ax)>0.2)P.facing=aimStick.ax<0?-1:1;
   P.vx=clamp(P.vx,-maxS,maxS);
   P.lean=lerp(P.lean,clamp(P.vx/B.speed,-1,1),0.2);
   if(P.onGround)P.coyote=7;else if(P.coyote>0)P.coyote--;
@@ -1702,15 +1715,22 @@ function updatePlayer(){
     if(!bit&&inp.fire&&(w.auto||mobileAutoFire||pressed('fire')))fireWeapon();
   }
   if(!P.nadeReady&&!rolling&&pressed('nade')&&P.nades>0){
-    P.nadeReady=true;P.nadeCharge=0;P.nadeTier=0;tone(260,0.06,'triangle',0.025,390);
+    P.nadeReady=true;P.nadeCharge=0;tone(260,0.06,'triangle',0.025,390);
   }
   if(P.nadeReady){
     if(inp.nade){
-      P.nadeCharge=Math.min(180,P.nadeCharge+1);
-      var nt=P.nadeCharge>=180?2:P.nadeCharge>=20?1:0;
-      if(nt!==P.nadeTier){P.nadeTier=nt;tone(nt===2?820:540,0.09,'triangle',0.035,nt===2?1100:720);}
+      var wasFull=P.nadeCharge>=NADE_CHARGE_MAX;
+      P.nadeCharge=Math.min(NADE_CHARGE_MAX,P.nadeCharge+1);
+      /* The winding pitch rises with the charge instead of clicking between
+         tiers, so the throw you hear matches the throw you get. */
+      if(P.nadeCharge<NADE_CHARGE_MAX){
+        if(P.nadeCharge%7===0){
+          var wind=P.nadeCharge/NADE_CHARGE_MAX;
+          tone(430+430*wind,0.04,'triangle',0.016,540+520*wind);
+        }
+      } else if(!wasFull)tone(980,0.10,'triangle',0.038,1320);
     } else {
-      throwNade(P.nadeCharge);P.nadeReady=false;P.nadeCharge=0;P.nadeTier=0;
+      throwNade(P.nadeCharge);P.nadeReady=false;P.nadeCharge=0;
     }
   }
   P.anim+=Math.abs(P.vx)*0.20;
@@ -3603,15 +3623,22 @@ function paintWeaponWheel(){
 function paintProjectiles(){
   var i;
   if(P.nadeReady&&!P.dead){
-    var gv=grenadeVelocity(P.nadeCharge),gx=P.x+P.w/2,gy=P.y+8;
-    g.fillStyle=gv.tier===2?'rgba(255,210,80,.82)':gv.tier===1?'rgba(185,225,130,.72)':'rgba(210,225,220,.62)';
+    var gv=grenadeVelocity(P.nadeCharge),gx=P.x+P.w/2,gy=P.y+8,pw=gv.power;
+    /* Arc colour rides the charge: pale at a lob, green through the middle,
+       hot amber at full stretch — a readout with no steps in it. */
+    var cr=Math.round(lerp(210,255,pw)),cg=Math.round(lerp(225,205,pw)),cb=Math.round(lerp(220,80,pw));
+    g.fillStyle='rgba('+cr+','+cg+','+cb+','+(0.62+0.24*pw)+')';
     for(var gt=3;gt<=30;gt+=3){
       var ga=1-gt/36;g.globalAlpha=ga;ell(g,gx+gv.vx*gt,gy+gv.vy*gt+0.21*gt*gt,2.3,2.3);g.fill();
     }
     g.globalAlpha=1;
-    for(var gp=0;gp<3;gp++){
-      g.fillStyle=gp<=gv.tier?'#e8c25a':'rgba(255,255,255,.18)';ell(g,gx-10+gp*10,P.y-10,3.2,3.2);g.fill();
-    }
+    // continuous charge meter over the brother
+    var mw=34*charScale,mh=4.5*charScale,mx=gx-mw/2,my=P.y-13*charScale;
+    g.fillStyle='rgba(8,10,12,.55)';rr(g,mx,my,mw,mh,mh/2);g.fill();
+    g.fillStyle='rgba('+cr+','+cg+','+cb+',.95)';
+    if(pw>0){rr(g,mx,my,Math.max(mh,mw*pw),mh,mh/2);g.fill();}
+    g.strokeStyle=pw>=1?'rgba(255,225,145,.9)':'rgba(255,255,255,.28)';
+    g.lineWidth=1.2;rr(g,mx,my,mw,mh,mh/2);g.stroke();
   }
   for(i=0;i<bullets.length;i++){
     var b=bullets[i];

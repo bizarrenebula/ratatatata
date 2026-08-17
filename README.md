@@ -21,7 +21,7 @@ Then open <http://localhost:8000>.
 | Drop through | Hold Down and press Jump while standing on a platform or interior floor |
 | Jump | Z, K, or Space |
 | Fire / bite | X or J; automatically bites when an enemy is within melee range |
-| Grenade | Hold C or L to ready; release for short, medium, or three-second maximum throw |
+| Grenade | Hold C or L; range grows smoothly with the hold, from a short lob on a tap to maximum at 1.5 seconds |
 | Swap brother | Left Shift or Q |
 | Start / restart | Enter or R |
 | Pause | P or Escape |
@@ -32,7 +32,7 @@ On compatible phones, twin sticks float over the full-screen landscape game:
 | --- | --- | --- |
 | Move stick | bottom left | Left/right walks; a straight push up jumps, or climbs where stairs or a door are in reach; down crouches |
 | Aim stick | bottom right | Aims through a full 360°, and **fires by itself** once pushed past the inner ring — a lighter push turns and aims without spending ammo |
-| Bomb | above the move stick | Hold to charge a grenade, release to throw |
+| Bomb | above the move stick | Tap to lob a grenade at your feet; hold up to 1.5 seconds for range |
 | Jump, Swap | above the aim stick | Jump button covers crouch-drops (down + jump), which one stick cannot express |
 | Weapon change | on the character | Swipe left/right across the brother; the gallery appears over his head |
 | Pause | upper-left corner | |
