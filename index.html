@@ -2991,33 +2991,36 @@ function drawBoss(){
 }
 
 /* ==================== ENTITY PAINT ==================== */
-function drawWeaponPickupIcon(x,y,wep,col){
-  g.save();g.translate(x,y);g.lineJoin='round';g.lineCap='round';
-  g.strokeStyle='rgba(5,6,7,.9)';g.lineWidth=1.5;g.fillStyle=col;
-  if(wep==='knife'){
-    g.rotate(-.48);g.fillStyle='#e8edf0';g.beginPath();g.moveTo(-11,-2);g.lineTo(5,-3);g.lineTo(11,0);g.lineTo(5,3);g.lineTo(-11,2);g.closePath();g.fill();g.stroke();
-    g.fillStyle='#70452b';rr(g,-13,-4,5,8,1.5);g.fill();g.stroke();
+function drawWeaponIcon(c,x,y,wep,col,scale){
+  c.save();c.translate(x,y);c.scale(scale||1,scale||1);c.lineJoin='round';c.lineCap='round';
+  c.strokeStyle='rgba(5,6,7,.9)';c.lineWidth=1.5;c.fillStyle=col;
+  if(wep==='scratch'){
+    c.strokeStyle='#e8d6a8';c.lineWidth=3;c.beginPath();
+    c.moveTo(-9,7);c.quadraticCurveTo(-2,-5,5,-9);c.moveTo(-3,9);c.quadraticCurveTo(4,-3,11,-7);c.stroke();
+  }else if(wep==='knife'){
+    c.rotate(-.48);c.fillStyle='#e8edf0';c.beginPath();c.moveTo(-11,-2);c.lineTo(5,-3);c.lineTo(11,0);c.lineTo(5,3);c.lineTo(-11,2);c.closePath();c.fill();c.stroke();
+    c.fillStyle='#70452b';rr(c,-13,-4,5,8,1.5);c.fill();c.stroke();
   }else if(wep==='pistol'){
-    g.fillStyle='#c7cbd0';rr(g,-10,-6,18,7,2);g.fill();g.stroke();g.fillStyle='#6b4a31';
-    g.beginPath();g.moveTo(2,0);g.lineTo(8,0);g.lineTo(5,10);g.lineTo(-1,10);g.closePath();g.fill();g.stroke();
-    g.fillStyle='#24282d';g.fillRect(8,-4,5,3);
+    c.fillStyle='#c7cbd0';rr(c,-10,-6,18,7,2);c.fill();c.stroke();c.fillStyle='#6b4a31';
+    c.beginPath();c.moveTo(2,0);c.lineTo(8,0);c.lineTo(5,10);c.lineTo(-1,10);c.closePath();c.fill();c.stroke();
+    c.fillStyle='#24282d';c.fillRect(8,-4,5,3);
   }else if(wep==='machinegun'){
-    g.fillStyle='#3b4245';rr(g,-10,-5,17,7,2);g.fill();g.stroke();g.fillRect(6,-4,9,2.5);
-    g.fillStyle='#7b4b2b';g.beginPath();g.moveTo(-10,-3);g.lineTo(-15,-7);g.lineTo(-15,4);g.lineTo(-9,2);g.closePath();g.fill();g.stroke();
-    g.fillStyle='#25282b';ell(g,0,5,6,6);g.fill();g.stroke();
+    c.fillStyle='#3b4245';rr(c,-10,-5,17,7,2);c.fill();c.stroke();c.fillRect(6,-4,9,2.5);
+    c.fillStyle='#7b4b2b';c.beginPath();c.moveTo(-10,-3);c.lineTo(-15,-7);c.lineTo(-15,4);c.lineTo(-9,2);c.closePath();c.fill();c.stroke();
+    c.fillStyle='#25282b';ell(c,0,5,6,6);c.fill();c.stroke();
   }else if(wep==='spread'){
-    g.rotate(-.12);g.strokeStyle='#171a1c';g.lineWidth=4;g.beginPath();g.moveTo(-5,-2);g.lineTo(14,-2);g.moveTo(-5,2);g.lineTo(14,2);g.stroke();
-    g.strokeStyle='#8a512d';g.lineWidth=7;g.beginPath();g.moveTo(-14,5);g.lineTo(-3,0);g.stroke();
+    c.rotate(-.12);c.strokeStyle='#171a1c';c.lineWidth=4;c.beginPath();c.moveTo(-5,-2);c.lineTo(14,-2);c.moveTo(-5,2);c.lineTo(14,2);c.stroke();
+    c.strokeStyle='#8a512d';c.lineWidth=7;c.beginPath();c.moveTo(-14,5);c.lineTo(-3,0);c.stroke();
   }else if(wep==='flame'){
-    g.fillStyle='#a44728';ell(g,-5,2,7,9);g.fill();g.stroke();g.fillStyle='#353b3e';rr(g,0,-5,10,6,2);g.fill();g.stroke();
-    g.strokeStyle='#555d60';g.lineWidth=3;g.beginPath();g.moveTo(8,-3);g.lineTo(14,-7);g.stroke();
-    g.fillStyle='#ff9a32';g.beginPath();g.moveTo(13,-9);g.lineTo(18,-7);g.lineTo(13,-4);g.closePath();g.fill();
+    c.fillStyle='#a44728';ell(c,-5,2,7,9);c.fill();c.stroke();c.fillStyle='#353b3e';rr(c,0,-5,10,6,2);c.fill();c.stroke();
+    c.strokeStyle='#555d60';c.lineWidth=3;c.beginPath();c.moveTo(8,-3);c.lineTo(14,-7);c.stroke();
+    c.fillStyle='#ff9a32';c.beginPath();c.moveTo(13,-9);c.lineTo(18,-7);c.lineTo(13,-4);c.closePath();c.fill();
   }else if(wep==='bazooka'){
-    g.rotate(-.08);g.fillStyle='#4f633b';rr(g,-13,-5,25,10,4);g.fill();g.stroke();
-    g.fillStyle='#b86a32';g.beginPath();g.moveTo(10,-7);g.lineTo(16,-3);g.lineTo(16,3);g.lineTo(10,7);g.closePath();g.fill();g.stroke();
-    g.strokeStyle='#252b22';g.lineWidth=3;g.beginPath();g.moveTo(-4,5);g.lineTo(-2,11);g.stroke();
+    c.rotate(-.08);c.fillStyle='#4f633b';rr(c,-13,-5,25,10,4);c.fill();c.stroke();
+    c.fillStyle='#b86a32';c.beginPath();c.moveTo(10,-7);c.lineTo(16,-3);c.lineTo(16,3);c.lineTo(10,7);c.closePath();c.fill();c.stroke();
+    c.strokeStyle='#252b22';c.lineWidth=3;c.beginPath();c.moveTo(-4,5);c.lineTo(-2,11);c.stroke();
   }
-  g.restore();
+  c.restore();
 }
 function paintItems(){
   var i;
@@ -3052,7 +3055,7 @@ function paintItems(){
       g.fillStyle=lin(g,x-14,y-13,x+14,y+13,[[0,'#4a4034'],[1,'#1d1a16']]);
       rr(g,x-14,y-13,28,26,4);g.fill();ink(g,'rgba(6,6,8,.85)',2);
       g.fillStyle='rgba(255,255,255,.08)';rr(g,x-11,y-10,22,20,3);g.fill();
-      drawWeaponPickupIcon(x,y,it.wep,col);
+      drawWeaponIcon(g,x,y,it.wep,col,1);
     }
     g.globalAlpha=1;
   }
@@ -3509,7 +3512,7 @@ function drawPad(){
     var idx=(wi+i+inv.length)%inv.length,wep=inv[idx],wy=gy+i*gr*2.15,active=i===0;
     pg.fillStyle=active?'rgba(201,162,74,.30)':'rgba(8,12,14,.22)';ell(pg,gx,wy,gr*(active?1.05:.82),gr*(active?1.05:.82));pg.fill();
     pg.strokeStyle=active?'rgba(255,225,145,.72)':'rgba(245,248,248,.25)';pg.lineWidth=active?2:1;pg.stroke();
-    pg.fillStyle=active?'#ffe29a':'rgba(255,255,255,.55)';pg.font='bold '+Math.max(8,gr*.55)+'px Arial';pg.textAlign='center';pg.fillText(WEAPONS[wep].name.slice(0,3),gx,wy+3);
+    drawWeaponIcon(pg,gx,wy,wep,WEAPONS[wep].col||'#fff',(active?.76:.58)*gr/19);
   }
   pg.fillStyle='rgba(255,255,255,.45)';pg.font='bold 8px Arial';pg.fillText('SWIPE',gx,gy+gr*4.1);
   pg.textAlign='left';pg.textBaseline='alphabetic';
