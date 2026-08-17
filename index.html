@@ -1184,15 +1184,22 @@ function updateStairTraversal(B){
     P.stair=null;P.vy=B.jump;P.onGround=false;P.jumps=1;P.coyote=0;SFX.jump();
     updateBuildingState();return true;
   }
-  var travel=((fl.highX-fl.lowX)*P.stair.dir)>0?1:-1;
-  if((travel>0&&inp.right)||(travel<0&&inp.left)){
-    P.stairT=clamp(P.stairT+P.stair.dir*0.038,0,1);
-    P.anim+=0.34;
+  var flightSign=fl.highX>=fl.lowX?1:-1;
+  var axis=(inp.right?1:0)-(inp.left?1:0),travel=axis*flightSign;
+  // A vertical stick/key direction also works once attached to the flight,
+  // which makes mobile stair movement controllable without a diagonal hold.
+  if(!axis)travel=(inp.up?1:0)-(inp.down?1:0);
+  var stairLen=Math.hypot(fl.highX-fl.lowX,fl.highY-fl.lowY);
+  if(travel){
+    P.stairT=clamp(P.stairT+travel*(B.speed/stairLen),0,1);
+    P.anim+=Math.abs(travel)*0.22;
   }
   var sx=lerp(fl.lowX,fl.highX,P.stairT),sy=lerp(fl.lowY,fl.highY,P.stairT);
   P.x=sx-P.w/2;P.y=sy-P.h;P.vx=0;P.vy=0;P.onGround=true;P.prone=false;
-  P.facing=travel;
-  if((P.stair.dir>0&&P.stairT>=1)||(P.stair.dir<0&&P.stairT<=0)){
+  if(travel)P.facing=flightSign*(travel>0?1:-1);
+  // Continuing to walk beyond either landing immediately hands control back
+  // to normal movement instead of holding the player until input is released.
+  if((travel>0&&P.stairT>=1)||(travel<0&&P.stairT<=0)){
     P.stair=null;P.checkX=P.x;P.checkY=P.y;
   }
   updateBuildingState();
