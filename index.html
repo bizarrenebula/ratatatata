@@ -1023,8 +1023,15 @@ function droppableSurfaceBelow(o){
   }
   return false;
 }
-function blockedAt(o,x,y,w){
-  var i,p,t={x:x,y:y,w:w||o.w,h:o.h};
+function playerNeedsClearanceCrouch(){
+  if(!P.onGround)return false;
+  var feet=P.y+P.h,standY=feet-42;
+  // Test the full standing body at the current feet position. Touching the
+  // ground is harmless; only overlapping geometry overhead keeps us low.
+  return blockedAt(P,P.x+2,standY,P.w-4,42);
+}
+function blockedAt(o,x,y,w,h){
+  var i,p,t={x:x,y:y,w:w||o.w,h:h||o.h};
   for(i=0;i<level.plats.length;i++){
     p=level.plats[i];
     if(!solidFor(p,o))continue;
@@ -1221,7 +1228,7 @@ function updateLadderTraversal(){
   return true;
 }
 function updatePlayer(){
-  var B=BROS[P.bro],dropNow=false;
+  var B=BROS[P.bro],dropNow=false,clearanceCrouch=false;
   if(P.cd>0)P.cd--;
   if(P.inv>0)P.inv--;
   if(P.swapCd>0)P.swapCd--;
@@ -1257,18 +1264,20 @@ function updatePlayer(){
     burst(P.x+P.w/2,P.y+P.h,'#9b8d72',7,2.2);
   }
   var rolling=P.rollT>0;
-  P.prone=rolling||(inp.down&&P.onGround&&!inp.left&&!inp.right);
+  clearanceCrouch=!rolling&&playerNeedsClearanceCrouch();
+  P.prone=rolling||clearanceCrouch||(inp.down&&P.onGround&&!inp.left&&!inp.right);
   var th=P.prone?24:42;
   if(th!==P.h){P.y+=(P.h-th);P.h=th;}
-  var acc=P.onGround?0.85:0.55,maxS=rolling?(B.big?5.4:6.3):B.speed*(P.prone?0:1);
+  var acc=P.onGround?(clearanceCrouch?0.52:0.85):0.55;
+  var maxS=rolling?(B.big?5.4:6.3):B.speed*(clearanceCrouch?0.42:(P.prone?0:1));
   if(rolling){
     P.rollT--;
     if(P.rollAir)P.vx=P.rollDir*Math.max(B.big?3.8:4.4,Math.abs(P.vx)*.992);
     else P.vx=P.rollDir*(B.big?5.4:6.3)*(0.72+0.28*P.rollT/P.rollMax);
     if(!P.rollAir&&P.rollT%6===0)addPart(P.x+P.w/2,P.y+P.h,rnd(-1,1),rnd(-1.6,-.3),'#8f8069',16,2.5,.18);
     if(P.rollT<=0)P.rollCd=18;
-  } else if(inp.left&&!P.prone){P.vx-=acc;P.facing=-1;}
-  else if(inp.right&&!P.prone){P.vx+=acc;P.facing=1;}
+  } else if(inp.left&&(!P.prone||clearanceCrouch)){P.vx-=acc;P.facing=-1;}
+  else if(inp.right&&(!P.prone||clearanceCrouch)){P.vx+=acc;P.facing=1;}
   else P.vx*=P.onGround?0.72:0.90;
   P.vx=clamp(P.vx,-maxS,maxS);
   P.lean=lerp(P.lean,clamp(P.vx/B.speed,-1,1),0.2);
