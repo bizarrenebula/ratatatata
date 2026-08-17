@@ -570,6 +570,12 @@ function addTraversalDetour(lv,rng,n,routeStart){
     for(var bi=0;bi<lv.buildings.length;bi++){b=lv.buildings[bi];if(cx>b.x-300&&cx<b.x+b.w+300)clear=false;}
     if(clear)candidates.push(p);
   }
+  // Every travel stage gets one convergence puzzle. If environmental
+  // dressing consumed the ideal segment, fall back to a long main-route
+  // segment instead of silently generating a stage with no detour.
+  if(!candidates.length)for(i=0;i<lv.plats.length;i++){
+    p=lv.plats[i];if(p.ground&&p.w>=500&&p.x>700&&p.x+p.w<routeStart+80)candidates.push(p);
+  }
   if(!candidates.length)return;
   p=candidates[Math.floor(rng()*candidates.length)];
   var lower=(lv.theme.prop==='pipe'||n===5),x=Math.round(p.x+p.w/2-210),gy=p.y;
@@ -604,11 +610,23 @@ function addTraversalDetour(lv,rng,n,routeStart){
   lv.transitions.push({x:entryX,y:entryY,w:44,h:46,inB:entryIn,action:lower||entryIn?'down':'up',kind:entryKind,
     tx:altStartX,ty:altStartY,targetIn:null,label:'ALTERNATE ROUTE'});
   lv.transitions.push({x:altEndX,y:altEndY,w:44,h:46,inB:null,action:lower?'up':'down',kind:exitKind,
-    tx:x+450,ty:gy-42,targetIn:null,label:'RETURN TO MAIN ROUTE'});
+    tx:x+450,ty:gy-42,targetIn:null,label:'REJOIN MAIN ROUTE'});
+  lv.routePlan={startX:0,blockedX:x,entryX:entryX,entryIn:entryIn,alternate:lower?'LOWER SUBLEVEL':'UPPER SUBLEVEL',
+    mergeX:x+450,destination:lv.flow.exit};
+  // The detour is a playable piece of the mission, not an empty shortcut.
+  if(lower){
+    lv.spawns.push({x:x+155,y:520,t:'mouse',used:false});
+    lv.spawns.push({x:x+270,y:514,t:n>3?'weasel':'mouse',used:false});
+    lv.items.push({x:x+220,y:518,w:26,h:26,kind:n%2?'cheese':'nade',bob:rng()*6.28});
+  } else {
+    lv.spawns.push({x:xs[2]+32,y:ys[2]-38,t:n>2?'weasel':'mouse',used:false});
+    lv.spawns.push({x:xs[3]+30,y:ys[3]-32,t:'mouse',used:false});
+    lv.items.push({x:xs[2]+58,y:ys[2]-30,w:26,h:26,kind:n%2?'nade':'cheese',bob:rng()*6.28});
+  }
 }
 function buildLevel(n){
   var rng=mulberry32(9001+n*577+campaignSeed), isBoss=(n===11);
-  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],transitions:[],setpieces:[],foreground:[],boss:isBoss,
+  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],transitions:[],routePlan:null,setpieces:[],foreground:[],boss:isBoss,
           length:isBoss?Math.max(1180,view.w*2.2):(4200+n*470),exit:null,routeMode:null,flow:STAGE_FLOW[n-1],miniBossDefeated:isBoss};
   var x=0,gy=470,px;
   if(isBoss){
@@ -2357,7 +2375,8 @@ function paintIngress(){
     g.fillStyle='#16191b';rr(g,x-43,y-84,78,84,5);g.fill();g.strokeStyle='#70777a';g.lineWidth=4;g.stroke();
   }
   g.fillStyle='rgba(10,9,10,.7)';rr(g,x-55,y-120,110,20,4);g.fill();
-  g.fillStyle='#8f897c';g.font='10px Impact,sans-serif';g.textAlign='center';g.fillText('FROM '+k.toUpperCase(),x,y-106);g.textAlign='left';g.restore();
+  var arrival=stage>1?('VIA '+STAGE_FLOW[stage-2].exit.toUpperCase()):('FROM '+k.toUpperCase());
+  g.fillStyle='#8f897c';g.font='10px Impact,sans-serif';g.textAlign='center';g.fillText(arrival,x,y-106);g.textAlign='left';g.restore();
 }
 function paintExit(){
   if(level.boss||!level.exit)return;
