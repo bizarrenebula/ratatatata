@@ -454,30 +454,22 @@ function groundYAt(lv,x){
   return null;
 }
 function objectiveText(n,type,thing){
-  var act=n<4?'TRACE':n<7?'EXPOSE':n<10?'BREAK':'REACH';
-  if(type==='raid')return act+' THE MARKED BUILDING';
-  if(type==='recover')return 'RECOVER THE '+thing.toUpperCase();
-  return 'ELIMINATE THE WEASEL HIT SQUAD';
+  return 'RECOVER THE '+thing.toUpperCase();
 }
 function configureObjective(lv,rng,n){
   if(lv.boss){lv.objective={type:'boss',text:'ELIMINATE P.C.U.-9',taskDone:false,done:false,progress:0,total:1};return;}
-  var choices=lv.buildings.length?['raid','recover','hunt']:['hunt'],type=choices[Math.floor(rng()*choices.length)];
   var biomeLoot=lv.flow&&lv.flow.loot,thing=biomeLoot?biomeLoot[Math.floor(rng()*biomeLoot.length)]:campaign.things[(n-1)%campaign.things.length];
-  var o=lv.objective={type:type,text:objectiveText(n,type,thing),taskDone:false,done:false,progress:0,total:1,thing:thing};
-  if(type==='raid'){
-    o.target=lv.buildings[Math.floor(rng()*lv.buildings.length)];o.target.objective=true;
-  } else if(type==='recover'){
+  var o=lv.objective={type:'recover',text:objectiveText(n,'recover',thing),taskDone:false,done:false,progress:0,total:1,thing:thing};
+  if(lv.buildings.length){
     var b=lv.buildings[Math.floor(rng()*lv.buildings.length)],sl=b.slabs.length?b.slabs[b.slabs.length-1]:null;
     var mx=sl?sl.x+sl.w/2-13:b.x+b.w/2-13,my=sl?sl.y-28:b.gy-28;
     o.target=b;b.objective=true;
     lv.items.push({x:Math.round(mx),y:Math.round(my),w:26,h:26,kind:'mission',inB:b,bob:rng()*6.28,objective:true});
   } else {
-    o.total=3+Math.floor(rng()*3);o.progress=0;
-    for(var i=0;i<o.total;i++){
-      var sx=Math.round(900+i*145+rng()*80+(n%3)*360),sy=groundYAt(lv,sx);
-      if(sy===null){sx=Math.round(700+i*110);sy=groundYAt(lv,sx)||470;}
-      lv.spawns.push({x:sx,y:sy-38,t:'weasel',used:false,objective:true});
-    }
+    var best=null;
+    for(var i=0;i<lv.plats.length;i++)if(lv.plats[i].oneway&&lv.plats[i].x>500&&lv.plats[i].x<lv.length-500)best=lv.plats[i];
+    var ix=best?best.x+best.w/2-13:Math.round(lv.length*.45),iy=best?best.y-28:(groundYAt(lv,Math.round(lv.length*.45))||470)-28;
+    lv.items.push({x:Math.round(ix),y:Math.round(iy),w:26,h:26,kind:'mission',bob:rng()*6.28,objective:true});
   }
 }
 function configureMiniBoss(lv,n){
@@ -488,6 +480,46 @@ function configureMiniBoss(lv,n){
   lv.miniBossInfo=m;lv.miniBossDefeated=false;
   lv.spawns.push({x:Math.round(mx),y:Math.round(my-(m.type==='cat'?52:m.type==='bat'?80:m.type==='weasel'?38:32)),
     t:m.type,used:false,miniBoss:m});
+}
+function enemySpawnSize(t){return t==='cat'?{w:40,h:52}:t==='bat'?{w:34,h:24}:t==='weasel'?{w:26,h:38}:{w:24,h:32};}
+function enemySpawnBlocked(lv,s,x,y){
+  var z=enemySpawnSize(s.t),r={x:x,y:y,w:z.w,h:z.h},i,p;
+  for(i=0;i<lv.obstacles.length;i++){
+    var o=lv.obstacles[i];if(!o.dead&&!o.decorative&&hit(r,{x:o.x-5,y:o.y-3,w:o.w+10,h:o.h+6}))return true;
+  }
+  if(s.inB)for(i=0;i<lv.plats.length;i++){
+    p=lv.plats[i];if(p.inside===s.inB&&p.step&&hit(r,{x:p.x-3,y:p.y-3,w:p.w+6,h:p.h+6}))return true;
+  }
+  return false;
+}
+function interiorSpawnSupported(lv,s,x,y,z){
+  var foot=y+z.h,cx=x+z.w/2;
+  if(Math.abs(foot-s.inB.gy)<5)return true;
+  for(var i=0;i<lv.plats.length;i++){
+    var p=lv.plats[i];
+    if(p.inside===s.inB&&p.interiorFloor&&cx>p.x+3&&cx<p.x+p.w-3&&Math.abs(foot-p.y)<5)return true;
+  }
+  return false;
+}
+function sanitizeEnemySpawns(lv){
+  var safe=[],offsets=[0,62,-62,124,-124,190,-190,260,-260,340,-340];
+  for(var i=0;i<lv.spawns.length;i++){
+    var s=lv.spawns[i],z=enemySpawnSize(s.t),placed=false;
+    if(s.perch){safe.push(s);continue;}
+    for(var j=0;j<offsets.length;j++){
+      var nx=s.x+offsets[j],ny=s.y;
+      if(s.inB){
+        if(nx<s.inB.x+16||nx+z.w>s.inB.x+s.inB.w-16)continue;
+        if(!interiorSpawnSupported(lv,s,nx,ny,z))continue;
+      } else if(s.t!=='bat'){
+        var gy=groundYAt(lv,nx+z.w/2);if(gy===null)continue;ny=gy-z.h;
+      }
+      if(enemySpawnBlocked(lv,s,nx,ny))continue;
+      s.x=Math.round(nx);s.y=Math.round(ny);placed=true;break;
+    }
+    if(placed)safe.push(s);
+  }
+  lv.spawns=safe;
 }
 function completeObjective(){
   if(!level||!level.objective||level.objective.taskDone)return;
@@ -704,6 +736,7 @@ function buildLevel(n){
   if(!campaign)campaign=CAMPAIGNS[0];
   configureObjective(lv,rng,n);
   configureMiniBoss(lv,n);
+  sanitizeEnemySpawns(lv);
   // background silhouettes (3 parallax bands) + street lamps
   for(px=-200;px<lv.length+400;px+=70+rng()*130){
     lv.props.push({x:px,y:rng(),w:60+rng()*130,h:120+rng()*260,band:rng()<0.5?0:1,s:rng()});
@@ -1180,6 +1213,9 @@ function updateStairTraversal(B){
   if((travel>0&&P.stairT>=1)||(travel<0&&P.stairT<=0)){
     P.stair=null;P.checkX=P.x;P.checkY=P.y;
   }
+  // Stair traversal owns movement, but never suppresses combat input.
+  var stairWeapon=WEAPONS[P.weapon],stairBite=pressed('fire')&&tryBite();
+  if(!stairBite&&inp.fire&&(stairWeapon.auto||pressed('fire')))fireWeapon();
   updateBuildingState();
   return true;
 }
@@ -3086,7 +3122,7 @@ function paintHUD(){
     g.fillStyle='#8a6a20';g.beginPath();g.arc(w-pad-11-i*15,ny-4,2,0,6.283);g.fill();
   }
   if(level.objective&&!level.boss){
-    var ob=level.objective,prog=ob.type==='hunt'?'  '+ob.progress+'/'+ob.total:'';
+    var ob=level.objective,prog='';
     var ow=Math.min(w-120,420),ox=(w-ow)/2,oy=hh+7;
     g.fillStyle='rgba(8,7,9,.78)';rr(g,ox,oy,ow,34,5);g.fill();
     g.strokeStyle=ob.done?'rgba(120,210,80,.75)':'rgba(201,162,74,.65)';g.lineWidth=1.5;rr(g,ox+.5,oy+.5,ow-1,33,5);g.stroke();
