@@ -53,6 +53,9 @@ The current implementation intentionally remains in one HTML file so this initia
   trucks and cranes in the warehouses — all jumpable, and all but the crane mast
   can be shot or blown apart
 - Mouse, bat, weasel, cat, and machine-gun lizard enemies plus a final boss
+- Headshots: 15% of direct hits (bullets and melee, never splash) kill a
+  rank-and-file enemy outright and deal double damage to mini-bosses and
+  P.C.U.-9, marked by a skull-and-knife sting over the target
 - Mini-bosses hold a fixed zone around their spawn: they commit the moment they
   see you inside it, and break off if you leave, so a fight can always be quit
 - A live size control (top right) scales the cast; `BUILD_SCALE` and `ITEM_SCALE`
