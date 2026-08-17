@@ -1,0 +1,17 @@
+{
+  "sampleRate": 22050,
+  "ambientSegmentSeconds": 9,
+  "segments": [
+    "sewer-main",
+    "old-downtown",
+    "tenement",
+    "service-sewers",
+    "warehouse-stacks",
+    "warehouse-floor",
+    "corporate-avenue",
+    "ventilation",
+    "hallways",
+    "directors-office"
+  ],
+  "boss": "retro-arcade"
+}
