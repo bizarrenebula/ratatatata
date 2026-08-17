@@ -3537,7 +3537,10 @@ function drawPad(){
 
 /* ==================== LOOP ==================== */
 function updateCamera(){
-  var targetZoom=P.inB?1.22:1;
+  var mobile=matchMedia('(pointer:coarse)').matches;
+  var compact=mobile?clamp((520-Math.min(view.cssW,view.cssH))/260,0,1):0;
+  var mobileBase=mobile?(1.16+compact*.14):1;
+  var targetZoom=P.inB?mobileBase+.18:mobileBase;
   cam.zoom=lerp(cam.zoom,targetZoom,P.inB?0.075:0.055);
   var visibleW=view.w/cam.zoom,visibleH=view.h/cam.zoom,t,ty;
   if(P.inB){
@@ -3545,7 +3548,7 @@ function updateCamera(){
     ty=P.inB.y+P.inB.h/2-visibleH/2+12;
   } else {
     t=P.x+P.w/2-visibleW*0.44+P.facing*22;
-    ty=camY0;
+    ty=VIEW_BOTTOM-visibleH;
   }
   cam.x+=(t-cam.x)*(P.inB?0.085:0.13);
   cam.x=clamp(cam.x,0,Math.max(0,level.length-visibleW));
