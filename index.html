@@ -362,13 +362,13 @@ var BROS=[
     glove:'#1f2228', gloveC:'#2c3038', trim:'#c9a86a', metal:'#e8e4d8', eye:'#f4ecd8' }
 ];
 var WEAPONS={
-  scratch:   {name:'CLAWS & BITE',cd:15,dmg:25,auto:true,melee:true,ammo:Infinity,col:'#e8d6a8'},
-  knife:     {name:'STREET KNIFE',cd:13,dmg:39,auto:true,melee:true,ammo:Infinity,col:'#dfe8ef'},
-  pistol:    {name:'.38 SNUB',    cd:11, dmg:11, auto:false, n:1, spread:0,    spd:11, ammo:Infinity, col:'#ffd98a', r:3.4},
-  machinegun:{name:'TOMMY GUN',   cd:5,  dmg:9,  auto:true,  n:1, spread:0.035,spd:12, ammo:260,      col:'#ffe9a8', r:3.0},
-  spread:    {name:'SAWN-OFF',    cd:17, dmg:10, auto:true,  n:5, spread:0.26, spd:10, ammo:110,      col:'#ffb05a', r:3.6},
-  flame:     {name:'FLAMER',      cd:3,  dmg:5,  auto:true,  n:1, spread:0.16, spd:7,  ammo:340,      col:'#ff7a2a', r:6, life:26},
-  bazooka:   {name:'BAZOOKA',     cd:34, dmg:42, auto:false, n:1, spread:0,    spd:7,  ammo:24,       col:'#ffb15a', r:7,rocket:true}
+  scratch:   {name:'CLAWS & BITE',power:0,cd:15,dmg:25,auto:true,melee:true,ammo:Infinity,col:'#e8d6a8'},
+  knife:     {name:'STREET KNIFE',power:1,cd:13,dmg:39,auto:true,melee:true,ammo:Infinity,col:'#dfe8ef'},
+  pistol:    {name:'.38 SNUB',    power:2,cd:11, dmg:11, auto:false, n:1, spread:0,    spd:11, ammo:Infinity, col:'#ffd98a', r:3.4},
+  machinegun:{name:'TOMMY GUN',   power:3,cd:5,  dmg:9,  auto:true,  n:1, spread:0.035,spd:12, ammo:260,      col:'#ffe9a8', r:3.0},
+  spread:    {name:'SAWN-OFF',    power:4,cd:17, dmg:10, auto:true,  n:5, spread:0.26, spd:10, ammo:110,      col:'#ffb05a', r:3.6},
+  flame:     {name:'FLAMER',      power:5,cd:3,  dmg:5,  auto:true,  n:1, spread:0.16, spd:7,  ammo:340,      col:'#ff7a2a', r:6, life:26},
+  bazooka:   {name:'BAZOOKA',     power:6,cd:34, dmg:42, auto:false, n:1, spread:0,    spd:7,  ammo:24,       col:'#ffb15a', r:7,rocket:true}
 };
 var PICKUP_WEAPONS=['knife','pistol','machinegun','spread','flame','bazooka'];
 var MINI_BOSSES=[
@@ -966,7 +966,7 @@ function killPlayer(){
 }
 
 /* ==================== PLAYER ==================== */
-function equipWeapon(wep,ammo){
+function equipWeapon(wep,ammo,activate){
   if(!WEAPONS[wep])return;
   if(P.weaponAmmo)P.weaponAmmo[P.weapon]=P.ammo;
   if(!P.weapons)P.weapons=['scratch'];
@@ -976,6 +976,7 @@ function equipWeapon(wep,ammo){
   if(WEAPONS[wep].ammo===Infinity)P.weaponAmmo[wep]=Infinity;
   else if(ammo!==undefined)P.weaponAmmo[wep]=Math.max(P.weaponAmmo[wep]||0,ammo);
   else if(P.weaponAmmo[wep]===undefined)P.weaponAmmo[wep]=WEAPONS[wep].ammo;
+  if(activate===false)return;
   P.weapon=wep;P.ammo=P.weaponAmmo[wep];P.cd=Math.max(P.cd,5);
 }
 function cycleWeapon(dir){
@@ -1851,7 +1852,9 @@ function updateProjectiles(){
       else if(it.kind==='cheese'){P.hp=Math.min(P.maxHp,P.hp+38);SFX.cheese();score+=50;
         burst(it.x+13,it.y+13,'#ffd94a',12,3);}
       else if(it.kind==='nade'){P.nades=Math.min(9,P.nades+3);SFX.pick();score+=50;}
-      else {equipWeapon(it.wep,WEAPONS[it.wep].ammo);SFX.pick();score+=100;
+      else {
+        var pickupIsStronger=WEAPONS[it.wep].power>WEAPONS[P.weapon].power;
+        equipWeapon(it.wep,WEAPONS[it.wep].ammo,pickupIsStronger);SFX.pick();score+=100;
         burst(it.x+13,it.y+13,WEAPONS[it.wep].col||'#fff',14,3);}
       addLight(it.x+13,it.y+13,110,'#ffe6a8',14);
       items.splice(i,1);
@@ -2988,6 +2991,34 @@ function drawBoss(){
 }
 
 /* ==================== ENTITY PAINT ==================== */
+function drawWeaponPickupIcon(x,y,wep,col){
+  g.save();g.translate(x,y);g.lineJoin='round';g.lineCap='round';
+  g.strokeStyle='rgba(5,6,7,.9)';g.lineWidth=1.5;g.fillStyle=col;
+  if(wep==='knife'){
+    g.rotate(-.48);g.fillStyle='#e8edf0';g.beginPath();g.moveTo(-11,-2);g.lineTo(5,-3);g.lineTo(11,0);g.lineTo(5,3);g.lineTo(-11,2);g.closePath();g.fill();g.stroke();
+    g.fillStyle='#70452b';rr(g,-13,-4,5,8,1.5);g.fill();g.stroke();
+  }else if(wep==='pistol'){
+    g.fillStyle='#c7cbd0';rr(g,-10,-6,18,7,2);g.fill();g.stroke();g.fillStyle='#6b4a31';
+    g.beginPath();g.moveTo(2,0);g.lineTo(8,0);g.lineTo(5,10);g.lineTo(-1,10);g.closePath();g.fill();g.stroke();
+    g.fillStyle='#24282d';g.fillRect(8,-4,5,3);
+  }else if(wep==='machinegun'){
+    g.fillStyle='#3b4245';rr(g,-10,-5,17,7,2);g.fill();g.stroke();g.fillRect(6,-4,9,2.5);
+    g.fillStyle='#7b4b2b';g.beginPath();g.moveTo(-10,-3);g.lineTo(-15,-7);g.lineTo(-15,4);g.lineTo(-9,2);g.closePath();g.fill();g.stroke();
+    g.fillStyle='#25282b';ell(g,0,5,6,6);g.fill();g.stroke();
+  }else if(wep==='spread'){
+    g.rotate(-.12);g.strokeStyle='#171a1c';g.lineWidth=4;g.beginPath();g.moveTo(-5,-2);g.lineTo(14,-2);g.moveTo(-5,2);g.lineTo(14,2);g.stroke();
+    g.strokeStyle='#8a512d';g.lineWidth=7;g.beginPath();g.moveTo(-14,5);g.lineTo(-3,0);g.stroke();
+  }else if(wep==='flame'){
+    g.fillStyle='#a44728';ell(g,-5,2,7,9);g.fill();g.stroke();g.fillStyle='#353b3e';rr(g,0,-5,10,6,2);g.fill();g.stroke();
+    g.strokeStyle='#555d60';g.lineWidth=3;g.beginPath();g.moveTo(8,-3);g.lineTo(14,-7);g.stroke();
+    g.fillStyle='#ff9a32';g.beginPath();g.moveTo(13,-9);g.lineTo(18,-7);g.lineTo(13,-4);g.closePath();g.fill();
+  }else if(wep==='bazooka'){
+    g.rotate(-.08);g.fillStyle='#4f633b';rr(g,-13,-5,25,10,4);g.fill();g.stroke();
+    g.fillStyle='#b86a32';g.beginPath();g.moveTo(10,-7);g.lineTo(16,-3);g.lineTo(16,3);g.lineTo(10,7);g.closePath();g.fill();g.stroke();
+    g.strokeStyle='#252b22';g.lineWidth=3;g.beginPath();g.moveTo(-4,5);g.lineTo(-2,11);g.stroke();
+  }
+  g.restore();
+}
 function paintItems(){
   var i;
   for(i=0;i<items.length;i++){
@@ -3020,11 +3051,8 @@ function paintItems(){
       var col=WEAPONS[it.wep].col||'#fff';
       g.fillStyle=lin(g,x-14,y-13,x+14,y+13,[[0,'#4a4034'],[1,'#1d1a16']]);
       rr(g,x-14,y-13,28,26,4);g.fill();ink(g,'rgba(6,6,8,.85)',2);
-      g.fillStyle=col;rr(g,x-10,y-9,20,18,3);g.fill();
-      g.fillStyle='rgba(0,0,0,.75)';
-      g.font='bold 15px Impact,sans-serif';g.textAlign='center';g.textBaseline='middle';
-      g.fillText(it.wep==='machinegun'?'M':it.wep==='spread'?'S':it.wep==='flame'?'F':it.wep==='bazooka'?'R':it.wep==='knife'?'K':'P',x,y+1);
-      g.textAlign='left';g.textBaseline='alphabetic';
+      g.fillStyle='rgba(255,255,255,.08)';rr(g,x-11,y-10,22,20,3);g.fill();
+      drawWeaponPickupIcon(x,y,it.wep,col);
     }
     g.globalAlpha=1;
   }
