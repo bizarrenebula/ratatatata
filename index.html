@@ -150,19 +150,25 @@ window.addEventListener('keydown',function(e){var n=KEYS[e.code];
   if(n){kb[n]=true;e.preventDefault();}});
 window.addEventListener('keyup',function(e){var n=KEYS[e.code];if(n){kb[n]=false;e.preventDefault();}});
 window.addEventListener('blur',function(){var i;for(i=0;i<NAMES.length;i++){kb[NAMES[i]]=false;tc[NAMES[i]]=false;}
-  stick.ax=0;stick.ay=0;});
+  moveStick.ax=0;moveStick.ay=0;aimStick.ax=0;aimStick.ay=0;wepSwipe.id=-1;});
 function poll(){var i,n;anyKey=keyPulse;keyPulse=false;for(i=0;i<NAMES.length;i++){n=NAMES[i];prev[n]=inp[n];inp[n]=!!(kb[n]||tc[n]);}}
 function pressed(n){return inp[n]&&!prev[n];}
 function anyButtonPressed(){for(var i=0;i<NAMES.length;i++)if(pressed(NAMES[i]))return true;return false;}
 
 /* ---- arcade panel layout + touch ---- */
-var stick={cx:0,cy:0,r:0,ax:0,ay:0,vx:0,vy:0,id:-1};
-var weaponSwipeY=null;
+/* Twin-stick mobile layout: the left stick walks and climbs, the right stick
+   aims through a full 360 degrees independently of where you are moving. Each
+   stick carries the buttons its own thumb is expected to reach. */
+var moveStick={cx:0,cy:0,r:0,ax:0,ay:0,vx:0,vy:0,id:-1};
+var aimStick ={cx:0,cy:0,r:0,ax:0,ay:0,vx:0,vy:0,id:-1};
+/* Weapon switching is a swipe across the brother himself. shown counts down the
+   frames the gallery stays up over his head after the last drag. */
+var wepSwipe={id:-1,lastX:0,shown:0}, WEAPON_SWIPE_PX=34;
 var BTNS=[
-  {n:'nade', l:'C', sub:'BOMB',  x:0,y:0,r:0,p:0,hue:'#e8b23a'},
-  {n:'swap', l:'D', sub:'SWAP',  x:0,y:0,r:0,p:0,hue:'#e8b23a'},
-  {n:'jump', l:'A', sub:'JUMP',  x:0,y:0,r:0,p:0,hue:'#e2402f'},
-  {n:'fire', l:'B', sub:'FIRE',  x:0,y:0,r:0,p:0,hue:'#e2402f'}
+  {n:'fire', l:'B', sub:'FIRE',  x:0,y:0,r:0,p:0,hue:'#e2402f',side:'L'},
+  {n:'nade', l:'C', sub:'BOMB',  x:0,y:0,r:0,p:0,hue:'#e8b23a',side:'L'},
+  {n:'jump', l:'A', sub:'JUMP',  x:0,y:0,r:0,p:0,hue:'#e2402f',side:'R'},
+  {n:'swap', l:'D', sub:'SWAP',  x:0,y:0,r:0,p:0,hue:'#e8b23a',side:'R'}
 ];
 var SMALL=[
   {n:'start',l:'START',x:0,y:0,r:0,p:0},
@@ -170,53 +176,88 @@ var SMALL=[
 ];
 function layoutPad(){
   var w=pad.cssW,h=pad.cssH;
-  stick.r=Math.min(h*0.14,w*0.09,72);
-  stick.cx=Math.max(w*0.14,stick.r+24+parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')||0));
-  stick.cy=h*0.74;
-  var br=Math.min(h*0.074,w*0.047,42);
-  var cx=w*0.84, cy=h*0.71, dx=br*1.42, dy=br*1.28;
-  BTNS[0].x=cx-dx; BTNS[0].y=cy-dy;
-  BTNS[1].x=cx+dx; BTNS[1].y=cy-dy;
-  BTNS[2].x=cx-dx; BTNS[2].y=cy+dy;
-  BTNS[3].x=cx+dx; BTNS[3].y=cy+dy;
-  var i;for(i=0;i<4;i++)BTNS[i].r=br;
-  var sr=0;SMALL[0].r=sr;SMALL[1].r=sr;
+  var sat=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')||0);
+  var r=Math.min(h*0.135,w*0.082,66), br=Math.min(h*0.070,w*0.043,38);
+  /* Weapon switching lives on the character now, so nothing reserves the right
+     edge and the aim stick can mirror the move stick exactly. */
+  var inset=Math.max(w*0.135,r+20+sat);
+  moveStick.r=aimStick.r=r;
+  moveStick.cx=inset;
+  aimStick.cx=w-inset;
+  moveStick.cy=aimStick.cy=h*0.72;
+  /* Buttons sit clear above the ring of the stick their thumb shares:
+     fire + bomb over the move stick, jump + swap over the aim stick. */
+  var by=moveStick.cy-r-br*1.45;
+  BTNS[0].x=moveStick.cx+br*1.45; BTNS[0].y=by;              // FIRE
+  BTNS[1].x=moveStick.cx-br*1.55; BTNS[1].y=by+br*0.62;      // BOMB
+  BTNS[2].x=aimStick.cx-br*1.45;  BTNS[2].y=by;              // JUMP
+  BTNS[3].x=aimStick.cx+br*1.55;  BTNS[3].y=by+br*0.62;      // SWAP
+  BTNS[0].r=br;BTNS[1].r=br*0.86;BTNS[2].r=br;BTNS[3].r=br*0.86;
+  SMALL[0].r=0;SMALL[1].r=0;
+}
+/* The pad canvas covers the whole viewport, so it — not the game canvas —
+   receives every touch. Character gestures therefore have to be resolved here,
+   against the stage canvas' own rect so the mapping stays correct even if the
+   two canvases are ever sized differently. */
+function touchOnPlayer(t){
+  if(!level||state!=='PLAY'||P.dead)return false;
+  var r=gcv.getBoundingClientRect();
+  var cx=(t.clientX-r.left)/r.width*view.cssW, cy=(t.clientY-r.top)/r.height*view.cssH;
+  var k=view.scale*cam.zoom;
+  var wx=cam.x+cx/k, wy=cam.y+cy/k, pad2=30;
+  return wx>P.x-pad2&&wx<P.x+P.w+pad2&&wy>P.y-pad2*1.6&&wy<P.y+P.h+pad2;
+}
+function stepWeaponSwipe(t){
+  var dx=t.clientX-wepSwipe.lastX;
+  wepSwipe.shown=90;
+  /* Drag left for the next weapon, right for the previous — the gallery over
+     the brother's head moves the same way the thumb does. */
+  if(Math.abs(dx)>=WEAPON_SWIPE_PX){cycleWeapon(dx<0?1:-1);wepSwipe.lastX=t.clientX;}
 }
 function padTouch(e){
   e.preventDefault(); initAudio();if(!landscapeAsked)requestLandscape();
   var i,k; for(k=0;k<NAMES.length;k++) tc[NAMES[k]]=false;
-  for(k=0;k<4;k++)BTNS[k].p=0;
+  for(k=0;k<BTNS.length;k++)BTNS[k].p=0;
   SMALL[0].p=0;SMALL[1].p=0;
-  var sx=0,sy=0,held=false;
+  var mx=0,my=0,mHeld=false,ax=0,ay=0,aHeld=false,swipeAlive=false;
   var r=pcv.getBoundingClientRect();
   for(i=0;i<e.touches.length;i++){
     var t=e.touches[i];
     var x=(t.clientX-r.left)/r.width*pad.cssW, y=(t.clientY-r.top)/r.height*pad.cssH;
-    if(x>pad.cssW*.92){
-      if(weaponSwipeY===null)weaponSwipeY=y;
-      else if(Math.abs(y-weaponSwipeY)>34){cycleWeapon(y<weaponSwipeY?1:-1);weaponSwipeY=y;}
-      continue;
-    }
-    if(x<pad.cssW*0.40){
-      var dx=x-stick.cx, dy=y-stick.cy, d=Math.hypot(dx,dy)||1, m=Math.min(1,d/(stick.r*1.15));
-      sx=dx/d*m; sy=dy/d*m; held=true; continue;
-    }
+    // 1. a weapon swipe already in progress keeps its own finger
+    if(wepSwipe.id>=0&&t.identifier===wepSwipe.id){swipeAlive=true;stepWeaponSwipe(t);continue;}
+    // 2. buttons win over the sticks they sit above
     var got=false;
-    for(k=0;k<4;k++){
+    for(k=0;k<BTNS.length;k++){
       var b=BTNS[k];
       if(Math.hypot(x-b.x,y-b.y)<b.r*1.32){tc[b.n]=true;b.p=1;got=true;break;}
     }
     if(got)continue;
-    for(k=0;k<2;k++){
-      var s=SMALL[k];
-      if(Math.hypot(x-s.x,y-s.y)<s.r*2.0){tc[s.n]=true;s.p=1;break;}
+    /* 3. each stick owns the area around its own well. This has to be tested
+       before the character, because the camera regularly parks the brother
+       right on top of the move stick — without this, walking would be eaten by
+       the weapon swipe exactly when the player is trying to walk. */
+    var near=(Math.hypot(x-moveStick.cx,y-moveStick.cy)<moveStick.r*1.35)?moveStick:
+             (Math.hypot(x-aimStick.cx,y-aimStick.cy)<aimStick.r*1.35)?aimStick:null;
+    // 4. a fresh touch on the brother, clear of both wells, claims the gallery
+    if(!near&&wepSwipe.id<0&&touchOnPlayer(t)){
+      wepSwipe.id=t.identifier;wepSwipe.lastX=t.clientX;wepSwipe.shown=90;
+      swipeAlive=true;continue;
     }
+    // 5. anything else drives the stick on its half of the screen
+    var s=near||((x<pad.cssW*0.5)?moveStick:aimStick);
+    var dx=x-s.cx, dy=y-s.cy, d=Math.hypot(dx,dy)||1, m=Math.min(1,d/(s.r*1.15));
+    if(s===moveStick){mx=dx/d*m; my=dy/d*m; mHeld=true;}
+    else {ax=dx/d*m; ay=dy/d*m; aHeld=true;}
   }
-  stick.ax=held?sx:0; stick.ay=held?sy:0;
+  if(!swipeAlive)wepSwipe.id=-1;
+  moveStick.ax=mHeld?mx:0; moveStick.ay=mHeld?my:0;
+  aimStick.ax =aHeld?ax:0; aimStick.ay =aHeld?ay:0;
   var DZ=0.34;
-  tc.left = stick.ax<-DZ; tc.right= stick.ax>DZ;
-  tc.up   = stick.ay<-DZ; tc.down = stick.ay>DZ;
-  if(!e.touches.length)weaponSwipeY=null;
+  /* Movement comes from the left stick alone; the aim stick never walks the
+     brother, which is what makes strafing and 360 aim independent. */
+  tc.left = moveStick.ax<-DZ; tc.right= moveStick.ax>DZ;
+  tc.up   = moveStick.ay<-DZ; tc.down = moveStick.ay>DZ;
 }
 ['touchstart','touchmove','touchend','touchcancel'].forEach(function(n){
   pcv.addEventListener(n,padTouch,{passive:false});
@@ -1239,7 +1280,13 @@ function autoAimTarget(base){
 }
 function aimVector(){
   var ax=P.facing,ay=0,mobile=matchMedia('(pointer:coarse)').matches;
-  if(mobile&&Math.hypot(stick.vx,stick.vy)>.24){ax=stick.vx;ay=stick.vy;}
+  /* On mobile the right stick owns aim outright — raw, not the smoothed value
+     used for drawing, so the reticle tracks the thumb without lag. Released, the
+     shot simply follows the way the brother faces; the move stick never steers
+     it, which is the whole point of the second stick. */
+  if(mobile){
+    if(Math.hypot(aimStick.ax,aimStick.ay)>.24){ax=aimStick.ax;ay=aimStick.ay;}
+  }
   else {var l=inp.left,r=inp.right,u=inp.up,d=inp.down;
     if(u&&(l||r)){ax=l?-1:1;ay=-1;}else if(u){ax=0;ay=-1;}
     else if(d&&(l||r)){ax=l?-1:1;ay=1;}else if(d){ax=0;ay=1;}}
@@ -3488,6 +3535,38 @@ function paintHeadshots(){
     g.restore();
   }
 }
+/* Weapon gallery, drawn in world space over the brother's head while a swipe
+   across him is live (and for a beat afterwards). Reads left-to-right: previous,
+   equipped, next — the same order the thumb drags through. */
+function paintWeaponWheel(){
+  if(wepSwipe.shown<=0||P.dead)return;
+  var inv=P.weapons||['scratch'];
+  if(inv.length<2)return;
+  var wi=inv.indexOf(P.weapon),i;
+  var a=Math.min(1,wepSwipe.shown/16);
+  var cx=P.x+P.w/2, cy=P.y-30*charScale, gr=15*charScale, gap=gr*2.3;
+  g.save();g.globalAlpha=a;
+  g.fillStyle='rgba(6,10,12,.62)';
+  rr(g,cx-gap-gr*1.15,cy-gr*1.2,(gap+gr*1.15)*2,gr*2.4,gr*0.7);g.fill();
+  g.strokeStyle='rgba(232,194,90,.34)';g.lineWidth=1.5;
+  rr(g,cx-gap-gr*1.15,cy-gr*1.2,(gap+gr*1.15)*2,gr*2.4,gr*0.7);g.stroke();
+  for(i=-1;i<=1;i++){
+    var idx=(wi+i+inv.length)%inv.length,wep=inv[idx],wx=cx+i*gap,active=i===0;
+    g.globalAlpha=a*(active?1:0.5);
+    g.fillStyle=active?'rgba(201,162,74,.34)':'rgba(10,14,16,.34)';
+    ell(g,wx,cy,gr*(active?1:.78),gr*(active?1:.78));g.fill();
+    g.strokeStyle=active?'rgba(255,225,145,.80)':'rgba(245,248,248,.24)';
+    g.lineWidth=active?2:1;g.stroke();
+    drawWeaponIcon(g,wx,cy,wep,WEAPONS[wep].col||'#fff',(active?.8:.6)*gr/19*charScale);
+  }
+  g.globalAlpha=a;
+  /* Hint sits above the panel — below it would land across the brother's face. */
+  g.fillStyle='rgba(255,235,180,.7)';
+  g.font='bold '+Math.max(7,5*charScale)+'px Arial,sans-serif';g.textAlign='center';
+  g.fillText('◀  SWIPE  ▶',cx,cy-gr*1.75);
+  g.textAlign='left';
+  g.restore();g.globalAlpha=1;
+}
 function paintProjectiles(){
   var i;
   if(P.nadeReady&&!P.dead){
@@ -3914,17 +3993,38 @@ function drawIntro(){
 }
 
 /* ==================== ARCADE PANEL ==================== */
+function drawFloatStick(s,label,isAim){
+  s.vx=lerp(s.vx,s.ax,.35);s.vy=lerp(s.vy,s.ay,.35);
+  var sx=s.cx,sy=s.cy,R=s.r,kx=sx+s.vx*R*.48,ky=sy+s.vy*R*.48;
+  var live=Math.hypot(s.ax,s.ay)>.24;
+  pg.fillStyle='rgba(5,8,10,.20)';ell(pg,sx,sy,R,R);pg.fill();
+  pg.strokeStyle=live?'rgba(255,220,125,.46)':'rgba(225,235,238,.25)';
+  pg.lineWidth=2;ell(pg,sx,sy,R,R);pg.stroke();
+  if(isAim){
+    /* A full-circle tick ring and a live bearing line sell the 360 aim. */
+    pg.strokeStyle='rgba(225,235,238,.16)';pg.lineWidth=1;
+    for(var a=0;a<8;a++){
+      var an=a*0.7854,c=Math.cos(an),si=Math.sin(an);
+      pg.beginPath();pg.moveTo(sx+c*R*.82,sy+si*R*.82);pg.lineTo(sx+c*R*.95,sy+si*R*.95);pg.stroke();
+    }
+    if(live){
+      var m=Math.hypot(s.vx,s.vy)||1;
+      pg.strokeStyle='rgba(255,120,110,.55)';pg.lineWidth=2;
+      pg.beginPath();pg.moveTo(sx,sy);pg.lineTo(sx+s.vx/m*R*.95,sy+s.vy/m*R*.95);pg.stroke();
+    }
+  }
+  pg.fillStyle='rgba(210,220,225,.16)';ell(pg,kx,ky,R*.48,R*.48);pg.fill();
+  pg.strokeStyle='rgba(245,248,250,.36)';pg.lineWidth=1.5;ell(pg,kx,ky,R*.48,R*.48);pg.stroke();
+  pg.fillStyle='rgba(240,245,246,.30)';pg.textAlign='center';pg.textBaseline='middle';
+  pg.font='bold '+Math.max(8,R*.19)+'px Arial,sans-serif';pg.fillText(label,sx,sy+R+9);
+}
 function drawPad(){
   var w=pad.cssW,h=pad.cssH,i;
   pg.setTransform(DPR,0,0,DPR,0,0);
   pg.clearRect(0,0,w,h);
   // Floating mobile controls: low-contrast until touched, bright enough to read over action.
-  stick.vx=lerp(stick.vx,stick.ax,.35);stick.vy=lerp(stick.vy,stick.ay,.35);
-  var sx=stick.cx,sy=stick.cy,R=stick.r,kx=sx+stick.vx*R*.48,ky=sy+stick.vy*R*.48;
-  pg.fillStyle='rgba(5,8,10,.20)';ell(pg,sx,sy,R,R);pg.fill();
-  pg.strokeStyle='rgba(225,235,238,.25)';pg.lineWidth=2;ell(pg,sx,sy,R,R);pg.stroke();
-  pg.fillStyle='rgba(210,220,225,.16)';ell(pg,kx,ky,R*.48,R*.48);pg.fill();
-  pg.strokeStyle='rgba(245,248,250,.36)';pg.lineWidth=1.5;ell(pg,kx,ky,R*.48,R*.48);pg.stroke();
+  drawFloatStick(moveStick,'MOVE',false);
+  drawFloatStick(aimStick,'AIM',true);
   for(i=0;i<BTNS.length;i++){
     var mb=BTNS[i],pressedAlpha=mb.p?.32:.14;
     pg.fillStyle='rgba(12,16,18,'+pressedAlpha+')';ell(pg,mb.x,mb.y,mb.r,mb.r);pg.fill();
@@ -3932,16 +4032,6 @@ function drawPad(){
     pg.fillStyle=mb.p?'rgba(255,238,190,.95)':'rgba(245,247,245,.62)';pg.textAlign='center';pg.textBaseline='middle';
     pg.font='bold '+Math.max(12,mb.r*.42)+'px Arial,sans-serif';pg.fillText(mb.sub,mb.x,mb.y);
   }
-  // Thumb-operated vertical weapon gallery on the extreme right edge.
-  var gx=w*.966,gy=h*.52,gr=Math.min(19,h*.038),inv=P.weapons||['scratch'],wi=inv.indexOf(P.weapon);
-  pg.strokeStyle='rgba(235,240,238,.22)';pg.lineWidth=2;pg.beginPath();pg.moveTo(gx,gy-gr*3.1);pg.lineTo(gx,gy+gr*3.1);pg.stroke();
-  for(i=-1;i<=1;i++){
-    var idx=(wi+i+inv.length)%inv.length,wep=inv[idx],wy=gy+i*gr*2.15,active=i===0;
-    pg.fillStyle=active?'rgba(201,162,74,.30)':'rgba(8,12,14,.22)';ell(pg,gx,wy,gr*(active?1.05:.82),gr*(active?1.05:.82));pg.fill();
-    pg.strokeStyle=active?'rgba(255,225,145,.72)':'rgba(245,248,248,.25)';pg.lineWidth=active?2:1;pg.stroke();
-    drawWeaponIcon(pg,gx,wy,wep,WEAPONS[wep].col||'#fff',(active?.76:.58)*gr/19);
-  }
-  pg.fillStyle='rgba(255,255,255,.45)';pg.font='bold 8px Arial';pg.fillText('SWIPE',gx,gy+gr*4.1);
   pg.textAlign='left';pg.textBaseline='alphabetic';
   return;
   // plastic body
@@ -3984,10 +4074,10 @@ function drawPad(){
   pg.textAlign='left';
 
   // ---- joystick ----
-  var sx=stick.cx,sy=stick.cy,R=stick.r;
-  stick.vx=lerp(stick.vx,stick.ax,0.35);
-  stick.vy=lerp(stick.vy,stick.ay,0.35);
-  var ox=stick.vx*R*0.52, oy=stick.vy*R*0.52;
+  var sx=moveStick.cx,sy=moveStick.cy,R=moveStick.r;
+  moveStick.vx=lerp(moveStick.vx,moveStick.ax,0.35);
+  moveStick.vy=lerp(moveStick.vy,moveStick.ay,0.35);
+  var ox=moveStick.vx*R*0.52, oy=moveStick.vy*R*0.52;
   // base well
   pg.fillStyle=lin(pg,sx,sy-R,sx,sy+R,[[0,'#0a0a0c'],[1,'#3a3a40']]);
   ell(pg,sx,sy+2,R*1.02,R*0.92);pg.fill();
@@ -4008,7 +4098,7 @@ function drawPad(){
   pg.fillStyle='rgba(255,255,255,.55)';
   ell(pg,bx-R*0.22,by-R*0.26,R*0.16,R*0.11);pg.fill();
   // direction glow
-  if(Math.abs(stick.vx)>0.3||Math.abs(stick.vy)>0.3){
+  if(Math.abs(moveStick.vx)>0.3||Math.abs(moveStick.vy)>0.3){
     pg.strokeStyle='rgba(120,230,255,.55)';pg.lineWidth=2;
     ell(pg,sx,sy,R*0.98,R*0.88);pg.stroke();
   }
@@ -4078,6 +4168,7 @@ function updateCamera(){
 }
 function step(){
   tick++;poll();
+  if(wepSwipe.shown>0)wepSwipe.shown--;
   var anyStart=anyKey||anyButtonPressed()||tapped;
   if(state==='TITLE'){ if(anyStart){Music.menu();SFX.start();state='SELECT';stateT=0;tapped=false;} return; }
   if(state==='SELECT'){
@@ -4219,6 +4310,7 @@ function render(){
   }
   paintProjectiles();
   paintHeadshots();
+  paintWeaponWheel();
   paintLighting();
   paintWeather();
   paintForegroundParallax();

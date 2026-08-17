@@ -26,7 +26,20 @@ Then open <http://localhost:8000>.
 | Start / restart | Enter or R |
 | Pause | P or Escape |
 
-On compatible phones, touch controls float over the full-screen landscape game: an analog movement/aim stick on the left, four action buttons on the right, a vertical weapon swiper at the far-right edge, and pause in the upper-left corner. Tap Jump for a short hop or hold it for a higher jump. Aim assistance can be switched on or off on the character-select screen.
+On compatible phones, twin sticks float over the full-screen landscape game:
+
+| Control | Position | Does |
+| --- | --- | --- |
+| Move stick | bottom left | Left/right walks; up/down takes stairs and ladders |
+| Aim stick | bottom right | Aims the weapon through a full 360°, independent of movement |
+| Fire, Bomb | above the move stick | Shoot and throw grenades |
+| Jump, Swap | above the aim stick | Tap Jump for a short hop, hold it for a higher one |
+| Weapon change | on the character | Swipe left/right across the brother; the gallery appears over his head |
+| Pause | upper-left corner | |
+
+Each stick owns the area around its own well, so walking still works when the
+camera parks the brother on top of the move stick. Aim assistance can be
+switched on or off on the character-select screen.
 
 ## Project structure
 
