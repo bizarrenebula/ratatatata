@@ -419,7 +419,7 @@ function makePlayer(b){
      jumps:0,coyote:0,anim:0,dead:false,checkX:80,checkY:300,swapCd:0,fireT:0,lean:0,
      inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,
      rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,nadeTier:0,
-     interiorFade:0,entryLock:0,stair:null,stairT:0,ladder:null};
+     interiorFade:0,entryLock:0,stair:null,stairT:0,ladder:null,dropT:0};
 }
 
 /* ==================== LEVEL ==================== */
@@ -540,6 +540,10 @@ function addBuilding(lv,rng,x,gy,kind){
       var win={x:wx,y:base-54,w:40,h:46,open:false,broken:false,f:f,base:base,b:b};
       b.windows.push(win);
     }
+    // A narrow window in the right edge is the building's deliberate escape
+    // point. Façade windows still shatter, but never change interior state.
+    b.windows.push({x:x+w-24,y:base-50,w:22,h:42,open:false,broken:false,
+      f:f,base:base,b:b,sideExit:true});
   }
   lv.buildings.push(b);
   return b;
@@ -736,7 +740,7 @@ function startStage(n){
   var i;for(i=0;i<level.items.length;i++)items.push(level.items[i]);
   P.x=60;P.y=380;P.vx=0;P.vy=0;P.inv=110;P.dead=false;P.checkX=60;P.checkY=380;
   P.inB=null;P.doorT=0;P.atDoor=null;P.nadeReady=false;P.nadeCharge=0;P.nadeTier=0;
-  P.interiorFade=0;P.entryLock=0;P.stair=null;P.stairT=0;P.ladder=null;
+  P.interiorFade=0;P.entryLock=0;P.stair=null;P.stairT=0;P.ladder=null;P.dropT=0;
   cam.x=0;cam.shake=0;cam.zoom=1;
   if(level.boss)spawnBoss();
   makeMotes();
@@ -989,10 +993,22 @@ function throwNade(charge){
 }
 function solidFor(p,o){
   if(p.dead||(p.obstacle&&p.obstacle.dead))return false;
+  if(o===P&&P.dropT>0&&(p.oneway||p.interiorFloor))return false;
   if(p.oneway)return false;
   if(p.step&&o===P)return false;              // player stairs use guided traversal
   if(p.inside&&p.inside!==o.inB)return false;   // interior walls/floors/stairs
   return true;
+}
+function droppableSurfaceBelow(o){
+  if(!o.onGround)return false;
+  var foot=o.y+o.h,cx=o.x+o.w/2;
+  for(var i=0;i<level.plats.length;i++){
+    var p=level.plats[i];
+    if(p.dead||(p.obstacle&&p.obstacle.dead)||!(p.oneway||p.interiorFloor))continue;
+    if(p.inside&&p.inside!==o.inB)continue;
+    if(cx>p.x+2&&cx<p.x+p.w-2&&Math.abs(foot-p.y)<5)return true;
+  }
+  return false;
 }
 function blockedAt(o,x,y,w){
   var i,p,t={x:x,y:y,w:w||o.w,h:o.h};
@@ -1030,6 +1046,7 @@ function collidePlatforms(o,useOneway,stepAssist){
   for(i=0;i<level.plats.length;i++){
     p=level.plats[i];r={x:p.x,y:p.y,w:p.w,h:p.h};
     if(p.dead||(p.obstacle&&p.obstacle.dead))continue;
+    if(o===P&&P.dropT>0&&(p.oneway||p.interiorFloor))continue;
     if(p.inside&&p.inside!==o.inB)continue;
     if(p.step&&o===P){
       if(useOneway&&o.vy>=0&&o.y+o.h-o.vy<=p.y+3&&hit(o,r)&&!inp.down){
@@ -1063,7 +1080,7 @@ function openWindowAt(b,strict){
   var i,w,cx=P.x+P.w/2,cy=P.y+P.h/2;
   for(i=0;i<b.windows.length;i++){
     w=b.windows[i];
-    if(!w.open)continue;
+    if(!w.open||!w.sideExit)continue;
     if(strict){                                   // centre must be in the opening
       if(cx>w.x+5&&cx<w.x+w.w-5&&cy>w.y-2&&cy<w.y+w.h+2)return w;
     } else if(hit(P,{x:w.x,y:w.y,w:w.w,h:w.h}))return w;
@@ -1094,7 +1111,7 @@ function updateBuildingState(){
     else if(P.inB&&pressed('down'))exitBuilding();
   }
   /* A broken window is an intentional DOWN interaction, never an automatic exit. */
-  if(P.inB&&P.winCd<=0&&pressed('down')){
+  if(P.inB&&P.winCd<=0&&pressed('down')&&!inp.jump&&!inp.fire&&!inp.nade){
     w=openWindowAt(P.inB,true);
     if(w){
       var wb=P.inB,outDir=(w.x+w.w/2<wb.x+wb.w/2)?-1:1;
@@ -1174,12 +1191,13 @@ function updateLadderTraversal(){
   return true;
 }
 function updatePlayer(){
-  var B=BROS[P.bro];
+  var B=BROS[P.bro],dropNow=false;
   if(P.cd>0)P.cd--;
   if(P.inv>0)P.inv--;
   if(P.swapCd>0)P.swapCd--;
   if(P.fireT>0)P.fireT--;
   if(P.rollCd>0)P.rollCd--;
+  if(P.dropT>0)P.dropT--;
   if(P.entryLock>0){P.entryLock--;P.vx*=.72;}
   if(pressed('swap')&&P.swapCd<=0){
     var frac=P.hp/P.maxHp;
@@ -1190,12 +1208,17 @@ function updatePlayer(){
     addLight(P.x+P.w/2,P.y+P.h/2,120,'#ffffff',14);
   }
   if(updateLadderTraversal())return;
-  if(updateStairTraversal(B))return;
+  dropNow=inp.down&&pressed('jump')&&droppableSurfaceBelow(P);
+  if(!dropNow&&updateStairTraversal(B))return;
+  if(dropNow){
+    P.stair=null;P.dropT=13;P.onGround=false;P.coyote=0;P.vy=3.8;P.y+=6;
+    P.prone=false;P.h=42;burst(P.x+P.w/2,P.y+P.h,'#9b8d72',5,1.6);tone(210,.05,'triangle',.025,130);
+  }
   if(P.onGround&&P.rollAir)P.rollAir=false;
   if(P.onGround&&P.rollT<=0)P.airRollUsed=false;
   var groundRoll=P.onGround&&(inp.left||inp.right||Math.abs(P.vx)>0.8);
   var airRoll=!P.onGround&&!P.airRollUsed;
-  if(P.rollT<=0&&P.rollCd<=0&&!P.atDoor&&pressed('down')&&(groundRoll||airRoll)){
+  if(!dropNow&&P.rollT<=0&&P.rollCd<=0&&!P.atDoor&&pressed('down')&&(groundRoll||airRoll)){
     P.rollDir=inp.left?-1:inp.right?1:(Math.abs(P.vx)>.2?(P.vx<0?-1:1):P.facing);
     P.rollAir=airRoll;P.rollMax=airRoll?20:24;P.rollT=P.rollMax;P.facing=P.rollDir;
     if(airRoll){P.airRollUsed=true;P.vx=P.rollDir*Math.max(Math.abs(P.vx),B.big?3.8:4.4);}
@@ -1220,9 +1243,8 @@ function updatePlayer(){
   P.vx=clamp(P.vx,-maxS,maxS);
   P.lean=lerp(P.lean,clamp(P.vx/B.speed,-1,1),0.2);
   if(P.onGround)P.coyote=7;else if(P.coyote>0)P.coyote--;
-  if(!rolling&&pressed('jump')){
-    if(P.onGround&&inp.down){P.y+=4;P.vy=1;}
-    else if(P.onGround||P.coyote>0){P.vy=B.jump;P.jumps=1;P.coyote=0;SFX.jump();}
+  if(!rolling&&pressed('jump')&&!dropNow){
+    if(P.onGround||P.coyote>0){P.vy=B.jump;P.jumps=1;P.coyote=0;SFX.jump();}
     else if(B.dbl&&P.jumps<2){P.vy=B.jump*0.92;P.jumps=2;SFX.jump();
       burst(P.x+P.w/2,P.y+P.h,'#cfe8ff',10,2.5);}
   }

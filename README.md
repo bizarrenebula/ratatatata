@@ -18,6 +18,7 @@ Then open <http://localhost:8000>.
 | --- | --- |
 | Move / aim | Arrow keys or WASD |
 | Roll | Move left/right + press Down; press Down once while airborne to somersault |
+| Drop through | Hold Down and press Jump while standing on a platform or interior floor |
 | Jump | Z, K, or Space |
 | Fire / bite | X or J; automatically bites when an enemy is within melee range |
 | Grenade | Hold C or L to ready; release for short, medium, or three-second maximum throw |
