@@ -15,7 +15,7 @@
     font-family:Impact,"Haettenschweiler","Arial Narrow Bold",sans-serif;}
   #app{position:fixed;inset:0;display:flex;flex-direction:column;background:#08080a;}
   #stage{flex:1 1 100%;position:relative;overflow:hidden;background:#0a0d0f;}
-  #panel{display:none;position:fixed;inset:0;z-index:8;pointer-events:none;}
+  #panel{display:none;visibility:hidden;position:fixed;inset:0;z-index:8;pointer-events:none;}
   #panel canvas{position:absolute;inset:0;pointer-events:auto;}
   #mobilePause{display:none;position:fixed;left:max(10px,env(safe-area-inset-left));top:max(9px,env(safe-area-inset-top));
     z-index:11;width:38px;height:38px;border:1px solid rgba(255,255,255,.34);border-radius:10px;
@@ -3409,7 +3409,6 @@ function step(){
     }
     return;
   }
-  tapped=false;
   if(state==='INTRO'){
     stateT++;var itl=introTimeline();
     if(stateT>=itl.objectiveStart&&stateT<itl.ready-14&&stateT%4===0&&introTypeMark!==stateT){
@@ -3418,6 +3417,7 @@ function step(){
     if(stateT>itl.ready&&(anyButtonPressed()||tapped)){tapped=false;state='PLAY';stateT=0;SFX.start();}
     return;
   }
+  tapped=false;
   if(state==='EXITING'){
     stateT++;P.vx=0;P.vy=0;P.y+=P.exitDown?2.1:-2.1;P.anim+=.18;updateCamera();Music.update();
     if(stateT>58){state='CLEAR';stateT=0;}
@@ -3558,7 +3558,12 @@ function loop(t){
   while(acc>=16.667&&guard<4){step();acc-=16.667;guard++;}
   if(guard>=4)acc=0;
   render();
-  if(matchMedia('(pointer:coarse)').matches)drawPad();
+  var touchControls=matchMedia('(pointer:coarse)').matches&&state==='PLAY';
+  panelEl.style.visibility=touchControls?'visible':'hidden';
+  if(touchControls)drawPad();
+  else if(matchMedia('(pointer:coarse)').matches){
+    pg.setTransform(DPR,0,0,DPR,0,0);pg.clearRect(0,0,pad.cssW,pad.cssH);
+  }
   mobilePause.style.visibility=(state==='PLAY'||state==='PAUSE')?'visible':'hidden';
 }
 resize();
