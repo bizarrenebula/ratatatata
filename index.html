@@ -402,6 +402,7 @@ var STAGE_FLOW=[
 /* ==================== STATE ==================== */
 var state='TITLE', stage=1, score=0, lives=3, selIdx=0, hiScore=0;
 var level=null, cam={x:0,y:0,shake:0,zoom:1}, tick=0, stateT=0,introTypeMark=-1;
+var routeFx={active:false,t:0,moved:false,portal:null};
 var campaignSeed=1,campaign=null;
 var CAMPAIGNS=[
  {name:'BLACK CHEESE FILE',goal:'P.C.U.-9 poisoned the colony stores',things:['toxin ledger','sealed antidote','shipment manifest','lab access card']},
@@ -573,7 +574,7 @@ function addTraversalDetour(lv,rng,n,routeStart){
   p=candidates[Math.floor(rng()*candidates.length)];
   var lower=(lv.theme.prop==='pipe'||n===5),x=Math.round(p.x+p.w/2-210),gy=p.y;
   lv.detour={x:x,y:gy,w:420,kind:lower?'lower':'upper',cause:
-    lv.theme.prop==='pipe'?'SEWER COLLAPSE':n===2?'BURNING STREET':n===5||n===6?'JAMMED CARGO':n===7?'PILE OF WRECKED CARS':'SEALED P.C.U. CHECKPOINT'};
+    (lower&&n%2===0)?'COLLAPSED SPAN — GAP TOO WIDE':lv.theme.prop==='pipe'?'SEWER COLLAPSE':n===2?'BURNING STREET':n===5||n===6?'JAMMED CARGO':n===7?'PILE OF WRECKED CARS':'SEALED P.C.U. CHECKPOINT'};
   if(lower){
     var idx=lv.plats.indexOf(p);lv.plats.splice(idx,1);
     if(x-p.x>40)lv.plats.push({x:p.x,y:gy,w:x-p.x,h:620-gy,ground:true});
@@ -587,10 +588,27 @@ function addTraversalDetour(lv,rng,n,routeStart){
     var block={x:x+42,y:gy-142,w:112,h:142,type:'blockade',hp:9999,dead:false,indestructible:true};
     block.platform={x:block.x,y:block.y,w:block.w,h:block.h,obstacle:block};lv.obstacles.push(block);lv.plats.push(block.platform);
   }
+  // A contextual entrance sits behind the point where the blockage is first
+  // discovered. The player fades into a real alternate lane, traverses it,
+  // then uses a second connector beyond the obstruction.
+  var kinds=lower?['pipe','manhole','floor hatch']:['ladder','vent','fire escape'];
+  var entryKind=kinds[(n-1)%kinds.length],entryX=x-145,entryY=gy-42,entryIn=null;
+  if(lv.buildings.length&&n%3===0){
+    for(i=lv.buildings.length-1;i>=0;i--)if(lv.buildings[i].x+lv.buildings[i].w<x-35){
+      b=lv.buildings[i];entryKind='floor hatch';entryX=b.x+b.w*.56;entryY=b.gy-42;entryIn=b;break;
+    }
+  }
+  var altStartX=lower?x+18:x-118,altStartY=lower?510:ys[0]-42;
+  var altEndX=lower?x+382:x+305,altEndY=lower?510:ys[4]-42;
+  var exitKind=lower?(n%2?'ladder':'pipe'):(n%2?'vent':'ladder');
+  lv.transitions.push({x:entryX,y:entryY,w:44,h:46,inB:entryIn,action:lower||entryIn?'down':'up',kind:entryKind,
+    tx:altStartX,ty:altStartY,targetIn:null,label:'ALTERNATE ROUTE'});
+  lv.transitions.push({x:altEndX,y:altEndY,w:44,h:46,inB:null,action:lower?'up':'down',kind:exitKind,
+    tx:x+450,ty:gy-42,targetIn:null,label:'RETURN TO MAIN ROUTE'});
 }
 function buildLevel(n){
   var rng=mulberry32(9001+n*577+campaignSeed), isBoss=(n===11);
-  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],setpieces:[],foreground:[],boss:isBoss,
+  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],transitions:[],setpieces:[],foreground:[],boss:isBoss,
           length:isBoss?Math.max(1180,view.w*2.2):(4200+n*470),exit:null,routeMode:null,flow:STAGE_FLOW[n-1],miniBossDefeated:isBoss};
   var x=0,gy=470,px;
   if(isBoss){
@@ -748,6 +766,7 @@ function buildLevel(n){
 }
 function startStage(n){
   stage=n; level=buildLevel(n);
+  routeFx={active:false,t:0,moved:false,portal:null};
   bullets=[];ebullets=[];enemies=[];items=[];parts=[];nades=[];swings=[];
   decals=[];flashes=[];lights=[];
   var i;for(i=0;i<level.items.length;i++)items.push(level.items[i]);
@@ -1169,6 +1188,34 @@ function updateBuildingState(){
     b.cut=lerp(b.cut,(P.inB===b)?1:0,0.14);
     b.doorOpen=lerp(b.doorOpen,(P.inB===b)?1:0,0.20);
   }
+}
+function routePortalNear(t){
+  if((t.inB||null)!==(P.inB||null))return false;
+  return hit(P,{x:t.x-18,y:t.y-12,w:t.w+36,h:t.h+24});
+}
+function tryRouteTransition(){
+  if(!level.transitions||routeFx.active)return false;
+  if(level.detour&&P.x>level.detour.x-235)level.detour.discovered=true;
+  if(level.detour&&!level.detour.discovered)return false;
+  for(var i=0;i<level.transitions.length;i++){
+    var t=level.transitions[i];
+    if(routePortalNear(t)&&((t.action==='up'&&pressed('up'))||(t.action==='down'&&pressed('down')))){
+      routeFx={active:true,t:0,moved:false,portal:t};P.vx=0;P.vy=0;P.rollT=0;P.stair=null;
+      tone(180,.14,'triangle',.035,80);return true;
+    }
+  }
+  return false;
+}
+function updateRouteTransition(){
+  if(!routeFx.active)return false;
+  routeFx.t++;P.vx=0;P.vy=0;
+  if(routeFx.t>=22&&!routeFx.moved){
+    var t=routeFx.portal;routeFx.moved=true;P.inB=t.targetIn||null;P.x=t.tx;P.y=t.ty;
+    P.h=42;P.prone=false;P.onGround=false;P.inv=Math.max(P.inv,26);P.checkX=P.x;P.checkY=P.y;
+    cam.x=clamp(P.x-view.w*.38,0,Math.max(0,level.length-view.w));cam.y=camY0;
+  }
+  if(routeFx.t>=44){routeFx.active=false;routeFx.portal=null;}
+  return true;
 }
 function updateStairTraversal(B){
   if(!P.inB||!P.inB.stairs){P.stair=null;return false;}
@@ -2209,6 +2256,35 @@ function paintBuildings(){
     }
     if(P.inB&&b!==P.inB){
       g.fillStyle='rgba(3,4,6,.68)';g.fillRect(b.x-10,b.y-14,b.w+20,b.h+18);
+    }
+  }
+}
+function paintRouteTransitions(){
+  if(!level.transitions)return;
+  for(var i=0;i<level.transitions.length;i++){
+    var t=level.transitions[i];
+    if((t.inB&&P.inB!==t.inB)||(!t.inB&&P.inB))continue;
+    var cx=t.x+t.w/2,base=t.y+t.h;
+    g.fillStyle='rgba(8,10,11,.88)';g.strokeStyle='rgba(145,164,150,.72)';g.lineWidth=3;
+    if(t.kind==='manhole'||t.kind==='floor hatch'){
+      ell(g,cx,base-5,t.kind==='manhole'?25:23,t.kind==='manhole'?8:11);g.fill();g.stroke();
+      g.strokeStyle='rgba(210,225,205,.20)';g.lineWidth=1;
+      for(var mh=-14;mh<=14;mh+=7){g.beginPath();g.moveTo(cx+mh,base-11);g.lineTo(cx+mh,base+1);g.stroke();}
+    } else if(t.kind==='ladder'||t.kind==='fire escape'){
+      g.strokeStyle='#69776d';g.lineWidth=4;g.beginPath();g.moveTo(cx-13,t.y);g.lineTo(cx-13,base);g.moveTo(cx+13,t.y);g.lineTo(cx+13,base);g.stroke();
+      g.lineWidth=2;for(var ly=t.y+7;ly<base;ly+=9){g.beginPath();g.moveTo(cx-13,ly);g.lineTo(cx+13,ly);g.stroke();}
+    } else {
+      g.strokeStyle='#53655e';g.lineWidth=9;g.beginPath();g.moveTo(cx,t.y);g.lineTo(cx,base);g.stroke();
+      g.strokeStyle='rgba(210,230,220,.25)';g.lineWidth=2;g.strokeRect(cx-9,t.y+4,18,t.h-8);
+    }
+    if(level.detour&&level.detour.discovered&&routePortalNear(t)){
+      var ay=t.y-18-Math.sin(tick*.12)*2,up=t.action==='up';
+      g.globalAlpha=.58+.42*Math.abs(Math.sin(tick*.1));g.fillStyle='rgba(5,7,8,.84)';ell(g,cx,ay,15,15);g.fill();
+      g.fillStyle='#9be36a';g.beginPath();
+      if(up){g.moveTo(cx,ay-8);g.lineTo(cx+7,ay+4);g.lineTo(cx-7,ay+4);}
+      else {g.moveTo(cx,ay+8);g.lineTo(cx+7,ay-4);g.lineTo(cx-7,ay-4);}
+      g.closePath();g.fill();g.globalAlpha=1;
+      txt(t.label,cx,ay-21,9,'#c8d7c5','center');
     }
   }
 }
@@ -3511,6 +3587,8 @@ function step(){
     return;
   }
   if(pressed('pause')){state='PAUSE';if(matchMedia('(pointer:coarse)').matches)setPauseModal(true);return;}
+  if(updateRouteTransition())return;
+  if(tryRouteTransition())return;
   updatePlayer();updateEnemies();updateBoss();updateProjectiles();updateCamera();Music.update();
   if(!level.boss&&playerReachedExit()){
     P.exitDown=level.exit.kind==='toilet'||level.exit.kind==='containerdrop';
@@ -3539,6 +3617,7 @@ function render(){
   paintIngress();
   paintInteriorFocus();
   paintBuildings();
+  paintRouteTransitions();
   paintObstacles();
   paintExit();
   paintItems();
@@ -3610,6 +3689,10 @@ function render(){
     txt('the sewer belongs to the brothers again',view.cssW/2,view.cssH*0.44+92,
       Math.min(14,view.cssW*0.034),'#8fbf6a','center');
   }
+  var fadeA=routeFx.active?(routeFx.t<=22?routeFx.t/22:(44-routeFx.t)/22):0;
+  if(state==='EXITING')fadeA=Math.max(fadeA,clamp((stateT-10)/48,0,1));
+  if(state==='CLEAR'&&stateT<20)fadeA=Math.max(fadeA,1-stateT/20);
+  if(fadeA>0){g.fillStyle='rgba(0,0,0,'+clamp(fadeA,0,1)+')';g.fillRect(0,0,view.cssW,view.cssH);}
 }
 var last=0,acc=0;
 function loop(t){
@@ -3620,7 +3703,7 @@ function loop(t){
   while(acc>=16.667&&guard<4){step();acc-=16.667;guard++;}
   if(guard>=4)acc=0;
   render();
-  var touchControls=matchMedia('(pointer:coarse)').matches&&state==='PLAY';
+  var touchControls=matchMedia('(pointer:coarse)').matches&&state==='PLAY'&&!routeFx.active;
   panelEl.style.visibility=touchControls?'visible':'hidden';
   if(touchControls)drawPad();
   else if(matchMedia('(pointer:coarse)').matches){
