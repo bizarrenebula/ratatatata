@@ -1049,14 +1049,14 @@ function collidePlatforms(o,useOneway,stepAssist){
     if(o===P&&P.dropT>0&&(p.oneway||p.interiorFloor))continue;
     if(p.inside&&p.inside!==o.inB)continue;
     if(p.step&&o===P){
-      if(useOneway&&o.vy>=0&&o.y+o.h-o.vy<=p.y+3&&hit(o,r)&&!inp.down){
+      if(useOneway&&o.vy>=0&&o.y+o.h-o.vy<=p.y+3&&hit(o,r)){
         o.y=p.y-o.h;o.vy=0;o.onGround=true;
       }
       continue;
     }
     if(p.oneway){
       if(!useOneway)continue;
-      if(o.vy>=0&&o.y+o.h-o.vy<=p.y+2&&hit(o,r)&&!(o===P&&inp.down)){o.y=p.y-o.h;o.vy=0;o.onGround=true;}
+      if(o.vy>=0&&o.y+o.h-o.vy<=p.y+2&&hit(o,r)){o.y=p.y-o.h;o.vy=0;o.onGround=true;}
       continue;
     }
     if(hit(o,r)){
@@ -1110,8 +1110,9 @@ function updateBuildingState(){
     if(!P.inB&&pressed('up'))enterBuilding(P.atDoor);
     else if(P.inB&&pressed('down'))exitBuilding();
   }
-  /* A broken window is an intentional DOWN interaction, never an automatic exit. */
-  if(P.inB&&P.winCd<=0&&pressed('down')&&!inp.jump&&!inp.fire&&!inp.nade){
+  /* Side-window exits use the same deliberate crouch + jump gesture as
+     dropping through a floor. DOWN alone remains free for downward aim. */
+  if(P.inB&&P.winCd<=0&&P.prone&&inp.down&&pressed('jump')&&!inp.fire&&!inp.nade){
     w=openWindowAt(P.inB,true);
     if(w){
       var wb=P.inB,outDir=(w.x+w.w/2<wb.x+wb.w/2)?-1:1;
@@ -1208,7 +1209,7 @@ function updatePlayer(){
     addLight(P.x+P.w/2,P.y+P.h/2,120,'#ffffff',14);
   }
   if(updateLadderTraversal())return;
-  dropNow=inp.down&&pressed('jump')&&droppableSurfaceBelow(P);
+  dropNow=P.prone&&inp.down&&pressed('jump')&&droppableSurfaceBelow(P);
   if(!dropNow&&updateStairTraversal(B))return;
   if(dropNow){
     P.stair=null;P.dropT=13;P.onGround=false;P.coyote=0;P.vy=3.8;P.y+=6;
