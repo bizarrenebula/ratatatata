@@ -913,7 +913,13 @@ function explode(x,y,radius,dmg,fromPlayer){
   } else if(Math.hypot(P.x+P.w/2-x,P.y+P.h/2-y)<radius) hurtPlayer(dmg,x);
 }
 function damageEnemy(e,d){
-  e.hp-=d;e.flash=6;SFX.ehit();
+  if(e.miniBoss){
+    e.miniFightStarted=true;
+    d*=0.55; // Elite armor keeps high-DPS weapons from erasing phase transitions.
+    if(e.hp-d<=0&&(e.miniFightTicks||0)<1800)e.hp=1;
+    else e.hp-=d;
+  }else e.hp-=d;
+  e.flash=6;SFX.ehit();
   if(e.miniBoss&&e.hp>0)updateMiniBossPhase(e,P.x+P.w/2,P.y+P.h/2);
   addPart(e.x+e.w/2,e.y+e.h/2,rnd(-2,2),rnd(-3,-0.5),'#c8202c',22,3,0.3);
   if(e.hp<=0){
@@ -1502,8 +1508,8 @@ function updateMiniBossPhase(e,pcx,pcy){
     burst(e.x+e.w/2,e.y+e.h/2,phase===2?'#ffc13c':'#78e37b',24,5);cam.shake=8;
     tone(phase===2?170:620,.32,'sawtooth',.065,phase===2?65:980);
   }
-  e.miniMove=phase===2?1.42:phase===3?1.68:1;
-  e.miniAttackRate=phase===2?.68:phase===3?1.7:1;
+  e.miniMove=phase===2?1.42:phase===3?1.95:1;
+  e.miniAttackRate=phase===2?.68:phase===3?.48:1;
   if(e.specialT>0)e.specialT--;
   if(phase!==2||(!e.engaged&&Math.abs(pcx-(e.x+e.w/2))>500))return;
   e.specialCd--;
@@ -1534,9 +1540,10 @@ function updateEnemies(){
       if(s.objective)ne.objective=true;
       if(s.miniBoss){
         ne.miniBoss=s.miniBoss;ne.name=s.miniBoss.name;ne.title=s.miniBoss.title;
-        ne.hp=Math.round(ne.hp*9.25);ne.maxHp=ne.hp;ne.dmg=Math.round(ne.dmg*1.65);
+        ne.hp=Math.max(Math.round(ne.hp*18),1800+stage*120);ne.maxHp=ne.hp;ne.dmg=Math.round(ne.dmg*1.85);
         ne.w=Math.round(ne.w*1.28);ne.h=Math.round(ne.h*1.28);ne.patrolRadius*=1.35;
         ne.baseY=ne.y;ne.miniPhase=1;ne.specialCd=75;ne.specialT=0;ne.maxHp=ne.hp;
+        ne.miniFightStarted=false;ne.miniFightTicks=0;
         if(s.t!=='bat')assignEnemyTerritory(ne);
       }
       if(s.inB){ne.inB=s.inB;assignEnemyTerritory(ne);}
@@ -1547,6 +1554,7 @@ function updateEnemies(){
   for(i=enemies.length-1;i>=0;i--){
     e=enemies[i];
     if(e.dead){enemies.splice(i,1);continue;}
+    if(e.miniBoss&&e.miniFightStarted&&!P.dead)e.miniFightTicks++;
     if(e.flash>0)e.flash--;
     if(e.touchCd>0)e.touchCd--;
     e.anim+=0.15;
@@ -1556,6 +1564,7 @@ function updateEnemies(){
       e.vy+=e.t==='bat'?0.18:0.55;e.vx*=0.992;
       collidePlatforms(e,true,true);holdEnemyTerritory(e);
       if(e.fallDead||e.y>640){
+        if(e.miniBoss){e.fallDead=false;e.blastLoose=0;recoverEnemyTerritory(e);continue;}
         countObjectiveElimination(e);SFX.enemyDeath(e.t,!!e.miniBoss);
         burst(e.x+e.w/2,Math.min(610,e.y+e.h),'#6f6256',8,3);enemies.splice(i,1);
       }
@@ -1563,12 +1572,12 @@ function updateEnemies(){
     }
     if(e.t==='mouse'){
       var dir=pcx<ecx?-1:1,dist=Math.abs(pcx-ecx);
-      if(setEnemyEngaged(e,dist,190,270,90)){
+      if(setEnemyEngaged(e,dist,e.miniBoss?520:190,e.miniBoss?650:270,e.miniBoss?180:90)){
         e.facing=dir;
-        if(e.miniBoss&&e.miniPhase===3)e.vx=dist<350?-dir*2.35*e.miniMove:dist>455?dir*1.05*e.miniMove:e.vx*.82;
+        if(e.miniBoss&&e.miniPhase===3)e.vx=dir*(dist>80?2.3:.6)*e.miniMove;
         else e.vx=dir*(dist<135?2.4+stage*0.06:1.65+stage*0.04)*(e.miniMove||1);
         if(e.state==='lunge'){e.timer--;if(e.timer<=0)e.state='engage';}
-        else if(dist<70&&Math.abs(pcy-ecy)<40&&e.onGround&&(!e.miniBoss||e.miniPhase!==3)){e.state='lunge';e.timer=22;e.vy=-5.2;}
+        else if(dist<70&&Math.abs(pcy-ecy)<40&&e.onGround){e.state='lunge';e.timer=e.miniPhase===3?14:22;e.vy=e.miniPhase===3?-6.2:-5.2;}
         else e.state='engage';
       } else {e.state='patrol';patrolGround(e,1.05+stage*0.025);}
       e.vy+=0.55;moveGroundEnemy(e,true,true);
@@ -1576,10 +1585,10 @@ function updateEnemies(){
     } else if(e.t==='bat'){
       var tx=pcx-ecx,ty=(P.y-70)-e.y;
       var batDist=Math.hypot(tx,pcy-ecy);
-      if(setEnemyEngaged(e,batDist,330,430,300)){
+      if(setEnemyEngaged(e,batDist,e.miniBoss?560:330,e.miniBoss?680:430,300)){
         e.state='engage';
-        var batSeek=e.miniBoss&&e.miniPhase===3&&batDist<360?-1:1;
-        e.vx+=clamp(tx,-1,1)*0.055*batSeek*(e.miniMove||1);e.vy+=clamp(ty,-1,1)*0.05;
+        var batAccel=e.miniBoss&&e.miniPhase===3?.082:.055;
+        e.vx+=clamp(tx,-1,1)*batAccel*(e.miniMove||1);e.vy+=clamp(ty,-1,1)*batAccel;
       } else {
         e.state='patrol';
         var orbitX=e.baseX+Math.sin(tick*0.018+e.anim*0.1)*e.patrolRadius;
@@ -1622,9 +1631,8 @@ function updateEnemies(){
         if(setEnemyEngaged(e,adw,440,540,170)){
           e.state='engage';e.facing=dw<0?-1:1;
           if(e.miniBoss&&e.miniPhase===3){
-            if(adw<380)e.vx=-e.facing*2.15*e.miniMove;
-            else if(adw>480)e.vx=e.facing*1.15*e.miniMove;
-            else e.vx*=.82;
+            if(adw>105)e.vx=e.facing*2.05*e.miniMove;
+            else e.vx*=.55;
           } else if(adw<150)e.vx=-e.facing*1.7*(e.miniMove||1);
           else if(adw>300)e.vx=e.facing*1.7*(e.miniMove||1);
           else e.vx*=0.72;
@@ -1637,7 +1645,7 @@ function updateEnemies(){
             aimedShot(ecx+e.facing*15,e.y+13,pcx,pcy-4,6.4,{dmg:12,r:4,life:150,pistol:true});
             addLight(ecx+e.facing*20,e.y+13,72,'#ffe08a',7);
             tone(700,0.05,'square',0.035,260);noise(0.05,0.05,2400);
-          } else {e.shots=e.t==='lizard'?5:e.miniBoss&&e.miniPhase===2?4:e.miniBoss&&e.miniPhase===3?1:stage>5?3:2;e.timer=(e.t==='lizard'?48:64+Math.random()*46)*(e.miniAttackRate||1);}
+          } else {e.shots=e.t==='lizard'?5:e.miniBoss&&(e.miniPhase===2||e.miniPhase===3)?4:stage>5?3:2;e.timer=(e.t==='lizard'?48:64+Math.random()*46)*(e.miniAttackRate||1);}
         }
         if(e.y>640){recoverEnemyTerritory(e);continue;}
       }
@@ -1647,7 +1655,7 @@ function updateEnemies(){
       var catDist=Math.abs(d2);
       if(setEnemyEngaged(e,catDist,520,640,190)){
         e.state='engage';e.facing=d2<0?-1:1;
-        if(e.miniBoss&&e.miniPhase===3)e.vx=catDist<430?-e.facing*1.65*e.miniMove:catDist>540?e.facing*.8*e.miniMove:e.vx*.84;
+        if(e.miniBoss&&e.miniPhase===3)e.vx=catDist>110?e.facing*1.35*e.miniMove:e.vx*.65;
         else e.vx=e.facing*(catDist>330?0.9:catDist<210?-0.65:0.15)*(e.miniMove||1);
       } else {e.state='patrol';patrolGround(e,0.62);}
       moveGroundEnemy(e,false,true);
