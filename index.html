@@ -2120,17 +2120,6 @@ function paintBuildings(){
     }
 
     if(P.inB===b&&!P.stair){
-      var pc=P.x+P.w/2,pf=P.y+P.h;
-      for(i=0;i<b.stairs.length;i++){
-        var sf=b.stairs[i],arrow=0,ax=0,ay=0;
-        if(Math.abs(pc-sf.lowX)<52&&Math.abs(pf-sf.lowY)<24){arrow=-1;ax=sf.lowX;ay=sf.lowY-50;}
-        else if(Math.abs(pc-sf.highX)<52&&Math.abs(pf-sf.highY)<24){arrow=1;ax=sf.highX;ay=sf.highY-50;}
-        if(arrow){g.globalAlpha=.55+.45*Math.abs(Math.sin(tick*.11));g.fillStyle='rgba(8,9,10,.82)';ell(g,ax,ay,14,14);g.fill();
-          g.fillStyle='#9be36a';g.beginPath();
-          if(arrow<0){g.moveTo(ax,ay-7);g.lineTo(ax+7,ay+4);g.lineTo(ax-7,ay+4);}
-          else {g.moveTo(ax,ay+7);g.lineTo(ax+7,ay-4);g.lineTo(ax-7,ay-4);}
-          g.closePath();g.fill();g.globalAlpha=1;}
-      }
       var openW=openWindowAt(b,true);
       if(openW){var wax=openW.x+openW.w/2,way=openW.y-15;g.globalAlpha=.55+.45*Math.abs(Math.sin(tick*.11));
         g.fillStyle='rgba(8,9,10,.82)';ell(g,wax,way,14,14);g.fill();g.fillStyle='#9be36a';
