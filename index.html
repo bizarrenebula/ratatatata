@@ -2702,6 +2702,55 @@ function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT){
   g.restore();
   g.restore();
 }
+
+// Front-facing portraits are used only on character select. Keeping this separate
+// preserves the readable side silhouettes used by gameplay and the title scene.
+function drawBrotherPortrait(x,y,broIdx,scale){
+  var B=BROS[broIdx],big=B.big,bodyW=big?48:38,headW=big?46:40;
+  g.save();g.translate(x,y);g.scale(scale,scale);
+  g.strokeStyle=B.tail;g.lineWidth=big?7:5;g.lineCap='round';
+  g.beginPath();g.moveTo(bodyW*.24,-29);g.quadraticCurveTo(bodyW*.9,-22,bodyW*.72,-5);g.stroke();g.lineCap='butt';
+  g.strokeStyle=B.pantsD;g.lineWidth=big?15:11;g.lineCap='round';
+  g.beginPath();g.moveTo(-bodyW*.2,-34);g.lineTo(-bodyW*.22,-12);g.moveTo(bodyW*.2,-34);g.lineTo(bodyW*.22,-12);g.stroke();g.lineCap='butt';
+  g.fillStyle=B.boot;rr(g,-bodyW*.42,-13,bodyW*.36,13,4);g.fill();ink(g,'rgba(8,6,8,.8)',1.5);
+  rr(g,bodyW*.06,-13,bodyW*.36,13,4);g.fill();ink(g,'rgba(8,6,8,.8)',1.5);
+  if(!big){g.fillStyle=B.bootL;g.fillRect(-bodyW*.44,-4,bodyW*.4,4);g.fillRect(bodyW*.04,-4,bodyW*.4,4);}
+  g.fillStyle=B.shirt;rr(g,-bodyW*.28,-70,bodyW*.56,39,8);g.fill();
+  g.fillStyle=B.coatL;rr(g,-bodyW*.52,-70,bodyW*.25,40,6);g.fill();ink(g,'rgba(8,6,8,.72)',1.7);
+  g.fillStyle=B.coat;rr(g,bodyW*.27,-70,bodyW*.25,40,6);g.fill();ink(g,'rgba(8,6,8,.72)',1.7);
+  g.strokeStyle=B.coatD;g.lineWidth=2;g.beginPath();g.moveTo(0,-68);g.lineTo(0,-31);g.stroke();
+  if(big){
+    g.fillStyle='#6b5332';rr(g,-bodyW*.52,-36,bodyW*1.04,8,2);g.fill();
+    for(var s=-2;s<=2;s++){g.fillStyle=B.trim;rr(g,s*8-2.5,-37,5,9,1);g.fill();}
+  }
+  g.strokeStyle=big?B.furD:B.coatD;g.lineWidth=big?13:10;g.lineCap='round';
+  g.beginPath();g.moveTo(-bodyW*.43,-63);g.lineTo(-bodyW*.62,-34);g.moveTo(bodyW*.43,-63);g.lineTo(bodyW*.62,-34);g.stroke();
+  g.fillStyle=B.glove;ell(g,-bodyW*.62,-31,big?7:6,big?8:7);g.fill();ell(g,bodyW*.62,-31,big?7:6,big?8:7);g.fill();
+  g.fillStyle=B.fur;ell(g,-headW*.38,-97,big?13:14,big?16:18);g.fill();ink(g,'rgba(8,6,8,.75)',1.8);
+  ell(g,headW*.38,-97,big?13:14,big?16:18);g.fill();ink(g,'rgba(8,6,8,.75)',1.8);
+  g.fillStyle=B.skin;ell(g,-headW*.38,-97,big?7:8,big?10:12);g.fill();ell(g,headW*.38,-97,big?7:8,big?10:12);g.fill();
+  g.fillStyle=lin(g,-headW*.5,-111,headW*.5,-72,[[0,B.furL],[.58,B.fur],[1,B.furD]]);
+  ell(g,0,-91,headW*.52,big?25:24);g.fill();ink(g,'rgba(8,6,8,.82)',2);
+  g.fillStyle=B.furL;ell(g,-11,-82,13,11);g.fill();ell(g,11,-82,13,11);g.fill();
+  g.fillStyle=B.eye;ell(g,-9,-96,6,6.5);g.fill();ell(g,9,-96,6,6.5);g.fill();
+  g.fillStyle='#171310';ell(g,-8,-95,big?2.2:2,3);g.fill();ell(g,8,-95,big?2.2:2,3);g.fill();
+  g.strokeStyle='rgba(12,9,8,.9)';g.lineWidth=2.3;g.beginPath();
+  if(big){g.moveTo(-16,-104);g.lineTo(-4,-100);g.moveTo(16,-104);g.lineTo(4,-100);}
+  else{g.moveTo(-16,-102);g.lineTo(-4,-104);g.moveTo(16,-102);g.lineTo(4,-104);}g.stroke();
+  g.fillStyle=B.skin;ell(g,0,-84,6,4.5);g.fill();ink(g,'rgba(8,6,8,.55)',1.1);
+  g.strokeStyle='rgba(25,15,16,.75)';g.lineWidth=1.4;g.beginPath();g.moveTo(0,-80);g.lineTo(0,-76);g.stroke();
+  g.fillStyle='#f6f2e4';rr(g,-5,-77,4.5,9,1);g.fill();rr(g,.5,-77,4.5,9,1);g.fill();
+  if(big){
+    g.strokeStyle='rgba(150,70,65,.9)';g.lineWidth=2;g.beginPath();g.moveTo(4,-107);g.lineTo(11,-86);g.stroke();
+  }else{
+    g.fillStyle=B.coat;g.beginPath();g.arc(0,-105,19,Math.PI,Math.PI*2);g.lineTo(17,-100);g.lineTo(-17,-100);g.closePath();g.fill();ink(g,'rgba(8,6,8,.75)',1.6);
+    g.fillStyle='#b9342b';rr(g,-22,-104,8,5,2);g.fill();
+  }
+  g.strokeStyle='rgba(255,255,255,.34)';g.lineWidth=1;g.beginPath();
+  g.moveTo(-12,-82);g.lineTo(-31,-86);g.moveTo(-12,-79);g.lineTo(-32,-76);
+  g.moveTo(12,-82);g.lineTo(31,-86);g.moveTo(12,-79);g.lineTo(32,-76);g.stroke();
+  g.restore();
+}
 function drawMouseThug(e){
   var s=Math.sin(e.anim),x=e.x+e.w/2,y=e.y+e.h;
   var sq=e.squash/10,elite=e.miniBoss?1.28:1;
@@ -3149,10 +3198,14 @@ function txt(s,x,y,size,col,align,font){
 }
 function comicCaption(s,x,y,size,quiet){
   var font=size+'px Impact,"Arial Narrow Bold",sans-serif';
-  g.save();g.font=font;g.textAlign='center';g.lineJoin='round';
-  g.strokeStyle='rgba(8,6,6,.88)';g.lineWidth=Math.max(4,size*.32);g.strokeText(s,x+2,y+3);
-  g.strokeStyle='#e8d59c';g.lineWidth=Math.max(2,size*.16);g.strokeText(s,x,y);
-  g.fillStyle='#d63825';g.fillText(s,x,y);
+  g.save();g.font=font;g.textAlign='center';
+  var textW=g.measureText(s).width,padX=Math.max(10,size*.7),boxW=Math.min(view.cssW*.94,textW+padX*2);
+  var boxH=Math.max(17,size*1.3),boxX=x-boxW/2,boxY=y-size*.88;
+  g.shadowColor='rgba(0,0,0,.72)';g.shadowBlur=8;g.shadowOffsetY=3;
+  g.fillStyle=quiet?'rgba(5,10,12,.82)':'rgba(8,13,15,.9)';rr(g,boxX,boxY,boxW,boxH,4);g.fill();
+  g.shadowColor='transparent';g.strokeStyle=quiet?'rgba(190,205,195,.22)':'rgba(220,230,216,.32)';g.lineWidth=1;
+  rr(g,boxX+.5,boxY+.5,boxW-1,boxH-1,4);g.stroke();
+  g.fillStyle=quiet?'#d5ddd4':'#f2eee2';g.fillText(s,x,y);
   g.textAlign='left';g.restore();
 }
 var _vigG=null,_vigK='';
@@ -3311,8 +3364,10 @@ function drawTitle(){
     txt('RATATATATA!',3,4,ts,'#160b0a','center');txt('RATATATATA!',0,0,ts,'#d63825','center');g.restore();
   }
   comicCaption('RAT BROS: RODENT RECKONING',w/2,logoY+ry+31,Math.min(20,w*0.034),false);
-  comicCaption('P.C.U.-9 TOOK THEIR FATHER. NOW THEY\'RE COMING TO SHUT IT DOWN.',w/2,logoY+ry+58,
-    Math.min(13,w*0.0185),true);
+  comicCaption('A RUTHLESS EXTERMINATION COMPANY TOOK THEIR FATHER.',w/2,logoY+ry+54,
+    Math.min(13,w*0.019),true);
+  comicCaption('NOW THE RAT BROS ARE COMING FOR PAYBACK.',w/2,logoY+ry+72,
+    Math.min(13,w*0.019),true);
   // The brothers hold the sewer mouth back-to-back, covering both approaches.
   var heroY=h*0.715,heroGap=Math.min(31,w*0.045),heroScale=Math.min(1.42,h/390);
   var savedBro=P.bro,savedWeapon=P.weapon,savedFire=P.fireT,ha=titleHeroAction(0),hb=titleHeroAction(205);
@@ -3350,14 +3405,10 @@ function drawSelect(){
     rr(g,cx,cy,cw,ch,8);g.fill();
     g.strokeStyle=sel?'#c9a24a':'#2c3230';g.lineWidth=sel?3:1.5;
     rr(g,cx,cy,cw,ch,8);g.stroke();
-    g.save();
-    g.setTransform(DPR,0,0,DPR,0,0);
-    var sc=Math.min(cw/120,ch/150)*2.4;
-    g.translate(cx+cw/2,cy+ch*0.66);g.scale(sc,sc);
-    var savedW=P.weapon;P.weapon=i===0?'knife':'machinegun';
-    drawBrother(0,0,1,i,{x:1,y:0},0,false,false,1,P.weapon,0);
-    P.weapon=savedW;
-    g.restore();
+    // Portrait artwork occupies only the safe area between HP and the name block.
+    var portraitTop=cy+ch*.13,portraitBottom=cy+ch*.76;
+    var portraitScale=Math.min(cw*.76/78,(portraitBottom-portraitTop)/116);
+    drawBrotherPortrait(cx+cw/2,portraitBottom,i,portraitScale);
     txt(B.name,cx+cw/2,cy+ch*0.80,Math.min(24,cw*0.16),sel?'#e8c25a':'#a8a08e','center');
     txt(B.full.replace(B.name,'').trim()||B.name,cx+cw/2,cy+ch*0.855,Math.min(11,cw*0.075),
       sel?'#cfc4ad':'#7d8a70','center');
