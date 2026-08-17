@@ -20,6 +20,13 @@
   #mobilePause{display:none;position:fixed;left:max(10px,env(safe-area-inset-left));top:max(9px,env(safe-area-inset-top));
     z-index:11;width:38px;height:38px;border:1px solid rgba(255,255,255,.34);border-radius:10px;
     background:rgba(8,12,14,.36);color:rgba(255,255,255,.78);font:bold 15px Arial,sans-serif;backdrop-filter:blur(3px);}
+  #sizeCtl{position:fixed;right:max(10px,env(safe-area-inset-right));top:max(9px,env(safe-area-inset-top));
+    z-index:11;display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid rgba(255,255,255,.28);
+    border-radius:10px;background:rgba(8,12,14,.42);backdrop-filter:blur(3px);}
+  #sizeCtl button{width:30px;height:30px;border:1px solid rgba(255,255,255,.30);border-radius:8px;
+    background:rgba(255,255,255,.08);color:rgba(255,255,255,.86);font:bold 17px Arial,sans-serif;line-height:1;}
+  #sizeCtl button:active{background:rgba(232,194,90,.32);}
+  #sizeVal{min-width:44px;text-align:center;color:#e8c25a;font:bold 13px Arial,sans-serif;letter-spacing:.5px;}
   #pauseModal{display:none;position:fixed;inset:0;z-index:12;align-items:center;justify-content:center;background:rgba(2,4,5,.70);}
   #pauseCard{min-width:min(330px,72vw);padding:25px;border:1px solid rgba(232,194,90,.48);border-radius:14px;
     background:linear-gradient(#172024,#080b0d);box-shadow:0 18px 60px #000;text-align:center;color:#e8c25a;}
@@ -54,6 +61,11 @@
   <div id="panel"><canvas id="pad"></canvas></div>
 </div>
 <button id="mobilePause" aria-label="Pause game">Ⅱ</button>
+<div id="sizeCtl">
+  <button id="sizeDown" type="button" aria-label="Decrease character size">&minus;</button>
+  <span id="sizeVal">1.00&times;</span>
+  <button id="sizeUp" type="button" aria-label="Increase character size">+</button>
+</div>
 <div id="pauseModal"><div id="pauseCard"><h2>PAUSED</h2><button id="pauseContinue">CONTINUE</button><button id="pauseMenu">MAIN MENU</button></div></div>
 <script>
 (function(){
@@ -372,6 +384,9 @@ var WEAPONS={
   bazooka:   {name:'BAZOOKA',     power:6,cd:34, dmg:42, auto:false, n:1, spread:0,    spd:7,  ammo:24,       col:'#ffb15a', r:7,rocket:true}
 };
 var PICKUP_WEAPONS=['knife','pistol','machinegun','spread','flame','bazooka'];
+/* Half-width of the ground a mini-boss will defend — about one screen, so the
+   player can always walk out of the fight and come back on their own terms. */
+var MINI_LEASH=430;
 var MINI_BOSSES=[
  {type:'mouse',name:'SILKFANG',title:'THE SEWER RONIN'},
  {type:'cat',name:'CATZILLA',title:'THE NINE-LIFE HEAVY'},
@@ -449,9 +464,51 @@ var bullets=[],ebullets=[],enemies=[],items=[],parts=[],nades=[],swings=[],
     decals=[],flashes=[],lights=[],motes=[];
 var P={};
 
+/* ==================== CHARACTER SCALE ==================== */
+/* Live tuning knob for the brothers and every enemy. Both the drawn art and the
+   collision box scale together, so the feel stays honest while a size is dialled
+   in. Resizes anchor at the feet (bats at their centre) to avoid dropping a
+   grown body into the floor. The final boss is a fixed-arena setpiece and is
+   deliberately left out. */
+var P_W=24,P_STAND=42,P_PRONE=24;
+var SCALE_MIN=0.5,SCALE_MAX=2,SCALE_STEP=0.05,charScale=1.75;
+/* Structures scale with the cast so a 1.75x rat still fits through a doorway,
+   up a flight of stairs and under a ceiling. Pickups only take a readability
+   bump — they are icons, not bodies. Level pacing (gap widths, jump physics)
+   is deliberately NOT scaled, so the traversal still plays exactly as tuned. */
+var BUILD_SCALE=1.75, ITEM_SCALE=1.25, ITEM_D=Math.round(26*ITEM_SCALE);
+try{var storedScale=parseFloat(localStorage.getItem('rat.charScale'));
+  if(storedScale>=SCALE_MIN&&storedScale<=SCALE_MAX)charScale=storedScale;}catch(err){}
+
+function scaleBox(o,bw,bh,centred){
+  var nw=bw*charScale,nh=bh*charScale;
+  o.x+=(o.w-nw)/2;o.y+=centred?(o.h-nh)/2:(o.h-nh);o.w=nw;o.h=nh;
+}
+function applyCharScale(){
+  var i,e;
+  for(i=0;i<enemies.length;i++){e=enemies[i];if(e.bw)scaleBox(e,e.bw,e.bh,e.t==='bat');}
+  if(P.w)scaleBox(P,P_W,P.prone?P_PRONE:P_STAND,false);
+}
+function setCharScale(v){
+  charScale=clamp(Math.round(v*100)/100,SCALE_MIN,SCALE_MAX);
+  try{localStorage.setItem('rat.charScale',charScale);}catch(err){}
+  applyCharScale();
+  if(sizeVal)sizeVal.textContent=charScale.toFixed(2)+'×';
+}
+var sizeVal=document.getElementById('sizeVal');
+function bindSizeBtn(id,dir){
+  var b=document.getElementById(id);if(!b)return;
+  b.addEventListener('click',function(ev){
+    /* Keep focus on the document so the game keeps receiving key events. */
+    ev.preventDefault();b.blur();setCharScale(charScale+dir*SCALE_STEP);
+  });
+}
+bindSizeBtn('sizeDown',-1);bindSizeBtn('sizeUp',1);
+if(sizeVal)sizeVal.textContent=charScale.toFixed(2)+'×';
+
 function makePlayer(b){
   var B=BROS[b];
-  P={bro:b,x:80,y:300,vx:0,vy:0,w:24,h:42,facing:1,onGround:false,prone:false,
+  P={bro:b,x:80,y:300,vx:0,vy:0,w:P_W*charScale,h:P_STAND*charScale,facing:1,onGround:false,prone:false,
      hp:B.maxHp,maxHp:B.maxHp,weapon:'scratch',weapons:['scratch'],weaponAmmo:{scratch:Infinity},ammo:Infinity,nades:4,cd:0,inv:90,jumpHold:0,
      jumps:0,coyote:0,anim:0,dead:false,checkX:80,checkY:300,swapCd:0,fireT:0,lean:0,
      inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,
@@ -488,12 +545,12 @@ function configureObjective(lv,rng,n){
     var b=lv.buildings[Math.floor(rng()*lv.buildings.length)],sl=b.slabs.length?b.slabs[b.slabs.length-1]:null;
     var mx=sl?sl.x+sl.w/2-13:b.x+b.w/2-13,my=sl?sl.y-28:b.gy-28;
     o.target=b;b.objective=true;
-    lv.items.push({x:Math.round(mx),y:Math.round(my),w:26,h:26,kind:'mission',inB:b,bob:rng()*6.28,objective:true});
+    lv.items.push({x:Math.round(mx),y:Math.round(my),w:ITEM_D,h:ITEM_D,kind:'mission',inB:b,bob:rng()*6.28,objective:true});
   } else {
     var best=null;
     for(var i=0;i<lv.plats.length;i++)if(lv.plats[i].oneway&&lv.plats[i].x>500&&lv.plats[i].x<lv.length-500)best=lv.plats[i];
     var ix=best?best.x+best.w/2-13:Math.round(lv.length*.45),iy=best?best.y-28:(groundYAt(lv,Math.round(lv.length*.45))||470)-28;
-    lv.items.push({x:Math.round(ix),y:Math.round(iy),w:26,h:26,kind:'mission',bob:rng()*6.28,objective:true});
+    lv.items.push({x:Math.round(ix),y:Math.round(iy),w:ITEM_D,h:ITEM_D,kind:'mission',bob:rng()*6.28,objective:true});
   }
 }
 function configureMiniBoss(lv,n){
@@ -505,7 +562,8 @@ function configureMiniBoss(lv,n){
   lv.spawns.push({x:Math.round(mx),y:Math.round(my-(m.type==='cat'?52:m.type==='bat'?80:m.type==='weasel'?38:32)),
     t:m.type,used:false,miniBoss:m});
 }
-function enemySpawnSize(t){return t==='cat'?{w:40,h:52}:t==='bat'?{w:34,h:24}:t==='lizard'?{w:28,h:40}:t==='weasel'?{w:26,h:38}:{w:24,h:32};}
+function enemySpawnSize(t){var z=t==='cat'?{w:40,h:52}:t==='bat'?{w:34,h:24}:t==='lizard'?{w:28,h:40}:t==='weasel'?{w:26,h:38}:{w:24,h:32};
+  z.w*=charScale;z.h*=charScale;return z;}
 function enemySpawnBlocked(lv,s,x,y){
   var z=enemySpawnSize(s.t),r={x:x,y:y,w:z.w,h:z.h},i,p;
   for(i=0;i<lv.obstacles.length;i++){
@@ -570,20 +628,30 @@ function structureKind(th){
   return 'industrial';
 }
 function addBuilding(lv,rng,x,gy,kind){
-  var fh=82, floors=3+(rng()<0.55?1:0), w=Math.round(360+rng()*60);
-  var b={x:x,y:gy-floors*fh,w:w,h:floors*fh,gy:gy,fh:fh,floors:floors,cut:0,
-         slabs:[],steps:[],stairs:[],windows:[],door:{x:x+18,w:38},doorOpen:0,seed:rng(),lit:rng(),kind:kind||'downtown'};
+  /* Every authored dimension here is in 1x units multiplied by S, so the whole
+     structure keeps its proportions while growing to fit the scaled cast.
+     Storey count drops from 3-4 to 2-3: at S=1.75 a four-storey block would
+     tower off the top of the camera's fixed vertical framing. */
+  var S=BUILD_SCALE;
+  var fh=82*S, w=Math.round((360+rng()*60)*S);
+  /* The outdoor camera has a fixed vertical framing (nothing above y=52 is ever
+     on screen), so storeys are capped by the headroom this plot actually has —
+     otherwise a scaled block puts its roof, and any player standing on it, out
+     of sight. */
+  var floors=Math.min(2+(rng()<0.5?1:0),Math.max(1,Math.floor((gy-72)/fh)));
+  var b={x:x,y:gy-floors*fh,w:w,h:floors*fh,gy:gy,fh:fh,floors:floors,cut:0,scale:S,
+         slabs:[],steps:[],stairs:[],windows:[],door:{x:x+18*S,w:38*S},doorOpen:0,seed:rng(),lit:rng(),kind:kind||'downtown'};
   var f,i;
-  lv.plats.push({x:x-7,y:b.y-11,w:w+14,h:11,roof:true});          // roof: always solid
-  lv.plats.push({x:x-9,y:b.y,w:10,h:b.h,inside:b});               // walls: solid only from inside
-  lv.plats.push({x:x+w-1,y:b.y,w:10,h:b.h,inside:b});
+  lv.plats.push({x:x-7*S,y:b.y-11*S,w:w+14*S,h:11*S,roof:true});  // roof: always solid
+  lv.plats.push({x:x-9*S,y:b.y,w:10*S,h:b.h,inside:b});           // walls: solid only from inside
+  lv.plats.push({x:x+w-1,y:b.y,w:10*S,h:b.h,inside:b});
   for(f=1;f<floors;f++){
     var fy=gy-f*fh, lower=gy-(f-1)*fh;
-    var steps=6, stw=24, sth=fh/steps, runW=steps*stw, riser=sth+15;
+    var steps=6, stw=24*S, sth=fh/steps, runW=steps*stw, riser=sth+15*S;
     // A flight can only be climbed from its low end, so odd storeys run left-to-right
     // starting just past the door, and even storeys run back the other way. The top
     // tread always meets its landing, and there is headroom under the upper treads.
-    var goRight=(f%2===1), lowX=goRight?(x+66):(x+w-40-runW), sl;
+    var goRight=(f%2===1), lowX=goRight?(x+66*S):(x+w-40*S-runW), sl;
     b.stairs.push({lowX:goRight?lowX:lowX+runW,lowY:lower,
       highX:goRight?lowX+runW:lowX,highY:fy,goRight:goRight,floor:f});
     for(i=0;i<steps;i++){
@@ -591,31 +659,144 @@ function addBuilding(lv,rng,x,gy,kind){
       lv.plats.push({x:stx,y:sty,w:stw+1,h:riser,inside:b,step:true});
       b.steps.push({x:stx,y:sty,w:stw+1,h:riser});
     }
-    if(goRight) sl={x:lowX+runW+3,y:fy,w:(x+w-8)-(lowX+runW+3),h:11};
-    else        sl={x:x+8,y:fy,w:(lowX-3)-(x+8),h:11};
-    if(sl.w>40){b.slabs.push(sl);lv.plats.push({x:sl.x,y:sl.y,w:sl.w,h:sl.h,inside:b,interiorFloor:true});}
+    if(goRight) sl={x:lowX+runW+3*S,y:fy,w:(x+w-8*S)-(lowX+runW+3*S),h:11*S};
+    else        sl={x:x+8*S,y:fy,w:(lowX-3*S)-(x+8*S),h:11*S};
+    if(sl.w>40*S){b.slabs.push(sl);lv.plats.push({x:sl.x,y:sl.y,w:sl.w,h:sl.h,inside:b,interiorFloor:true});}
   }
   for(f=0;f<floors;f++){
     var base=gy-f*fh;
     for(i=0;i<3;i++){
-      var wx=x+28+i*((w-96)/2);
-      if(wx+40>x+w-18)continue;
-      if(f===0&&wx+40>b.door.x-16&&wx<b.door.x+b.door.w+16)continue;   // no window in the doorway
+      var wx=x+28*S+i*((w-96*S)/2);
+      if(wx+40*S>x+w-18*S)continue;
+      if(f===0&&wx+40*S>b.door.x-16*S&&wx<b.door.x+b.door.w+16*S)continue; // no window in the doorway
       var landing=(f===0);
       for(var q=0;q<b.slabs.length;q++){
         var sb=b.slabs[q];
-        if(Math.abs(sb.y-base)<2&&wx+34>sb.x&&wx+6<sb.x+sb.w){landing=true;break;}
+        if(Math.abs(sb.y-base)<2&&wx+34*S>sb.x&&wx+6*S<sb.x+sb.w){landing=true;break;}
       }
-      var win={x:wx,y:base-54,w:40,h:46,open:false,broken:false,f:f,base:base,b:b};
+      var win={x:wx,y:base-54*S,w:40*S,h:46*S,open:false,broken:false,f:f,base:base,b:b};
       b.windows.push(win);
     }
     // A narrow window in the right edge is the building's deliberate escape
     // point. Façade windows still shatter, but never change interior state.
-    b.windows.push({x:x+w-24,y:base-50,w:22,h:42,open:false,broken:false,
+    b.windows.push({x:x+w-24*S,y:base-50*S,w:22*S,h:42*S,open:false,broken:false,
       f:f,base:base,b:b,sideExit:true});
   }
   lv.buildings.push(b);
   return b;
+}
+/* ==================== THEME PROPS ====================
+   Replaces the old free-floating slabs. Every stage now climbs over objects
+   that belong to it: pipework in the sewers, street furniture and parked cars
+   downtown, crates and haulage on the warehouse floors. Everything here is
+   jumpable and — the crane mast aside — destructible, so a route made of props
+   can also be blown out of the way. */
+/* A standing jump peaks at v^2/2g = 11.9^2 / (2*0.52) ~= 136px, so anything the
+   player is expected to hop over stays at or under PROP_MAX_H, leaving real
+   clearance rather than a frame-perfect scrape. Taller pieces (the crane mast)
+   must be scenery, never a solid box, or they wall the level off. */
+var PROP_MAX_H=100;
+var PROP_SETS={
+  sewer:{
+    ground:[
+      {t:'pipe',    w:[130,300],h:[28,50],hp:95},
+      {t:'pipeup',  w:[34,50], h:[76,100],hp:110},
+      {t:'valvebox',w:[56,80], h:[46,66], hp:75}
+    ],
+    /* Sewer climbs stay in the air — wall-run pipes of varying bore, threaded
+       through where the bare platforms used to hang. */
+    climb:{air:true,spec:{t:'pipe',w:[120,250],h:[24,44],hp:95}}
+  },
+  street:{
+    ground:[
+      {t:'crate',     w:[50,88],  h:[48,78], hp:50},
+      {t:'binbank',   w:[66,110], h:[52,74], hp:65},
+      {t:'phonebooth',w:[46,56],  h:[92,100],hp:80},
+      {t:'car',       w:[172,216],h:[66,80], hp:150,blast:true}
+    ],
+    climb:{air:false,tiers:[{t:'crate',w:[56,84]},{t:'binbank',w:[70,96]},{t:'crate',w:[62,92]}]}
+  },
+  warehouse:{
+    ground:[
+      {t:'crate',     w:[50,116], h:[48,100],hp:60},
+      {t:'cargotruck',w:[232,286],h:[94,104],hp:210,blast:true},
+      {t:'crane',     w:[36,44],  h:[150,186],hp:0}
+    ],
+    climb:{air:false,tiers:[{t:'crate',w:[58,98]},{t:'crate',w:[64,104]},{t:'crate',w:[58,96]}]}
+  }
+};
+function propSetFor(th){return th.prop==='pipe'?'sewer':th.prop==='junk'?'warehouse':'street';}
+function rngRange(rng,r){return Math.round(r[0]+rng()*(r[1]-r[0]));}
+function propSpaceFree(lv,x,w,pad){
+  var i,o;
+  pad=pad||70;
+  for(i=0;i<lv.buildings.length;i++){
+    var b=lv.buildings[i];
+    if(x+w>b.x-130&&x<b.x+b.w+130)return false;
+  }
+  for(i=0;i<lv.obstacles.length;i++){
+    o=lv.obstacles[i];
+    if(x+w>o.x-pad&&x<o.x+o.w+pad)return false;
+  }
+  if(lv.exit&&x+w>lv.exit.x-200)return false;
+  return true;
+}
+/* Registers a prop as both a destructible obstacle and the platform you stand
+   on, matching how the pre-existing barrels and dumpsters already work. */
+function addProp(lv,type,x,y,w,h,hp,opt){
+  opt=opt||{};
+  var o={x:Math.round(x),y:Math.round(y),w:Math.round(w),h:Math.round(h),type:type,
+         hp:hp,dead:false,prop:true,v:opt.v===undefined?Math.random():opt.v};
+  if(opt.blast)o.blast=true;
+  if(hp<=0)o.indestructible=true;
+  lv.obstacles.push(o);
+  /* Scenery (decor) is drawn but never collides — used for anything too tall to
+     clear, which would otherwise seal the route. */
+  if(!opt.decor){
+    o.platform={x:o.x,y:o.y,w:o.w,h:o.h,obstacle:o};
+    if(opt.oneway)o.platform.oneway=true;
+    lv.plats.push(o.platform);
+  }
+  return o;
+}
+function placeGroundProp(lv,rng,spec,x,gy){
+  var w=rngRange(rng,spec.w),h=rngRange(rng,spec.h);
+  if(!propSpaceFree(lv,x,w))return null;
+  if(spec.t==='crane'){
+    /* The mast is pure scenery — at 150-186 tall a solid box would be an
+       unjumpable, indestructible wall. The jib overhead is the real platform,
+       and a crate always lands alongside so the jib stays reachable: 92 tall
+       crate + a 136 jump clears it comfortably. */
+    var mast=addProp(lv,'crane',x,gy-h,w,h,0,{decor:true,v:rng()});
+    addProp(lv,'craneJib',x-96,gy-h-16,w+192,16,0,{oneway:true,v:rng()});
+    var cw=rngRange(rng,[62,86]),ch=rngRange(rng,[74,92]);
+    addProp(lv,'crate',x+w+26,gy-ch,cw,ch,60,{v:rng()});
+    return mast;
+  }
+  return addProp(lv,spec.t,x,gy-Math.min(h,PROP_MAX_H),w,Math.min(h,PROP_MAX_H),spec.hp,{blast:spec.blast,v:rng()});
+}
+function buildPropClimb(lv,rng,set,px,gy){
+  var climb=set.climb,k;
+  if(climb.air){
+    /* Same tier heights the bare platforms used, now drawn as pipework. */
+    var dir=rng()<0.5?-1:1,spec=climb.spec;
+    for(k=0;k<3;k++){
+      var pw=rngRange(rng,spec.w),ph=rngRange(rng,spec.h);
+      var pxk=px+k*118*dir-(dir<0?pw:0),pyk=gy-64-k*48;
+      if(!propSpaceFree(lv,pxk,pw,30))continue;
+      addProp(lv,'pipe',pxk,pyk,pw,ph,spec.hp,{oneway:true,v:rng()});
+    }
+    return;
+  }
+  /* Ground stacks step up in jumpable increments so the high lane stays
+     reachable even though each tier can be destroyed. */
+  var cx=px,tierH=[56,110,164];
+  for(k=0;k<climb.tiers.length;k++){
+    var t=climb.tiers[k],tw=rngRange(rng,t.w),th=tierH[k];
+    if(!propSpaceFree(lv,cx,tw,26)){cx+=tw+14;continue;}
+    addProp(lv,t.t,cx,gy-th,tw,th,t.t==='binbank'?65:60,{v:rng()});
+    cx+=tw+14;
+  }
 }
 function buildLevel(n){
   var rng=mulberry32(9001+n*577+campaignSeed), isBoss=(n===11);
@@ -629,7 +810,10 @@ function buildLevel(n){
   } else {
     var routeStart=lv.length-1050;
     while(x<routeStart){
-      var segw=Math.round(520+rng()*280);
+      /* Ground runs are widened to match the scaled buildings — a 735-wide
+         block needs a segment that can seat it with margins. Gap widths and
+         step heights below are left at 1x so jump distances stay reachable. */
+      var segw=Math.round(880+rng()*420);
       if(x+segw>routeStart)segw=routeStart-x;
       lv.plats.push({x:x,y:gy,w:segw,h:620-gy,ground:true});
       x+=segw;
@@ -640,19 +824,9 @@ function buildLevel(n){
         gy=ngy;
       }
     }
-    for(px=420;px<routeStart-120;px+=210+rng()*300){
-      if(rng()<0.72)lv.plats.push({x:Math.round(px),y:Math.round(250+rng()*150),
-        w:Math.round(95+rng()*120),h:16,oneway:true});
-    }
-    // Traversal pockets create optional high/low lanes throughout the stage.
-    for(px=720;px<routeStart-420;px+=650+rng()*360){
-      var pocketGround=groundYAt(lv,px),pocketDir=rng()<0.5?-1:1;
-      if(pocketGround===null)continue;
-      for(var pk=0;pk<3;pk++)lv.plats.push({
-        x:Math.round(px+pk*112*pocketDir-(pocketDir<0?105:0)),
-        y:Math.round(pocketGround-62-pk*48),w:105+Math.round(rng()*32),h:16,oneway:true
-      });
-    }
+    /* Themed clutter stands in for the old bare platforms. It is generated
+       after the exit and buildings exist so placement can steer clear of both;
+       see the deferred pass below. */
 
     // The campaign follows one connected route through the city; the final
     // traversal matches the physical entrance to the next stage.
@@ -679,18 +853,21 @@ function buildLevel(n){
     }
     // --- one or two guaranteed, theme-aware enterable structures ---
     var gi,candidates=[],targetBuildings=1+(rng()<0.58?1:0),kind=structureKind(lv.theme);
+    /* Widest a scaled building can come out, plus the margin it needs to sit
+       clear of the segment edges. Placement tests work off this, not literals. */
+    var maxBuildW=Math.ceil(420*BUILD_SCALE), buildRoom=maxBuildW+110;
     for(gi=0;gi<lv.plats.length;gi++){
       var seg=lv.plats[gi];
-      if(!seg.ground||seg.w<500||seg.x<360||seg.x>routeStart-200)continue;
+      if(!seg.ground||seg.w<buildRoom||seg.x<360||seg.x>routeStart-200)continue;
       candidates.push(seg);
     }
     for(gi=0;gi<targetBuildings&&candidates.length;gi++){
       var pick=Math.min(candidates.length-1,Math.floor((gi+0.5)*candidates.length/targetBuildings));
       var seg2=candidates[pick];
-      var bx=Math.round(seg2.x+55+rng()*Math.max(20,seg2.w-440));
+      var bx=Math.round(seg2.x+55+rng()*Math.max(20,seg2.w-buildRoom));
       var tooClose=false;
-      for(var cb=0;cb<lv.buildings.length;cb++)if(Math.abs(lv.buildings[cb].x-bx)<620)tooClose=true;
-      if(tooClose||bx+430>seg2.x+seg2.w){
+      for(var cb=0;cb<lv.buildings.length;cb++)if(Math.abs(lv.buildings[cb].x-bx)<Math.round(620*BUILD_SCALE))tooClose=true;
+      if(tooClose||bx+maxBuildW+10>seg2.x+seg2.w){
         /* Prefer the requested spacing, but never lose the guaranteed first structure. */
         if(lv.buildings.length>0)continue;
         bx=Math.round(seg2.x+55);
@@ -700,7 +877,7 @@ function buildLevel(n){
       for(var si=0;si<bld.slabs.length;si++){
         if(rng()<0.62){
           var sl=bld.slabs[si], rl=rng();
-          lv.items.push({x:Math.round(sl.x+sl.w/2-13),y:sl.y-28,w:26,h:26,inB:bld,bob:rng()*6.28,
+          lv.items.push({x:Math.round(sl.x+sl.w/2-ITEM_D/2),y:sl.y-28,w:ITEM_D,h:ITEM_D,inB:bld,bob:rng()*6.28,
             kind:rl<0.42?'cheese':(rl<0.72?'nade':'weapon'),
             wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)]});
         }
@@ -733,7 +910,7 @@ function buildLevel(n){
       var roll=rng(),kind='cheese';
       if(roll>0.52)kind='weapon';
       if(roll>0.86)kind='nade';
-      lv.items.push({x:Math.round(px),y:iy-30,w:26,h:26,kind:kind,
+      lv.items.push({x:Math.round(px),y:iy-30,w:ITEM_D,h:ITEM_D,kind:kind,
         wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)],bob:rng()*6.28});
     }
     for(px=500;px<lv.length-300;px+=720+rng()*420){
@@ -753,9 +930,22 @@ function buildLevel(n){
       ob.platform={x:ob.x,y:ob.y,w:ob.w,h:ob.h,obstacle:ob};lv.obstacles.push(ob);lv.plats.push(ob.platform);
       if(rng()<.62){var ax=px+130+rng()*80,agy=groundYAt(lv,ax);if(agy!==null)lv.spawns.push({x:Math.round(ax),y:agy-38,t:n>=3&&rng()<.65?'weasel':'mouse',used:false});}
     }
+    /* ---- themed props: run last so they can avoid everything already placed ---- */
+    var pset=PROP_SETS[propSetFor(lv.theme)];
+    for(px=430;px<routeStart-140;px+=250+rng()*300){
+      if(rng()>0.80)continue;
+      var pgy=groundYAt(lv,px);
+      if(pgy===null)continue;
+      placeGroundProp(lv,rng,pset.ground[Math.floor(rng()*pset.ground.length)],px,pgy);
+    }
+    for(px=760;px<routeStart-420;px+=640+rng()*340){
+      var cgy=groundYAt(lv,px);
+      if(cgy===null)continue;
+      buildPropClimb(lv,rng,pset,px,cgy);
+    }
     if(n===10){
       var ngy=groundYAt(lv,lv.length-520)||470;
-      lv.items.push({x:lv.length-520,y:ngy-30,w:26,h:26,kind:'nade',bob:0});
+      lv.items.push({x:lv.length-520,y:ngy-30,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
     }
   }
   if(!campaign)campaign=CAMPAIGNS[0];
@@ -807,11 +997,18 @@ function spawnEnemy(t,x,y){
          flash:0,anim:Math.random()*6,state:'patrol',touchCd:0,baseX:x,baseY:y,dmg:12,squash:0,
          engaged:false,patrolDir:Math.random()<0.5?-1:1,patrolTimer:55+Math.random()*75,
          patrolPause:0,patrolRadius:90+Math.random()*80};
-  if(t==='mouse'){e.hp=20+stage*2;e.w=24;e.h=32;e.vx=-1.3-stage*0.05;e.dmg=12;}
-  if(t==='bat'){e.hp=16+stage*2;e.w=34;e.h=24;e.dmg=10;e.timer=40+Math.random()*70;}
-  if(t==='cat'){e.hp=58+stage*7;e.w=40;e.h=52;e.dmg=18;e.timer=60+Math.random()*60;e.vx=-0.6;}
-  if(t==='weasel'){e.hp=26+stage*3;e.w=26;e.h=38;e.dmg=12;e.timer=50+Math.random()*50;e.shots=0;e.vx=0;}
-  if(t==='lizard'){e.hp=34+stage*4;e.w=28;e.h=40;e.dmg=13;e.timer=35+Math.random()*35;e.shots=3;e.vx=0;}
+  /* Health is graded by kind so nothing pops on a single swipe. Reference point
+     is Rocco's opening claw (25 x 1.35 = 34 damage): a bat takes 2 hits, a mouse
+     3, a weasel 3-4, a lizard 4-5 and a cat 6-7, and every kind gains durability
+     as the stages climb. */
+  if(t==='mouse'){e.hp=72+stage*6;e.w=24;e.h=32;e.vx=-1.3-stage*0.05;e.dmg=12;}
+  if(t==='bat'){e.hp=54+stage*5;e.w=34;e.h=24;e.dmg=10;e.timer=40+Math.random()*70;}
+  if(t==='cat'){e.hp=210+stage*17;e.w=40;e.h=52;e.dmg=18;e.timer=60+Math.random()*60;e.vx=-0.6;}
+  if(t==='weasel'){e.hp=104+stage*9;e.w=26;e.h=38;e.dmg=12;e.timer=50+Math.random()*50;e.shots=0;e.vx=0;}
+  if(t==='lizard'){e.hp=140+stage*12;e.w=28;e.h=40;e.dmg=13;e.timer=35+Math.random()*35;e.shots=3;e.vx=0;}
+  e.maxHp=e.hp;
+  /* Remember the authored footprint so the live size knob can rescale from it. */
+  e.bw=e.w;e.bh=e.h;scaleBox(e,e.bw,e.bh,t==='bat');
   if(t==='bat')e.territory={air:true,x1:x-e.patrolRadius,x2:x+e.patrolRadius,y1:y-70,y2:y+70};
   else assignEnemyTerritory(e);
   enemies.push(e);return e;
@@ -929,10 +1126,10 @@ function damageEnemy(e,d){
     burst(e.x+e.w/2,e.y+e.h/2,e.t==='cat'?'#e0954a':e.t==='bat'?'#7b57a8':'#a6a6b0',9,4);
     SFX.enemyDeath(e.t,!!e.miniBoss);
     var dropW=e.t==='mouse'?'knife':e.t==='cat'?'bazooka':e.t==='weasel'?'pistol':e.t==='lizard'?'machinegun':null;
-    if(dropW)items.push({x:e.x,y:e.y,w:26,h:26,kind:'weapon',wep:dropW,bob:0});
-    else if(e.t==='bat')items.push({x:e.x,y:e.y,w:26,h:26,kind:'nade',bob:0});
-    else if(Math.random()<0.13)items.push({x:e.x,y:e.y,w:26,h:26,kind:'cheese',bob:0});
-    else if(Math.random()<0.07)items.push({x:e.x,y:e.y,w:26,h:26,kind:'nade',bob:0});
+    if(dropW)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'weapon',wep:dropW,bob:0});
+    else if(e.t==='bat')items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
+    else if(Math.random()<0.13)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'cheese',bob:0});
+    else if(Math.random()<0.07)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
   }
 }
 function damageObstacle(o,d){
@@ -941,8 +1138,11 @@ function damageObstacle(o,d){
   o.hp-=d;burst(o.x+o.w/2,o.y+o.h/2,o.type==='barrel'?'#d86a32':'#9b927e',4,2.5);
   if(o.hp<=0){
     o.dead=true;if(o.platform)o.platform.dead=true;score+=o.type==='gate'?180:40;
-    burst(o.x+o.w/2,o.y+o.h/2,o.type==='barrel'?'#ff9b3a':'#82786a',18,5);
-    if(o.type==='barrel')explode(o.x+o.w/2,o.y+o.h/2,72,38,true);
+    var fiery=o.type==='barrel'||o.blast;
+    burst(o.x+o.w/2,o.y+o.h/2,fiery?'#ff9b3a':'#82786a',18,5);
+    /* Vehicles go up harder than a barrel — the blast scales with the wreck. */
+    if(o.blast)explode(o.x+o.w/2,o.y+o.h/2,Math.max(86,o.w*0.62),52,true);
+    else if(o.type==='barrel')explode(o.x+o.w/2,o.y+o.h/2,72,38,true);
     else {noise(.09,.08,1200);tone(150,.08,'square',.025,80);}
   }
 }
@@ -1110,10 +1310,10 @@ function droppableSurfaceBelow(o){
 }
 function playerNeedsClearanceCrouch(){
   if(!P.onGround)return false;
-  var feet=P.y+P.h,standY=feet-42;
+  var stand=P_STAND*charScale,feet=P.y+P.h,standY=feet-stand;
   // Test the full standing body at the current feet position. Touching the
   // ground is harmless; only overlapping geometry overhead keeps us low.
-  return blockedAt(P,P.x+2,standY,P.w-4,42);
+  return blockedAt(P,P.x+2,standY,P.w-4,stand);
 }
 function blockedAt(o,x,y,w,h){
   var i,p,t={x:x,y:y,w:w||o.w,h:h||o.h};
@@ -1230,7 +1430,7 @@ function updateBuildingState(){
     w=openWindowAt(P.inB,true);
     if(w){
       var wb=P.inB,outDir=(w.x+w.w/2<wb.x+wb.w/2)?-1:1;
-      exitBuilding();P.rollT=0;P.prone=false;P.h=42;
+      exitBuilding();P.rollT=0;P.prone=false;P.h=P_STAND*charScale;
       P.x=outDir<0?wb.x-P.w-10:wb.x+wb.w+10;
       if(w.f===0){
         P.y=wb.gy-P.h;P.vx=outDir*1.8;P.vy=0;P.onGround=true;
@@ -1309,7 +1509,7 @@ function updateLadderTraversal(){
       if(pressed('up')&&Math.abs(cx-(L.x+L.w/2))<46&&Math.abs(feet-L.bottomY)<28){P.ladder=L;break;}
     }
     if(!P.ladder)return false;
-    P.rollT=0;P.prone=false;P.h=42;P.vx=0;P.vy=0;
+    P.rollT=0;P.prone=false;P.h=P_STAND*charScale;P.vx=0;P.vy=0;
   }
   L=P.ladder;P.x=lerp(P.x,L.x+L.w/2-P.w/2,.28);P.y-=2.8;P.vx=0;P.vy=0;P.onGround=false;P.anim+=.3;
   if(P.y+P.h<=L.topY){P.x=L.topX;P.y=L.topY-P.h;P.onGround=true;P.ladder=null;P.checkX=P.x;P.checkY=P.y;}
@@ -1337,7 +1537,7 @@ function updatePlayer(){
   if(!dropNow&&updateStairTraversal(B))return;
   if(dropNow){
     P.stair=null;P.dropT=13;P.onGround=false;P.coyote=0;P.vy=3.8;P.y+=6;
-    P.prone=false;P.h=42;burst(P.x+P.w/2,P.y+P.h,'#9b8d72',5,1.6);tone(210,.05,'triangle',.025,130);
+    P.prone=false;P.h=P_STAND*charScale;burst(P.x+P.w/2,P.y+P.h,'#9b8d72',5,1.6);tone(210,.05,'triangle',.025,130);
   }
   if(P.onGround&&P.rollAir)P.rollAir=false;
   if(P.onGround&&P.rollT<=0)P.airRollUsed=false;
@@ -1354,8 +1554,9 @@ function updatePlayer(){
   var rolling=P.rollT>0;
   clearanceCrouch=!rolling&&playerNeedsClearanceCrouch();
   P.prone=rolling||clearanceCrouch||(inp.down&&P.onGround&&!inp.left&&!inp.right);
-  var th=P.prone?24:42;
+  var th=(P.prone?P_PRONE:P_STAND)*charScale,tw=P_W*charScale;
   if(th!==P.h){P.y+=(P.h-th);P.h=th;}
+  if(tw!==P.w){P.x+=(P.w-tw)/2;P.w=tw;}
   var acc=P.onGround?(clearanceCrouch?0.52:0.85):0.55;
   var maxS=rolling?(B.big?5.4:6.3):B.speed*(clearanceCrouch?0.42:(P.prone?0:1));
   if(rolling){
@@ -1494,6 +1695,16 @@ function enemyCanSeePlayer(e,verticalRange){
 }
 function setEnemyEngaged(e,dist,enterRange,leaveRange,verticalRange){
   var visible=enemyCanSeePlayer(e,verticalRange);
+  if(e.leash){
+    /* Leashed hunters (mini-bosses) commit the instant they spot the player
+       anywhere inside their zone, rather than waiting for a proximity range.
+       Leaving the zone is the reliable way to break contact. */
+    var pcx=P.x+P.w/2,inZone=pcx>e.leash.x1-50&&pcx<e.leash.x2+50;
+    if(e.engaged&&(!inZone||(!visible&&dist>leaveRange))){
+      e.engaged=false;e.returnT=48;e.patrolPause=Math.max(e.patrolPause||0,10);
+    } else if(!e.engaged&&inZone&&visible){e.engaged=true;e.returnT=0;}
+    return e.engaged;
+  }
   if(e.engaged&&(dist>leaveRange||!visible)){
     e.engaged=false;e.returnT=48;e.patrolPause=Math.max(e.patrolPause||0,10);
   } else if(!e.engaged&&dist<enterRange&&visible){e.engaged=true;e.returnT=0;}
@@ -1540,11 +1751,24 @@ function updateEnemies(){
       if(s.objective)ne.objective=true;
       if(s.miniBoss){
         ne.miniBoss=s.miniBoss;ne.name=s.miniBoss.name;ne.title=s.miniBoss.title;
-        ne.hp=Math.max(Math.round(ne.hp*18),1800+stage*120);ne.maxHp=ne.hp;ne.dmg=Math.round(ne.dmg*1.85);
-        ne.w=Math.round(ne.w*1.28);ne.h=Math.round(ne.h*1.28);ne.patrolRadius*=1.35;
+        /* Roughly 40% shorter than the old duel: still a fight worth its name,
+           but no longer a war of attrition against the ammo count. */
+        ne.hp=Math.max(Math.round(ne.hp*9),1050+stage*70);ne.dmg=Math.round(ne.dmg*1.85);
+        ne.bw=Math.round(ne.bw*1.28);ne.bh=Math.round(ne.bh*1.28);
+        scaleBox(ne,ne.bw,ne.bh,s.t==='bat');
+        ne.patrolRadius*=1.35;
         ne.baseY=ne.y;ne.miniPhase=1;ne.specialCd=75;ne.specialT=0;ne.maxHp=ne.hp;
         ne.miniFightStarted=false;ne.miniFightTicks=0;
         if(s.t!=='bat')assignEnemyTerritory(ne);
+        /* A mini-boss owns the ground it spawned on and nothing beyond it. The
+           leash caps both the chase and the patrol, so backing out of the zone
+           is always a way to disengage, heal up and come back. */
+        var mcx=ne.x+ne.w/2;
+        ne.leash={x1:mcx-MINI_LEASH,x2:mcx+MINI_LEASH};
+        if(ne.territory){
+          var lx1=Math.max(ne.territory.x1,ne.leash.x1),lx2=Math.min(ne.territory.x2,ne.leash.x2);
+          if(lx2-lx1>ne.w+60){ne.territory.x1=lx1;ne.territory.x2=lx2;}
+        }
       }
       if(s.inB){ne.inB=s.inB;assignEnemyTerritory(ne);}
       if(s.perch){ne.perch=s.perch;ne.inB=s.perch.b;ne.state='hide';ne.hidden=true;
@@ -2127,13 +2351,16 @@ function paintBuildings(){
       g.fillStyle='rgba(255,225,180,.20)';g.fillRect(st.x,st.y,st.w,2.5);
       g.fillStyle='rgba(0,0,0,.35)';g.fillRect(st.x,st.y+2.5,2,Math.min(st.h,26)-2.5);
     }
-    for(f=1;f<b.floors;f++){                                  // zig-zag stair rails
-      var railLow=b.gy-(f-1)*b.fh-18,railHigh=b.gy-f*b.fh-18,railRight=(f%2===1);
-      var railX1=railRight?b.x+70:b.x+b.w-44,railX2=railRight?b.x+210:b.x+b.w-184;
-      g.strokeStyle='rgba(185,155,105,.58)';g.lineWidth=3;g.beginPath();g.moveTo(railX1,railLow);g.lineTo(railX2,railHigh);g.stroke();
-      g.strokeStyle='rgba(10,8,7,.55)';g.lineWidth=1;g.stroke();
+    /* Rails follow the generated flights rather than fixed offsets, so they stay
+       glued to the treads at any BUILD_SCALE. */
+    var bs=b.scale||1;
+    for(i=0;i<b.stairs.length;i++){
+      var fl=b.stairs[i],railDrop=18*bs;
+      var railX1=fl.lowX,railX2=fl.highX,railLow=fl.lowY-railDrop,railHigh=fl.highY-railDrop;
+      g.strokeStyle='rgba(185,155,105,.58)';g.lineWidth=3*bs;g.beginPath();g.moveTo(railX1,railLow);g.lineTo(railX2,railHigh);g.stroke();
+      g.strokeStyle='rgba(10,8,7,.55)';g.lineWidth=1*bs;g.stroke();
       for(var rrn=0;rrn<5;rrn++){var rm=rrn/4,rx=lerp(railX1,railX2,rm),ry=lerp(railLow,railHigh,rm);
-        g.strokeStyle='rgba(150,125,88,.48)';g.lineWidth=2;g.beginPath();g.moveTo(rx,ry);g.lineTo(rx,ry+18);g.stroke();}
+        g.strokeStyle='rgba(150,125,88,.48)';g.lineWidth=2*bs;g.beginPath();g.moveTo(rx,ry);g.lineTo(rx,ry+railDrop);g.stroke();}
     }
     for(i=0;i<b.slabs.length;i++){                             // floor slabs
       var sl=b.slabs[i];
@@ -2344,6 +2571,126 @@ function paintObstacles(){
       g.fillStyle='#182c24';rr(g,o.x-5,o.y-8,o.w+10,12,3);g.fill();g.fillStyle='rgba(210,225,190,.12)';g.fillRect(o.x+7,o.y+10,o.w-14,3);
       g.strokeStyle='rgba(165,185,160,.25)';g.lineWidth=2;g.strokeRect(o.x+12,o.y+18,o.w-24,21);
       g.fillStyle='#111';ell(g,o.x+13,o.y+o.h+1,6,6);g.fill();ell(g,o.x+o.w-13,o.y+o.h+1,6,6);g.fill();
+    } else if(o.type==='pipe'){
+      /* Bore and run length both vary, so the whole thing is drawn from o.w/o.h:
+         a barrel body, a rim at each end and a flange over the seam. */
+      var pr=o.h/2,pmid=o.y+pr;
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#6f8a84'],[.42,'#48605c'],[1,'#22302f']]);
+      rr(g,o.x,o.y,o.w,o.h,Math.min(pr,14));g.fill();ink(g,'rgba(6,12,11,.8)',2);
+      g.fillStyle='rgba(215,240,232,.16)';rr(g,o.x+6,o.y+3,o.w-12,Math.max(3,o.h*0.17),3);g.fill();
+      g.fillStyle='rgba(0,0,0,.28)';g.fillRect(o.x+4,o.y+o.h-Math.max(3,o.h*0.16),o.w-8,Math.max(3,o.h*0.16));
+      g.fillStyle='#5d7570';
+      rr(g,o.x-3,o.y-2,9,o.h+4,3);g.fill();rr(g,o.x+o.w-6,o.y-2,9,o.h+4,3);g.fill();
+      var seam=o.x+o.w*(0.34+(o.v%1)*0.3);
+      g.fillStyle='#4a615c';rr(g,seam,o.y-3,10,o.h+6,3);g.fill();ink(g,'rgba(8,14,13,.55)',1.4);
+      g.fillStyle='rgba(120,160,140,.30)';
+      for(var pv=o.x+18;pv<o.x+o.w-18;pv+=34)ell(g,pv,pmid+pr*0.45,3,2);g.fill();
+    } else if(o.type==='pipeup'){
+      g.fillStyle=lin(g,o.x,o.y,o.x+o.w,o.y,[[0,'#22302f'],[.45,'#5b736e'],[1,'#26332f']]);
+      rr(g,o.x,o.y,o.w,o.h,7);g.fill();ink(g,'rgba(6,12,11,.8)',2);
+      g.fillStyle='#5d7570';rr(g,o.x-4,o.y,o.w+8,10,3);g.fill();rr(g,o.x-4,o.y+o.h-12,o.w+8,10,3);g.fill();
+      g.fillStyle='rgba(220,245,235,.14)';g.fillRect(o.x+4,o.y+12,Math.max(3,o.w*0.2),o.h-26);
+      g.fillStyle='#7b5738';ell(g,o.x+o.w/2,o.y+o.h*0.42,o.w*0.3,o.w*0.3);g.fill();ink(g,'rgba(8,10,8,.6)',1.5);
+    } else if(o.type==='valvebox'){
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#4a5a52'],[1,'#1e2a26']]);
+      rr(g,o.x,o.y,o.w,o.h,4);g.fill();ink(g,'rgba(6,10,9,.8)',2);
+      g.fillStyle='rgba(220,240,225,.10)';g.fillRect(o.x+5,o.y+5,o.w-10,4);
+      g.strokeStyle='#8c6a3f';g.lineWidth=3;g.beginPath();g.arc(o.x+o.w/2,o.y+o.h*0.45,Math.min(o.w,o.h)*0.24,0,6.283);g.stroke();
+      g.strokeStyle='#b08a4c';g.lineWidth=2;
+      g.beginPath();g.moveTo(o.x+o.w/2-9,o.y+o.h*0.45);g.lineTo(o.x+o.w/2+9,o.y+o.h*0.45);
+      g.moveTo(o.x+o.w/2,o.y+o.h*0.45-9);g.lineTo(o.x+o.w/2,o.y+o.h*0.45+9);g.stroke();
+    } else if(o.type==='crate'){
+      /* Tall crates read as a stack of boxes rather than one giant cube. */
+      var layers=Math.max(1,Math.round(o.h/58)),lh=o.h/layers,cl;
+      for(cl=0;cl<layers;cl++){
+        var cy0=o.y+cl*lh,inset=cl?Math.min(7,o.w*0.06):0;
+        g.fillStyle=lin(g,o.x,cy0,o.x+o.w,cy0+lh,[[0,cl%2?'#8a6337':'#7a5730'],[1,'#3f2c18']]);
+        rr(g,o.x+inset,cy0,o.w-inset*2,lh-2,3);g.fill();ink(g,'rgba(14,9,5,.8)',2);
+        g.strokeStyle='rgba(226,196,140,.32)';g.lineWidth=Math.max(2,lh*0.06);
+        g.beginPath();
+        g.moveTo(o.x+inset+4,cy0+4);g.lineTo(o.x+o.w-inset-4,cy0+lh-7);
+        g.moveTo(o.x+o.w-inset-4,cy0+4);g.lineTo(o.x+inset+4,cy0+lh-7);g.stroke();
+        g.fillStyle='rgba(255,232,190,.13)';g.fillRect(o.x+inset+3,cy0+2,o.w-inset*2-6,2.5);
+      }
+    } else if(o.type==='binbank'){
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#3f6b57'],[1,'#1b3227']]);
+      rr(g,o.x+3,o.y+6,o.w-6,o.h-6,4);g.fill();ink(g,'rgba(6,10,8,.8)',2);
+      g.fillStyle='#16281f';rr(g,o.x-4,o.y-2,o.w+8,12,3);g.fill();
+      g.fillStyle='rgba(215,230,200,.11)';g.fillRect(o.x+9,o.y+18,o.w-18,3);
+      g.strokeStyle='rgba(170,190,165,.24)';g.lineWidth=2;
+      g.strokeRect(o.x+11,o.y+Math.max(20,o.h*0.38),o.w-22,Math.max(12,o.h*0.32));
+      g.fillStyle='#111';ell(g,o.x+12,o.y+o.h,5,5);g.fill();ell(g,o.x+o.w-12,o.y+o.h,5,5);g.fill();
+      g.fillStyle='rgba(240,220,150,.22)';ell(g,o.x+o.w*0.34,o.y+3,7,4);g.fill();
+    } else if(o.type==='phonebooth'){
+      g.fillStyle=lin(g,o.x,o.y,o.x+o.w,o.y,[[0,'#a33127'],[1,'#5d150f']]);
+      rr(g,o.x,o.y,o.w,o.h,4);g.fill();ink(g,'rgba(10,5,4,.85)',2);
+      g.fillStyle='rgba(150,205,215,.34)';rr(g,o.x+6,o.y+12,o.w-12,o.h*0.52,2);g.fill();
+      g.fillStyle='rgba(255,255,255,.16)';g.beginPath();g.moveTo(o.x+8,o.y+o.h*0.6);g.lineTo(o.x+o.w*0.55,o.y+14);g.lineTo(o.x+o.w*0.72,o.y+14);g.lineTo(o.x+9,o.y+o.h*0.62);g.closePath();g.fill();
+      g.fillStyle='#c9a24a';g.fillRect(o.x+5,o.y+4,o.w-10,5);
+      g.fillStyle='#2a1410';g.fillRect(o.x+6,o.y+o.h*0.68,o.w-12,o.h*0.3);
+      g.fillStyle='#e8c25a';g.font='bold 9px Impact,sans-serif';g.textAlign='center';
+      g.fillText('CALL',o.x+o.w/2,o.y+o.h*0.84);g.textAlign='left';
+    } else if(o.type==='car'){
+      var ch2=o.h,cbY=o.y+ch2*0.42,wheelR=Math.max(9,ch2*0.2);
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+ch2,[[0,'#4d5f74'],[.5,'#33455a'],[1,'#161f2b']]);
+      // cabin
+      g.beginPath();
+      g.moveTo(o.x+o.w*0.24,cbY);g.quadraticCurveTo(o.x+o.w*0.34,o.y+2,o.x+o.w*0.52,o.y+2);
+      g.quadraticCurveTo(o.x+o.w*0.70,o.y+3,o.x+o.w*0.78,cbY);g.closePath();g.fill();ink(g,'rgba(6,8,12,.8)',2);
+      // body
+      rr(g,o.x,cbY,o.w,ch2-wheelR-(cbY-o.y)+wheelR*0.55,7);g.fill();ink(g,'rgba(6,8,12,.85)',2);
+      g.fillStyle='rgba(170,215,235,.38)';
+      rr(g,o.x+o.w*0.28,cbY-ch2*0.30,o.w*0.2,ch2*0.26,2);g.fill();
+      rr(g,o.x+o.w*0.53,cbY-ch2*0.30,o.w*0.19,ch2*0.26,2);g.fill();
+      g.fillStyle='rgba(255,255,255,.10)';g.fillRect(o.x+6,cbY+5,o.w-12,3);
+      g.fillStyle='#f0d98a';ell(g,o.x+o.w-7,cbY+ch2*0.16,6,4.5);g.fill();
+      g.fillStyle='#c0392b';ell(g,o.x+6,cbY+ch2*0.16,5,4);g.fill();
+      g.fillStyle='#14181e';
+      ell(g,o.x+o.w*0.24,o.y+ch2,wheelR,wheelR);g.fill();
+      ell(g,o.x+o.w*0.78,o.y+ch2,wheelR,wheelR);g.fill();
+      g.fillStyle='#57616b';
+      ell(g,o.x+o.w*0.24,o.y+ch2,wheelR*0.42,wheelR*0.42);g.fill();
+      ell(g,o.x+o.w*0.78,o.y+ch2,wheelR*0.42,wheelR*0.42);g.fill();
+    } else if(o.type==='cargotruck'){
+      var tb=o.y+o.h,cabW=o.w*0.32,boxW=o.w-cabW-6,twR=Math.max(11,o.h*0.16);
+      g.fillStyle=lin(g,o.x,o.y,o.x,tb,[[0,'#7d7266'],[1,'#332c25']]);
+      rr(g,o.x,o.y,boxW,o.h-twR*0.9,4);g.fill();ink(g,'rgba(8,6,5,.85)',2.5);   // cargo box
+      g.strokeStyle='rgba(232,214,170,.20)';g.lineWidth=2;
+      for(var tr=o.x+16;tr<o.x+boxW-10;tr+=26){g.beginPath();g.moveTo(tr,o.y+7);g.lineTo(tr,o.y+o.h-twR*1.1);g.stroke();}
+      g.fillStyle='rgba(20,15,12,.5)';g.fillRect(o.x+6,o.y+o.h*0.44,boxW-12,4);
+      g.fillStyle='#b3342b';rr(g,o.x+boxW*0.2,o.y+o.h*0.18,boxW*0.55,o.h*0.2,3);g.fill();
+      g.fillStyle='#f2dfad';g.font='bold '+Math.max(9,Math.round(o.h*0.13))+'px Impact,sans-serif';g.textAlign='center';
+      g.fillText('P.C.U.',o.x+boxW*0.475,o.y+o.h*0.335);g.textAlign='left';
+      g.fillStyle=lin(g,o.x+boxW,o.y,o.x+boxW,tb,[[0,'#4f6274'],[1,'#1d2833']]);  // cab
+      g.beginPath();
+      g.moveTo(o.x+boxW+4,o.y+o.h*0.30);g.lineTo(o.x+boxW+cabW*0.55,o.y+o.h*0.30);
+      g.quadraticCurveTo(o.x+o.w,o.y+o.h*0.34,o.x+o.w,o.y+o.h*0.62);
+      g.lineTo(o.x+o.w,tb-twR*0.9);g.lineTo(o.x+boxW+4,tb-twR*0.9);g.closePath();g.fill();ink(g,'rgba(6,8,10,.85)',2.5);
+      g.fillStyle='rgba(175,215,235,.36)';rr(g,o.x+boxW+9,o.y+o.h*0.36,cabW*0.5,o.h*0.2,2);g.fill();
+      g.fillStyle='#f0d98a';ell(g,o.x+o.w-6,o.y+o.h*0.72,5.5,4.5);g.fill();
+      g.fillStyle='#14181e';
+      ell(g,o.x+boxW*0.28,tb,twR,twR);g.fill();ell(g,o.x+boxW*0.72,tb,twR,twR);g.fill();
+      ell(g,o.x+boxW+cabW*0.62,tb,twR,twR);g.fill();
+      g.fillStyle='#57616b';
+      ell(g,o.x+boxW*0.28,tb,twR*0.4,twR*0.4);g.fill();ell(g,o.x+boxW*0.72,tb,twR*0.4,twR*0.4);g.fill();
+      ell(g,o.x+boxW+cabW*0.62,tb,twR*0.4,twR*0.4);g.fill();
+    } else if(o.type==='crane'){
+      g.fillStyle=lin(g,o.x,o.y,o.x+o.w,o.y,[[0,'#c9922e'],[.5,'#8a6520'],[1,'#4d3a14']]);
+      g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(10,8,4,.85)',2);
+      g.strokeStyle='rgba(30,22,10,.55)';g.lineWidth=2.5;                      // lattice
+      for(var cy2=o.y+10;cy2<o.y+o.h-8;cy2+=22){
+        g.beginPath();g.moveTo(o.x+2,cy2);g.lineTo(o.x+o.w-2,cy2+11);
+        g.moveTo(o.x+o.w-2,cy2);g.lineTo(o.x+2,cy2+11);g.stroke();
+      }
+      g.fillStyle='#2b2419';g.fillRect(o.x-7,o.y+o.h-13,o.w+14,13);
+    } else if(o.type==='craneJib'){
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#d2a038'],[1,'#6d5018']]);
+      g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(10,8,4,.85)',2);
+      g.strokeStyle='rgba(30,22,10,.5)';g.lineWidth=2;
+      for(var jx=o.x+9;jx<o.x+o.w-6;jx+=20){g.beginPath();g.moveTo(jx,o.y+1);g.lineTo(jx+11,o.y+o.h-1);g.stroke();}
+      var hookX=o.x+o.w*(0.2+(o.v%1)*0.6);                                     // hanging hook
+      g.strokeStyle='#8d949a';g.lineWidth=2;g.beginPath();g.moveTo(hookX,o.y+o.h);g.lineTo(hookX,o.y+o.h+26);g.stroke();
+      g.fillStyle='#9aa2a8';rr(g,hookX-6,o.y+o.h+26,12,10,2);g.fill();ink(g,'rgba(8,8,10,.7)',1.5);
     } else if(o.type==='lowbeam'){
       g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#697176'],[1,'#292d31']]);g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(5,6,7,.82)',2);
       g.fillStyle='#c99a31';for(var lb=0;lb<o.w;lb+=24){g.save();g.translate(o.x+lb,o.y+o.h/2);g.rotate(-.55);g.fillRect(-2,-15,8,30);g.restore();}
@@ -2578,11 +2925,13 @@ function ratHead(B,big,aimUp){
   g.moveTo(21,7);g.lineTo(34,11);
   g.stroke();
 }
-function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT){
+function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
   var B=BROS[broIdx],big=B.big,i;
   g.save();
   g.globalAlpha=alpha===undefined?1:alpha;
-  g.translate(x,y);g.scale(face*0.55,0.55);
+  /* Title and select screens keep their own layout scale, so mul is opt-in. */
+  var k=0.55*(mul===undefined?1:mul);
+  g.translate(x,y);g.scale(face*k,k);
   var cr=prone?34:0;
   var sw=Math.sin(walk),bob=inAir?0:Math.abs(Math.cos(walk))*1.6;
   var hip=-34+cr*0.42-bob*0.3;
@@ -2767,7 +3116,7 @@ function drawBrotherPortrait(x,y,broIdx,scale){
 }
 function drawMouseThug(e){
   var s=Math.sin(e.anim),x=e.x+e.w/2,y=e.y+e.h;
-  var sq=e.squash/10,elite=e.miniBoss?1.28:1;
+  var sq=e.squash/10,elite=(e.miniBoss?1.28:1)*charScale;
   g.save();g.translate(x,y);g.scale(e.facing*0.74*elite*(1+sq*0.32),0.74*elite*(1-sq*0.45));
   if(e.flash>0)g.globalAlpha=0.75;
   g.strokeStyle='#5e5a58';g.lineWidth=3.5;g.lineCap='round';
@@ -2805,7 +3154,7 @@ function drawMouseThug(e){
 function drawBatBomber(e){
   var x=e.x+e.w/2,y=e.y+e.h/2,f=Math.sin(e.anim*3);
   var sq=e.squash/10;
-  var elite=e.miniBoss?1.28:1;
+  var elite=(e.miniBoss?1.28:1)*charScale;
   g.save();g.translate(x,y);g.scale(e.facing*0.95*elite*(1+sq*0.30),0.95*elite*(1-sq*0.42));
   if(e.flash>0)g.globalAlpha=0.75;
   g.fillStyle=lin(g,-30,-16,0,10,[[0,'#3a2450'],[1,'#6b4a92']]);
@@ -2837,7 +3186,7 @@ function drawBatBomber(e){
 }
 function drawWeasel(e){
   var x=e.x+e.w/2,y=e.y+e.h,sn=Math.sin(e.anim*0.8),sq=e.squash/10;
-  var elite=e.miniBoss?1.28:1;
+  var elite=(e.miniBoss?1.28:1)*charScale;
   g.save();g.translate(x,y);g.scale(e.facing*0.78*elite*(1+sq*0.3),0.78*elite*(1-sq*0.42));
   if(e.flash>0)g.globalAlpha=0.75;
   if(!e.perch){
@@ -2885,7 +3234,7 @@ function drawWeasel(e){
 }
 function drawLizard(e){
   var x=e.x+e.w/2,y=e.y+e.h,s=Math.sin(e.anim);
-  g.save();g.translate(x,y);g.scale(e.facing*.78,.78);if(e.flash>0)g.globalAlpha=.72;
+  g.save();g.translate(x,y);g.scale(e.facing*.78*charScale,.78*charScale);if(e.flash>0)g.globalAlpha=.72;
   g.strokeStyle='#477447';g.lineWidth=4;g.beginPath();g.moveTo(-7,-14);g.quadraticCurveTo(-29,-17+s*4,-32,-3);g.stroke();
   g.fillStyle='#1b2420';rr(g,-10,-5,9,5,2);g.fill();rr(g,2,-5,9,5,2);g.fill();
   g.fillStyle=lin(g,-10,-42,10,-10,[[0,'#70a85c'],[1,'#315c38']]);rr(g,-10,-40,20,29,7);g.fill();ink(g,'rgba(4,8,5,.8)',1.7);
@@ -2900,7 +3249,7 @@ function drawLizard(e){
 function drawCatBrute(e){
   var x=e.x+e.w/2,y=e.y+e.h,s=Math.sin(e.anim*0.7);
   var sq=e.squash/10;
-  var elite=e.miniBoss?1.28:1;
+  var elite=(e.miniBoss?1.28:1)*charScale;
   g.save();g.translate(x,y);g.scale(e.facing*0.66*elite*(1+sq*0.26),0.66*elite*(1-sq*0.38));
   if(e.flash>0)g.globalAlpha=0.75;
   g.strokeStyle='#b5762e';g.lineWidth=6;g.lineCap='round';
@@ -3034,9 +3383,12 @@ function drawWeaponIcon(c,x,y,wep,col,scale){
 function paintItems(){
   var i;
   for(i=0;i<items.length;i++){
-    var it=items[i],x=it.x+13,y=it.y+13+Math.sin(it.bob)*4;
+    var it=items[i],x=it.x+it.w/2,y=it.y+it.h/2+Math.sin(it.bob)*4;
     if(x<cam.x-50||x>cam.x+view.w+50)continue;
     g.globalAlpha=it.inB?(0.22+0.78*it.inB.cut):1;
+    /* Icon art is authored at 1x around (x,y); scale about that centre so the
+       drawn pickup matches its enlarged collision box. */
+    g.save();g.translate(x,y);g.scale(ITEM_SCALE,ITEM_SCALE);g.translate(-x,-y);
     g.globalCompositeOperation='lighter';
     g.fillStyle=rad(g,x,y,2,44,[[0,'rgba(255,220,140,.20)'],[1,'rgba(0,0,0,0)']]);
     g.beginPath();g.arc(x,y,44,0,6.283);g.fill();
@@ -3066,6 +3418,7 @@ function paintItems(){
       g.fillStyle='rgba(255,255,255,.08)';rr(g,x-11,y-10,22,20,3);g.fill();
       drawWeaponIcon(g,x,y,it.wep,col,1);
     }
+    g.restore();
     g.globalAlpha=1;
   }
 }
@@ -3691,7 +4044,7 @@ function step(){
     if(stateT>90){
       if(lives<=0){state='GAMEOVER';stateT=0;if(score>hiScore)hiScore=score;}
       else{
-        P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.h=42;P.inB=null;P.doorT=0;
+        P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
         var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;
         for(var ei=enemies.length-1;ei>=0;ei--){
           var nearby=enemies[ei];
@@ -3789,13 +4142,13 @@ function render(){
         g.restore();
       }
       g.save();g.translate(P.x+P.w/2,P.y+P.h/2);g.rotate(P.rollDir*rp*6.283);g.translate(0,-P.h/2);
-      drawBrother(0,P.h,P.facing,P.bro,{x:P.facing,y:0},P.anim,true,P.rollAir,1,P.weapon,0);g.restore();
+      drawBrother(0,P.h,P.facing,P.bro,{x:P.facing,y:0},P.anim,true,P.rollAir,1,P.weapon,0,charScale);g.restore();
     } else {
       if(P.bro===0&&!P.onGround&&P.vy>0.8){
         g.strokeStyle='rgba(255,205,90,'+(0.45+Math.sin(tick*.2)*.18)+')';g.lineWidth=3;
         g.beginPath();g.arc(P.x+P.w/2,P.y+P.h+2,13,0,6.283);g.stroke();
       }
-      drawBrother(P.x+P.w/2,P.y+P.h,P.facing,P.bro,aimVector(),P.anim,P.prone,!P.onGround,1,P.weapon,P.fireT);
+      drawBrother(P.x+P.w/2,P.y+P.h,P.facing,P.bro,aimVector(),P.anim,P.prone,!P.onGround,1,P.weapon,P.fireT,charScale);
     }
   }
   paintProjectiles();

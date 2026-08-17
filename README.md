@@ -47,6 +47,14 @@ The current implementation intentionally remains in one HTML file so this initia
 - Responsive Canvas 2D rendering and mobile arcade controls
 - Two switchable characters with different movement and combat stats
 - Starting claw/bite combat plus collectible knives, pistols, machine guns, shotguns, flamethrowers, bazookas, and grenades
-- Procedural stage layouts, platforms, enterable buildings, and pickups
+- Procedural stage layouts, enterable buildings, and pickups
+- Themed destructible props instead of bare floating platforms: pipework in the
+  sewers, crates, bins, phone boxes and parked cars downtown, and crates, cargo
+  trucks and cranes in the warehouses — all jumpable, and all but the crane mast
+  can be shot or blown apart
 - Mouse, bat, weasel, cat, and machine-gun lizard enemies plus a final boss
+- Mini-bosses hold a fixed zone around their spawn: they commit the moment they
+  see you inside it, and break off if you leave, so a fight can always be quit
+- A live size control (top right) scales the cast; `BUILD_SCALE` and `ITEM_SCALE`
+  in `index.html` scale structures and pickups to match
 - Eleven visual stage themes, particles, lighting, camera shake, and synthesized sound effects
