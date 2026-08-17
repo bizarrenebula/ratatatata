@@ -524,7 +524,7 @@ function addBuilding(lv,rng,x,gy,kind){
     }
     if(goRight) sl={x:lowX+runW+3,y:fy,w:(x+w-8)-(lowX+runW+3),h:11};
     else        sl={x:x+8,y:fy,w:(lowX-3)-(x+8),h:11};
-    if(sl.w>40){b.slabs.push(sl);lv.plats.push({x:sl.x,y:sl.y,w:sl.w,h:sl.h,inside:b});}
+    if(sl.w>40){b.slabs.push(sl);lv.plats.push({x:sl.x,y:sl.y,w:sl.w,h:sl.h,inside:b,interiorFloor:true});}
   }
   for(f=0;f<floors;f++){
     var base=gy-f*fh;
@@ -1629,12 +1629,15 @@ function updateProjectiles(){
       p=level.plats[j];
       if(p.dead||(p.obstacle&&p.obstacle.dead))continue;
       if(p.inside&&p.inside!==P.inB)continue;
+      // Interior gunfire crosses stair treads and floor slabs so enemies on
+      // adjacent storeys remain valid targets; outer walls still stop shots.
+      if(P.inB&&p.inside===P.inB&&(p.step||p.interiorFloor))continue;
       if(!p.oneway&&b.x>p.x&&b.x<p.x+p.w&&b.y>p.y&&b.y<p.y+p.h){
         kill=true;burst(b.x,b.y,'#cfc8b0',4,2.2);break;}
     }
     if(!kill)for(j=0;j<enemies.length;j++){
       e=enemies[j];
-      if(e.hidden)continue;
+      if(e.hidden||(e.inB||null)!==(P.inB||null))continue;
       if(!e.dead&&b.x>e.x&&b.x<e.x+e.w&&b.y>e.y&&b.y<e.y+e.h){
         damageEnemy(e,b.dmg);if(!b.fire)kill=true;break;}
     }
