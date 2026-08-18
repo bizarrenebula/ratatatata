@@ -590,7 +590,7 @@ function makePlayer(b){
      jumps:0,coyote:0,anim:0,dead:false,checkX:80,checkY:300,swapCd:0,fireT:0,lean:0,
      inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,rollPow:1,
      rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,airBoost:0,jumpLock:0,
-     interiorFade:0,exitFocus:0,entryLock:0,ladder:null,dropT:0};
+     interiorFade:0,exitFocus:0,entryLock:0,ladder:null,dropT:0,onStair:null,stairIn:false};
 }
 
 /* ==================== LEVEL ==================== */
@@ -711,11 +711,12 @@ function addBuilding(lv,rng,x,gy,kind){
      tower off the top of the camera's fixed vertical framing. */
   var S=BUILD_SCALE;
   var fh=82*S, w=Math.round((360+rng()*60)*S);
-  /* The outdoor camera has a fixed vertical framing (nothing above y=52 is ever
-     on screen), so storeys are capped by the headroom this plot actually has —
-     otherwise a scaled block puts its roof, and any player standing on it, out
-     of sight. */
-  var floors=Math.min(2+(rng()<0.5?1:0),Math.max(1,Math.floor((gy-72)/fh)));
+  /* Blocks are three to five storeys, threaded by flights that alternate ends of
+     the floor so each storey is crossed to reach the next. That makes them
+     taller than the camera's outdoor framing, which is what a city looks like
+     from the street; inside, the camera follows the storey the brother is on
+     (see updateCamera) rather than trying to hold the whole block at once. */
+  var floors=3+Math.floor(rng()*3);
   var b={x:x,y:gy-floors*fh,w:w,h:floors*fh,gy:gy,fh:fh,floors:floors,cut:0,scale:S,
          slabs:[],steps:[],stairs:[],windows:[],door:{x:x+18*S,w:38*S},doorOpen:0,seed:rng(),lit:rng(),kind:kind||'downtown'};
   var f,i;
@@ -746,12 +747,16 @@ function addBuilding(lv,rng,x,gy,kind){
       lv.plats.push({x:stx,y:sty,w:stw+1,h:riser,inside:b,step:true});
       b.steps.push({x:stx,y:sty,w:stw+1,h:riser});
     }
-    if(goRight) sl={x:lowX+runW,y:fy,w:(x+w-8*S)-(lowX+runW),h:11*S};
-    else        sl={x:x+8*S,y:fy,w:lowX-(x+8*S),h:11*S};
-    /* Landings are one-way: you land on them from above and pass straight up
-       through them from below, so a jump made under a floor reaches it instead
-       of stopping dead on its underside. Crouch + JUMP still drops back down. */
-    if(sl.w>40*S){b.slabs.push(sl);lv.plats.push({x:sl.x,y:sl.y,w:sl.w,h:sl.h,inside:b,interiorFloor:true,oneway:true});}
+    /* The storey above is a whole floor, wall to wall, with the flight hanging
+       underneath it rather than a ledge that stops at the stairwell. Walking the
+       upper floor therefore carries straight on over the stairs to the rest of
+       that floor; going down is a matter of asking for the stairs at their head.
+       Floors are one-way besides: you land on one from above and pass straight
+       up through it from below, so a jump made under a floor reaches it instead
+       of stopping dead on its underside, and crouch + JUMP drops back through. */
+    sl={x:x+8*S,y:fy,w:w-16*S,h:11*S};
+    b.slabs.push(sl);
+    lv.plats.push({x:sl.x,y:sl.y,w:sl.w,h:sl.h,inside:b,interiorFloor:true,oneway:true});
   }
   for(f=0;f<floors;f++){
     var base=gy-f*fh;
@@ -1062,7 +1067,7 @@ function startStage(n){
   var i;for(i=0;i<level.items.length;i++)items.push(level.items[i]);
   P.x=60;P.y=380;P.vx=0;P.vy=0;P.inv=110;P.dead=false;P.checkX=60;P.checkY=380;
   P.inB=null;P.doorT=0;P.atDoor=null;P.nadeReady=false;P.nadeCharge=0;
-  P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.ladder=null;P.dropT=0;
+  P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.ladder=null;P.dropT=0;P.onStair=null;
   P.jumpHold=0;P.airBoost=0;P.jumpLock=0;
   cam.x=0;cam.shake=0;cam.zoom=1;
   if(level.boss)spawnBoss();
@@ -1441,6 +1446,9 @@ function throwNade(charge){
   nades.push({x:P.x+P.w/2,y:P.y+8,vx:v.vx,vy:v.vy,life:80,r:7,mine:true,sp:0,power:v.power});
   tone(340+300*v.power,0.08,'triangle',0.04,660+420*v.power);
 }
+/* How near an end of a flight counts as being at it, both for asking for the
+   stairs and for how far past the end a flight keeps hold of the brother. */
+var STAIR_GRAB_X=56, STAIR_GRAB_Y=26;
 /* The rise an object takes in its stride: low ledges, kerbs and stair treads are
    stepped over rather than walked into, and a floor edge this close overhead is
    pulled up onto rather than missed. */
@@ -1455,27 +1463,59 @@ function solidFor(p,o){
   return true;
 }
 /* A stair flight is one continuous surface rather than a row of separate treads:
-   its height is a function of x across the whole run, which is what makes
-   walking, running and rolling up or down it work like sloped ground and leaves
-   no seam anywhere to fall through. Its ends meet the floor below and the
-   landing above exactly, so a flight is simply where one floor becomes the next. */
+   its height is a function of x across the whole run, so once the brother is on
+   a flight, walking, running and rolling up or down it work like sloped ground
+   with no seam anywhere to fall through. Its ends meet the floor below and the
+   landing above exactly, so a flight is simply where one floor becomes the next.
+   Getting on one is a decision, though — see stairEngage. */
+function rampSpans(p,cx,engaged){
+  var pad=engaged?STAIR_GRAB_X:0;
+  return cx>p.x-pad&&cx<p.x+p.w+pad;
+}
 function rampSurfaceY(p,cx){
   var r=p.ramp;
   return lerp(r.y1,r.y2,clamp((cx-r.x1)/(r.x2-r.x1),0,1));
 }
 function rampCarries(p,o){
-  var cx=o.x+o.w/2;
-  if(cx<=p.x||cx>=p.x+p.w||o.vy<0)return false;
+  var cx=o.x+o.w/2,engaged=(o===P&&P.onStair===p);
+  /* A flight the brother has taken keeps hold of him for a stride past either
+     end, where its surface has flattened out into the floor it meets — so
+     stepping onto the stairs from a pace short of them is stepping onto the
+     stairs, and the last stride off the bottom is still the same movement. */
+  if(!rampSpans(p,cx,engaged)||o.vy<0)return false;
   var sy=rampSurfaceY(p,cx),feet=o.y+o.h;
+  /* On the flight, the steps are underfoot in both directions: they may rise a
+     stride into the next pace, and going down they fall away faster than gravity
+     takes a walker, so the surface reaches up a stride for him too. That is what
+     keeps a walk or a roll glued to the stairs instead of skipping down them in
+     little hops. Jumping releases the flight, so this never fights a jump. */
+  if(engaged)return feet>=sy-STEP_UP&&feet-o.vy<=sy+STEP_UP;
   if(feet<sy-2)return false;
-  /* Stepping onto a flight is stepping up, so the surface may sit a step's
-     height above the feet and still take them — the same allowance ordinary
-     ground steps get, and enough that arriving at a run or in a roll gets on
-     the flight rather than skating underneath it. Once on, each frame's climb
-     is a fraction of that, so the ride up stays glued. Further along, the
-     underside is metres overhead and walking beneath it stays walking beneath
-     it. */
-  return feet-o.vy<=sy+STEP_UP;
+  /* Off it, a flight is see-through: walking into one carries straight on to
+     whatever the floor holds behind it. Dropping onto one from above is the
+     exception — stairs you land on hold you up, they are not a hole. Ordinary
+     footing never counts as a drop, so a brother walking the floor under a
+     flight keeps walking under it. */
+  return o.vy>1.5&&feet-o.vy<=sy;
+}
+/* Stairs are furniture until you ask for them. At either end of a flight, a push
+   into it plus the direction you mean to travel — towards it and UP at the foot,
+   towards it and DOWN at the head — puts the brother on the steps; from there
+   ordinary movement carries him along until he walks off an end. */
+function stairEngage(){
+  if(!P.inB||!P.onGround||P.dropT>0)return false;
+  var i,p,r,cx=P.x+P.w/2,feet=P.y+P.h,up,toHead,toFoot;
+  for(i=0;i<level.plats.length;i++){
+    p=level.plats[i];
+    if(!p.ramp||p.inside!==P.inB)continue;
+    r=p.ramp;up=r.x2>r.x1?1:-1;
+    toHead=up>0?inp.right:inp.left;            // towards the flight, from its foot
+    toFoot=up>0?inp.left:inp.right;            // towards the flight, from its head
+    if(P.onStair===p)continue;                 // already on it: DOWN means roll, not board
+    if(pressed('up')&&toHead&&Math.abs(cx-r.x1)<STAIR_GRAB_X&&Math.abs(feet-r.y1)<STAIR_GRAB_Y){P.onStair=p;P.stairIn=false;return true;}
+    if(pressed('down')&&toFoot&&Math.abs(cx-r.x2)<STAIR_GRAB_X&&Math.abs(feet-r.y2)<STAIR_GRAB_Y){P.onStair=p;P.stairIn=false;return true;}
+  }
+  return false;
 }
 function droppableSurfaceBelow(o){
   if(!o.onGround)return false;
@@ -1532,10 +1572,13 @@ function collidePlatforms(o,useOneway,stepAssist){
     p=level.plats[i];r={x:p.x,y:p.y,w:p.w,h:p.h};
     if(p.dead||(p.obstacle&&p.obstacle.dead))continue;
     if(o===P&&P.dropT>0&&(p.oneway||p.interiorFloor))continue;
+    // On the stairs, the floor they pass through is a stairwell, not a lid.
+    if(o===P&&P.onStair&&p.interiorFloor)continue;
     if(p.inside&&p.inside!==o.inB)continue;
     if(p.ramp){
       if(o===P&&rampCarries(p,o)){
         o.y=rampSurfaceY(p,o.x+o.w/2)-o.h;o.vy=0;o.onGround=true;
+        if(P.onStair!==p){P.onStair=p;P.stairIn=true;}
       }
       continue;
     }
@@ -1587,7 +1630,7 @@ function enterBuilding(b){
   if(b.objective&&level.objective&&level.objective.type==='raid')completeObjective();
 }
 function exitBuilding(){
-  P.inB=null;P.doorT=0;P.winCd=14;P.entryLock=10;
+  P.inB=null;P.doorT=0;P.winCd=14;P.entryLock=10;P.onStair=null;
   tone(520,0.10,'triangle',0.045,300);
 }
 function updateBuildingState(){
@@ -1679,6 +1722,10 @@ function updatePlayer(){
     addLight(P.x+P.w/2,P.y+P.h/2,120,'#ffffff',14);
   }
   if(updateLadderTraversal())return;
+  /* Asking for the stairs is a movement input like any other, so it is resolved
+     before the moves that share its buttons: the same push that steps onto a
+     flight would otherwise dive into a roll or spring off the ground. */
+  var tookStairs=stairEngage();
   dropNow=P.prone&&inp.down&&pressed('jump')&&droppableSurfaceBelow(P);
   if(dropNow){
     P.dropT=13;P.onGround=false;P.coyote=0;P.vy=3.8;P.y+=6;
@@ -1690,7 +1737,7 @@ function updatePlayer(){
   if(P.onGround)P.airBoost=0;
   var groundRoll=P.onGround&&(inp.left||inp.right||Math.abs(P.vx)>0.8);
   var airRoll=!P.onGround&&!P.airRollUsed;
-  if(!dropNow&&P.rollT<=0&&P.rollCd<=0&&!P.atDoor&&pressed('down')&&(groundRoll||airRoll)){
+  if(!dropNow&&!tookStairs&&P.rollT<=0&&P.rollCd<=0&&!P.atDoor&&pressed('down')&&(groundRoll||airRoll)){
     P.rollDir=inp.left?-1:inp.right?1:(Math.abs(P.vx)>.2?(P.vx<0?-1:1):P.facing);
     P.rollPow=rollPower();
     P.rollAir=airRoll;P.rollMax=Math.round((airRoll?20:24)*P.rollPow);P.rollT=P.rollMax;
@@ -1735,7 +1782,7 @@ function updatePlayer(){
      climbing is possible and as jump everywhere else. Stairs need no such turn:
      they are walked, run and rolled like any other ground. */
   var stickJump=pressed('upjump')&&!P.ladder&&!P.atDoor;
-  if(!rolling&&(pressed('jump')||stickJump)&&!dropNow){
+  if(!rolling&&!tookStairs&&(pressed('jump')||stickJump)&&!dropNow){
     /* Both triggers read the same analogue launch, so tapping JUMP with the
        stick held up-and-back leaps backwards exactly like the stick gesture. */
     var jl=jumpLaunch(B);
@@ -1754,6 +1801,18 @@ function updatePlayer(){
   P.vy+=0.52;if(P.vy>15)P.vy=15;
   collidePlatforms(P,true,true);
   updateBuildingState();
+  /* A flight is done with the brother the moment he walks off either end of it,
+     jumps off it, or leaves the building — after which those steps are furniture
+     again and he walks straight through them. */
+  if(P.onStair){
+    var sp=P.onStair,scx=P.x+P.w/2,onRun=scx>sp.x&&scx<sp.x+sp.w;
+    if(onRun)P.stairIn=true;
+    /* The apron is there to carry a brother the last pace onto the steps, so it
+       only holds before he has set foot on the run. Once he has, stepping off
+       either end hands him back to the floor there and done with. */
+    if(!P.inB||sp.inside!==P.inB||P.vy<-0.1||
+       (!onRun&&(P.stairIn||!rampSpans(sp,scx,true))))P.onStair=null;
+  }
   if(P.onGround)P.jumps=0;
   P.x=clamp(P.x,0,level.length-P.w);
   if(P.onGround&&P.vy===0){P.checkX=P.x;P.checkY=P.y-4;}
@@ -4290,7 +4349,12 @@ function updateCamera(){
   var visibleW=view.w/cam.zoom,visibleH=view.h/cam.zoom,t,ty;
   if(P.inB){
     t=P.inB.x+P.inB.w/2-visibleW/2;
-    ty=P.inB.y+P.inB.h/2-visibleH/2+12;
+    /* A block that fits is framed whole. A taller one is followed storey by
+       storey, held between its own roof and ground so the shot never drifts off
+       the building the brother is standing in. */
+    var bTop=P.inB.y-16,bBot=P.inB.gy+26;
+    if(bBot-bTop<=visibleH)ty=P.inB.y+P.inB.h/2-visibleH/2+12;
+    else ty=clamp(P.y+P.h/2-visibleH*0.52,bTop,bBot-visibleH);
   } else {
     t=P.x+P.w/2-visibleW*0.44+P.facing*22;
     ty=VIEW_BOTTOM-visibleH;
@@ -4335,7 +4399,7 @@ function step(){
     if(stateT>90){
       if(lives<=0){state='GAMEOVER';stateT=0;if(score>hiScore)hiScore=score;}
       else{
-        P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.airBoost=0;P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
+        P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.airBoost=0;P.onStair=null;P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
         var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;
         for(var ei=enemies.length-1;ei>=0;ei--){
           var nearby=enemies[ei];
