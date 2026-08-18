@@ -1,0 +1,15 @@
+name = "ratatatata-signal"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# One Durable Object per room code: the one place both peers can agree on while
+# they are still strangers. Rooms hold nothing but two mailboxes and expire.
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+# SQLite-backed Durable Objects are the class available on the Workers free
+# plan; the room state here is in memory either way, so nothing is written.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

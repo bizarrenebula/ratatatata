@@ -291,9 +291,20 @@ function padTouch(e){
 var tapped=false,selectDeployTap=false;
 function stageTouch(e){
   e.preventDefault();initAudio();if(!landscapeAsked)requestLandscape();
+  if(state==='MODE'&&e.touches&&e.touches.length){
+    var mr=gcv.getBoundingClientRect(),mx=(e.touches[0].clientX-mr.left)/mr.width*view.cssW;
+    var my=(e.touches[0].clientY-mr.top)/mr.height*view.cssH,mb=modeBoxes(),mi;
+    for(mi=0;mi<mb.length;mi++)
+      if(mx>=mb[mi].x&&mx<=mb[mi].x+mb[mi].w&&my>=mb[mi].y&&my<=mb[mi].y+mb[mi].h){
+        if(modeIdx!==mi){modeIdx=mi;SFX.selectMove();}
+        selectDeployTap=true;return;
+      }
+    return;
+  }
   if(state==='SELECT'&&e.touches&&e.touches.length){
     var r=gcv.getBoundingClientRect(),x=(e.touches[0].clientX-r.left)/r.width*view.cssW;
     var y=(e.touches[0].clientY-r.top)/r.height*view.cssH;
+    if(Net.on()&&lobbyBannerHit(x,y)){copyInvite();return;}
     var cw=view.cssW*.42,ch=view.cssH*.52,cy=view.cssH*.22;
     if(y>=cy&&y<=cy+ch){
       if(x>=view.cssW*.05&&x<=view.cssW*.05+cw){if(selIdx!==0)SFX.selectMove();selIdx=0;}
@@ -307,8 +318,19 @@ function stageTouch(e){
 gcv.addEventListener('touchstart',stageTouch,{passive:false});
 gcv.addEventListener('mousedown',function(e){
   initAudio();
+  if(state==='MODE'){
+    var mr=gcv.getBoundingClientRect(),mx=(e.clientX-mr.left)/mr.width*view.cssW;
+    var my=(e.clientY-mr.top)/mr.height*view.cssH,mb=modeBoxes(),mi;
+    for(mi=0;mi<mb.length;mi++)
+      if(mx>=mb[mi].x&&mx<=mb[mi].x+mb[mi].w&&my>=mb[mi].y&&my<=mb[mi].y+mb[mi].h){
+        if(modeIdx!==mi){modeIdx=mi;SFX.selectMove();}
+        selectDeployTap=true;return;
+      }
+    return;
+  }
   if(state==='SELECT'){
     var r=gcv.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*view.cssW,y=(e.clientY-r.top)/r.height*view.cssH;
+    if(Net.on()&&lobbyBannerHit(x,y)){copyInvite();return;}
     var cw=view.cssW*.42,ch=view.cssH*.52,cy=view.cssH*.22;
     if(y>=cy&&y<=cy+ch){
       if(x>=view.cssW*.05&&x<=view.cssW*.05+cw){selIdx=0;SFX.selectMove();}
@@ -319,6 +341,183 @@ gcv.addEventListener('mousedown',function(e){
   }
   tapped=true;
 });
+
+/* ==================== NET: TWO-PLAYER LOBBY ====================
+   Two browsers cannot find each other unaided, so a room code is minted at a
+   rendezvous (scripts/signal-server.js locally, scripts/cloudflare/worker.js on
+   Cloudflare) and each peer leaves the other a description of how to be reached.
+   The moment those descriptions have been swapped the browsers talk directly:
+   the lobby — who is here, which rat each has picked — rides the peer connection
+   itself, and the rendezvous never sees any of it.
+
+   Signalling lives at the same origin as the page by default, which is what the
+   bundled server arranges; ?signal=https://host overrides it for a game served
+   from somewhere other than its Worker. */
+var SIGNAL_BASE=(function(){
+  try{
+    var q=new URLSearchParams(location.search).get('signal');
+    if(q)return q.replace(/\/$/,'');
+  }catch(err){}
+  return (location.protocol==='http:'||location.protocol==='https:')?location.origin:'';
+})();
+var ICE=[{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']}];
+var Net={
+  role:'local',            // 'local' | 'host' | 'guest'
+  status:'off',            // 'off' | 'opening' | 'waiting' | 'joining' | 'live' | 'error'
+  code:'', link:'', note:'',
+  pc:null, chan:null, alive:false,
+  peerHere:false, peerBro:1,
+  on:function(){return Net.role!=='local';},
+  /* P1 is whoever opened the room. That is the whole of the seating plan. */
+  seat:function(){return Net.role==='guest'?2:1;},
+  reset:function(){
+    Net.alive=false;
+    try{if(Net.chan)Net.chan.close();}catch(err){}
+    try{if(Net.pc)Net.pc.close();}catch(err){}
+    Net.pc=null;Net.chan=null;Net.role='local';Net.status='off';
+    Net.code='';Net.link='';Net.note='';Net.peerHere=false;Net.peerBro=1;
+  },
+  fail:function(why){Net.status='error';Net.note=why;Net.alive=false;},
+  api:function(path,opts){
+    if(!SIGNAL_BASE)return Promise.reject(new Error('no signalling server'));
+    return fetch(SIGNAL_BASE+path,opts).then(function(r){
+      if(!r.ok)throw new Error('signal '+r.status);
+      return r.json();
+    });
+  },
+  post:function(msg){
+    return Net.api('/net/send?code='+Net.code+'&from='+(Net.role==='host'?'host':'guest'),
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(msg)});
+  },
+  /* Long-poll the mailbox until something arrives that the caller wants. */
+  collect:function(want){
+    var as=Net.role==='host'?'host':'guest';
+    return new Promise(function(resolve,reject){
+      var tries=0;
+      (function round(){
+        if(!Net.alive)return reject(new Error('cancelled'));
+        Net.api('/net/recv?code='+Net.code+'&as='+as).then(function(data){
+          var i,msgs=data.messages||[];
+          for(i=0;i<msgs.length;i++)if(msgs[i]&&msgs[i].t===want)return resolve(msgs[i]);
+          if(++tries>20)return reject(new Error('nobody joined'));
+          round();
+        }).catch(function(err){
+          if(!Net.alive)return reject(err);
+          if(++tries>20)return reject(err);
+          setTimeout(round,900);
+        });
+      })();
+    });
+  },
+  /* Both sides gather their candidates before describing themselves, so a single
+     message carries a complete description and there is no trickle to relay. */
+  settled:function(pc){
+    if(pc.iceGatheringState==='complete')return Promise.resolve();
+    return new Promise(function(resolve){
+      var done=false,finish=function(){if(done)return;done=true;resolve();};
+      pc.addEventListener('icegatheringstatechange',function(){
+        if(pc.iceGatheringState==='complete')finish();
+      });
+      setTimeout(finish,2500);
+    });
+  },
+  /* A closed tab does not always close a channel politely, so the connection's
+     own state is what decides whether anyone is still there. */
+  watch:function(pc){
+    pc.onconnectionstatechange=function(){
+      var st=pc.connectionState;
+      if(!Net.alive||(st!=='disconnected'&&st!=='failed'&&st!=='closed'))return;
+      if(!Net.peerHere)return;
+      Net.peerHere=false;Net.status='waiting';
+      Net.note=Net.role==='host'?'PLAYER 2 LEFT':'PLAYER 1 LEFT';
+    };
+  },
+  wire:function(chan){
+    Net.chan=chan;
+    chan.onopen=function(){
+      Net.status='live';Net.peerHere=true;Net.note='';Net.lastHeard=Date.now();
+      SFX.selectConfirm();
+      Net.say({t:'sel',bro:selIdx});
+    };
+    chan.onclose=function(){
+      if(!Net.alive)return;
+      Net.peerHere=false;Net.status='waiting';Net.note='PLAYER 2 LEFT';
+    };
+    chan.onmessage=function(e){
+      var m;try{m=JSON.parse(e.data);}catch(err){return;}
+      Net.lastHeard=Date.now();
+      if(!Net.peerHere){Net.peerHere=true;Net.status='live';Net.note='';}
+      if(m.t==='sel'){Net.peerBro=m.bro?1:0;SFX.selectMove();}
+    };
+  },
+  /* WebRTC takes the best part of a minute to admit a peer has gone, which is
+     no use to a lobby, so the two ends say hello once a second and a silence of
+     a few seconds is taken as an empty chair. */
+  lastHeard:0, lastPing:0,
+  tick:function(){
+    if(!Net.on()||Net.status!=='live')return;
+    var now=Date.now();
+    if(now-Net.lastPing>1000){Net.lastPing=now;Net.say({t:'ping'});}
+    if(Net.lastHeard&&now-Net.lastHeard>4000){
+      Net.peerHere=false;Net.status='waiting';
+      Net.note=Net.role==='host'?'PLAYER 2 LEFT':'PLAYER 1 LEFT';
+    }
+  },
+  say:function(msg){
+    if(Net.chan&&Net.chan.readyState==='open'){try{Net.chan.send(JSON.stringify(msg));}catch(err){}}
+  },
+  host:function(){
+    Net.reset();Net.role='host';Net.status='opening';Net.alive=true;
+    Net.api('/net/new',{method:'POST'}).then(function(data){
+      Net.code=data.code;
+      Net.link=location.origin+location.pathname+(location.search||'')+'#j='+Net.code;
+      Net.status='waiting';
+      var pc=Net.pc=new RTCPeerConnection({iceServers:ICE});
+      Net.watch(pc);
+      Net.wire(pc.createDataChannel('lobby',{ordered:true}));
+      return pc.createOffer().then(function(offer){
+        return pc.setLocalDescription(offer);
+      }).then(function(){
+        return Net.settled(pc);
+      }).then(function(){
+        return Net.post({t:'offer',sdp:pc.localDescription.sdp});
+      }).then(function(){
+        return Net.collect('answer');
+      }).then(function(msg){
+        return pc.setRemoteDescription({type:'answer',sdp:msg.sdp});
+      });
+    }).catch(function(err){
+      Net.fail(SIGNAL_BASE?String(err.message||err).toUpperCase():'NO SERVER: RUN node scripts/signal-server.js');
+    });
+  },
+  join:function(code){
+    Net.reset();Net.role='guest';Net.status='joining';Net.alive=true;
+    Net.code=String(code||'').trim().toUpperCase();
+    if(!/^[A-Z0-9]{6}$/.test(Net.code)){Net.fail('THAT IS NOT A GAME CODE');return;}
+    var pc=Net.pc=new RTCPeerConnection({iceServers:ICE});
+    Net.watch(pc);
+    pc.ondatachannel=function(e){Net.wire(e.channel);};
+    Net.collect('offer').then(function(msg){
+      return pc.setRemoteDescription({type:'offer',sdp:msg.sdp});
+    }).then(function(){
+      return pc.createAnswer();
+    }).then(function(answer){
+      return pc.setLocalDescription(answer);
+    }).then(function(){
+      return Net.settled(pc);
+    }).then(function(){
+      return Net.post({t:'answer',sdp:pc.localDescription.sdp});
+    }).catch(function(err){
+      Net.fail(SIGNAL_BASE?'COULD NOT REACH THAT GAME':'NO SERVER: RUN node scripts/signal-server.js');
+    });
+  },
+  /* A link with a room code in its fragment is an invitation: take it. */
+  invited:function(){
+    var m=/[#&]j=([A-Za-z0-9]{6})/.exec(location.hash||'');
+    return m?m[1].toUpperCase():'';
+  }
+};
+window.addEventListener('beforeunload',function(){Net.alive=false;try{if(Net.pc)Net.pc.close();}catch(err){}});
 
 /* ==================== AUDIO ==================== */
 var actx=null;
@@ -517,6 +716,7 @@ var STAGE_FLOW=[
 
 /* ==================== STATE ==================== */
 var state='TITLE', stage=1, score=0, lives=3, selIdx=0, hiScore=0,aimHelp=true;
+var modeIdx=0, MODES=['LOCAL','CREATE','JOIN'];
 var level=null, cam={x:0,y:0,shake:0,zoom:1}, tick=0, stateT=0,introTypeMark=-1;
 var campaignSeed=1,campaign=null;
 var CAMPAIGNS=[
@@ -4104,18 +4304,100 @@ function drawTitle(){
   if(Math.floor(tick/26)%2===0)
     txt('PRESS ANY KEY TO CONTINUE',w/2,h*0.88,Math.min(22,w*0.052),'#efe6d2','center');
 }
+/* What the room needs to say while the two of you sort yourselves out: who you
+   are, the code, and whether anyone else has turned up yet. */
+function drawLobbyBanner(){
+  var w=view.cssW,h=view.cssH,bh=Math.min(46,h*0.085),by=h*0.012,bw=Math.min(w*0.86,760),bx=(w-bw)/2;
+  var seat=Net.seat(),hue=seat===1?BROS[0].coat:BROS[1].coat;
+  g.fillStyle='rgba(8,12,14,.72)';rr(g,bx,by,bw,bh,9);g.fill();
+  g.strokeStyle=hexA(hue,0.7);g.lineWidth=2;rr(g,bx,by,bw,bh,9);g.stroke();
+  seatTag('P'+seat,bx+10,by+bh*0.5-Math.min(10,w*0.013),hue,w*0.16);
+  var line,sub,col='#efe6d2';
+  if(Net.status==='error'){line=Net.note||'CONNECTION FAILED';sub='PRESS ESC FOR THE MENU';col='#e2705f';}
+  else if(Net.status==='opening'){line='OPENING A ROOM…';sub='';}
+  else if(Net.status==='joining'){line='JOINING '+Net.code+'…';sub='WAITING FOR YOUR FRIEND’S GAME';}
+  else if(Net.status==='live'){
+    line=(seat===1?'PLAYER 2 IS HERE':'CONNECTED TO PLAYER 1')+'  •  ROOM '+Net.code;
+    sub='CO-OP PLAY IS NOT WIRED YET — DEPLOY RUNS YOUR OWN GAME';
+  }
+  else if(Net.note){line=Net.note+'  •  ROOM '+Net.code;sub='PRESS ESC AND CREATE A NEW GAME TO INVITE AGAIN';col='#e0b45c';}
+  else {line='ROOM '+Net.code+'  •  WAITING FOR PLAYER 2';sub=lobbyCopied>0?'LINK COPIED — SEND IT TO YOUR FRIEND':'TAP HERE TO COPY THE INVITE LINK';}
+  txt(line,w/2,by+bh*(sub?0.44:0.62),Math.min(15,w*0.026),col,'center');
+  if(sub)txt(sub,w/2,by+bh*0.80,Math.min(11,w*0.019),'#8f9b87','center','Arial,sans-serif');
+}
+var lobbyCopied=0;
+function lobbyBannerHit(x,y){
+  var w=view.cssW,h=view.cssH,bh=Math.min(46,h*0.085),by=h*0.012,bw=Math.min(w*0.86,760),bx=(w-bw)/2;
+  return x>=bx&&x<=bx+bw&&y>=by&&y<=by+bh;
+}
+function copyInvite(){
+  if(!Net.link)return;
+  lobbyCopied=150;SFX.selectMove();
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(Net.link);
+    else window.prompt('Send this link to your friend',Net.link);
+  }catch(err){try{window.prompt('Send this link to your friend',Net.link);}catch(e2){}}
+}
+/* A seat badge pinned to the corner of a chosen card. */
+function seatTag(label,x,y,hue,cw,right){
+  var pw=Math.min(34,cw*0.22),ph=Math.min(20,cw*0.13),bx=right?x-pw:x;
+  g.fillStyle=hue;rr(g,bx,y,pw,ph,5);g.fill();
+  txt(label,bx+pw/2,y+ph*0.76,Math.min(13,pw*0.52),'#120d0b','center');
+}
+/* The lobby's front door: play alone, open a room, or walk into one. */
+function modeBoxes(){
+  var w=view.cssW,h=view.cssH,bw=Math.min(w*0.26,300),gap=Math.min(w*0.035,34);
+  var total=bw*3+gap*2,x0=(w-total)/2,bh=Math.min(h*0.30,190),y=h*0.44;
+  return [0,1,2].map(function(i){return {x:x0+i*(bw+gap),y:y,w:bw,h:bh};});
+}
+function drawMode(){
+  var w=view.cssW,h=view.cssH,i,mobile=matchMedia('(pointer:coarse)').matches;
+  g.fillStyle=lin(g,0,0,0,h,[[0,'#0c1014'],[1,'#05080a']]);g.fillRect(0,0,w,h);
+  txt('RAT BROS',w/2,h*0.17,Math.min(38,w*0.082),'#e8c25a','center');
+  txt('ONE RAT, OR TWO?',w/2,h*0.17+26,Math.min(14,w*0.032),'#7d8a70','center');
+  var boxes=modeBoxes();
+  var label=['PLAY LOCAL','CREATE GAME','JOIN GAME'];
+  var blurb=[['ONE PLAYER','ON THIS DEVICE'],['GET A LINK','SEND IT TO A FRIEND'],['HAVE A CODE?','TYPE IT IN']];
+  var hue=['#c9a24a',BROS[0].coat,BROS[1].coat];
+  for(i=0;i<3;i++){
+    var bx=boxes[i],on=(modeIdx===i);
+    g.fillStyle=on?hexA(hue[i],0.16):'rgba(255,255,255,.03)';
+    rr(g,bx.x,bx.y,bx.w,bx.h,10);g.fill();
+    g.strokeStyle=on?hue[i]:'#2c3230';g.lineWidth=on?3:1.5;
+    rr(g,bx.x,bx.y,bx.w,bx.h,10);g.stroke();
+    txt(label[i],bx.x+bx.w/2,bx.y+bx.h*0.42,Math.min(19,bx.w*0.14),on?'#efe6d2':'#a8a08e','center');
+    txt(blurb[i][0],bx.x+bx.w/2,bx.y+bx.h*0.62,Math.min(11.5,bx.w*0.082),'#7d8a70','center');
+    txt(blurb[i][1],bx.x+bx.w/2,bx.y+bx.h*0.76,Math.min(11.5,bx.w*0.082),'#7d8a70','center');
+  }
+  txt(mobile?'TAP TO CHOOSE':'← → to pick  •  X or ENTER to confirm',
+    w/2,h*0.82,Math.min(13,w*0.028),'#8f9b87','center','Arial,sans-serif');
+  if(!SIGNAL_BASE)
+    txt('TWO-PLAYER NEEDS THE PAGE SERVED OVER HTTP',w/2,h*0.87,Math.min(11.5,w*0.024),'#a8544a','center','Arial,sans-serif');
+}
 function drawSelect(){
   var w=view.cssW,h=view.cssH,i,mobile=matchMedia('(pointer:coarse)').matches;
   g.fillStyle=lin(g,0,0,0,h,[[0,'#0c1014'],[1,'#05080a']]);g.fillRect(0,0,w,h);
   txt('CHOOSE YOUR RAT',w/2,h*0.13,Math.min(34,w*0.078),'#e8c25a','center');
   txt(mobile?'TAP A RAT TO CHOOSE':'joystick \u2190 \u2192 to pick \u2022 B to deploy',w/2,h*0.13+22,Math.min(13,w*0.032),'#7d8a70','center');
+  if(Net.on()){if(lobbyCopied>0)lobbyCopied--;drawLobbyBanner();}
   var cw=w*0.42,ch=h*0.52,cy=h*0.22;
+  /* In a two-player room each seat wears its own colour: P1 in Rocco's red,
+     P2 in Vinnie's blue, so a glance at the borders says who has picked what
+     even when both have landed on the same rat. */
+  var mySeat=Net.on()?Net.seat():0, peerSeat=mySeat===1?2:1;
+  var seatHue=['#c9a24a',BROS[0].coat,BROS[1].coat];
   for(i=0;i<2;i++){
     var cx=w*0.05+i*(w*0.48),sel=(selIdx===i),B=BROS[i];
-    g.fillStyle=sel?'rgba(201,162,74,.13)':'rgba(255,255,255,.03)';
+    var peerOn=Net.on()&&Net.peerHere&&Net.peerBro===i;
+    g.fillStyle=sel?hexA(seatHue[mySeat],0.15):(peerOn?hexA(seatHue[peerSeat],0.10):'rgba(255,255,255,.03)');
     rr(g,cx,cy,cw,ch,8);g.fill();
-    g.strokeStyle=sel?'#c9a24a':'#2c3230';g.lineWidth=sel?3:1.5;
+    g.strokeStyle=sel?seatHue[mySeat]:(peerOn?seatHue[peerSeat]:'#2c3230');g.lineWidth=sel||peerOn?3:1.5;
     rr(g,cx,cy,cw,ch,8);g.stroke();
+    if(peerOn&&!sel){rr(g,cx-4,cy-4,cw+8,ch+8,10);g.strokeStyle=hexA(seatHue[peerSeat],0.45);g.lineWidth=2;g.stroke();}
+    if(Net.on()){
+      if(sel)seatTag('P'+mySeat,cx+12,cy+12,seatHue[mySeat],cw);
+      if(peerOn)seatTag('P'+peerSeat,cx+cw-12,cy+12,seatHue[peerSeat],cw,true);
+    }
     // Portrait artwork occupies only the safe area between HP and the name block.
     var portraitTop=cy+ch*.13,portraitBottom=cy+ch*.76;
     var portraitScale=Math.min(cw*.76/78,(portraitBottom-portraitTop)/116);
@@ -4368,10 +4650,38 @@ function step(){
   tick++;poll();
   if(wepSwipe.shown>0)wepSwipe.shown--;
   var anyStart=anyKey||anyButtonPressed()||tapped;
-  if(state==='TITLE'){ if(anyStart){Music.menu();SFX.start();state='SELECT';stateT=0;tapped=false;} return; }
+  if(state==='TITLE'){
+    if(anyStart){
+      Music.menu();SFX.start();stateT=0;tapped=false;
+      /* Arriving on a friend's link is itself the answer to the question the
+         mode menu asks, so take the invitation and go straight to the lobby. */
+      var invite=Net.invited();
+      if(invite){Net.join(invite);selIdx=1;state='SELECT';}
+      else state='MODE';
+    }
+    return;
+  }
+  if(state==='MODE'){
+    if(pressed('left')&&modeIdx>0){modeIdx--;SFX.selectMove();}
+    if(pressed('right')&&modeIdx<MODES.length-1){modeIdx++;SFX.selectMove();}
+    if(pressed('fire')||pressed('start')||tapped||selectDeployTap){
+      tapped=false;selectDeployTap=false;SFX.selectConfirm();
+      if(MODES[modeIdx]==='LOCAL'){Net.reset();selIdx=0;state='SELECT';}
+      else if(MODES[modeIdx]==='CREATE'){Net.host();selIdx=0;state='SELECT';}
+      else {
+        var typed=null;
+        try{typed=window.prompt('Enter your friend\'s game code');}catch(err){}
+        if(typed){Net.join(typed);selIdx=1;state='SELECT';}
+      }
+    }
+    return;
+  }
   if(state==='SELECT'){
-    if(pressed('left')&&selIdx!==0){selIdx=0;SFX.selectMove();}
-    if(pressed('right')&&selIdx!==1){selIdx=1;SFX.selectMove();}
+    // Back out of a room the way you back out of anything else here.
+    if(pressed('pause')){Net.reset();modeIdx=0;state='MODE';return;}
+    Net.tick();
+    if(pressed('left')&&selIdx!==0){selIdx=0;SFX.selectMove();Net.say({t:'sel',bro:selIdx});}
+    if(pressed('right')&&selIdx!==1){selIdx=1;SFX.selectMove();Net.say({t:'sel',bro:selIdx});}
     if(pressed('fire')||pressed('start')||tapped||selectDeployTap){
       tapped=false;selectDeployTap=false;SFX.selectConfirm();makePlayer(selIdx);lives=3;score=0;
       campaignSeed=(Date.now()^(Math.random()*0x7fffffff))>>>0;
@@ -4437,6 +4747,7 @@ function render(){
   g.setTransform(DPR,0,0,DPR,0,0);
   g.clearRect(0,0,view.cssW,view.cssH);
   if(state==='TITLE'){drawTitle();paintVignette();return;}
+  if(state==='MODE'){drawMode();paintVignette();return;}
   if(state==='SELECT'){drawSelect();paintVignette();return;}
   if(state==='INTRO'){drawIntro();paintVignette();return;}
 

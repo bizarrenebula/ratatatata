@@ -12,6 +12,41 @@ python3 -m http.server 8000
 
 Then open <http://localhost:8000>.
 
+## Two players
+
+The title screen asks whether you are playing alone or with someone. **Create
+game** mints a room and gives you a link; send it to a friend and their browser
+joins yours directly. Once connected, the character select doubles as the lobby:
+your pick wears a **P1** badge in Rocco's red, your friend's wears **P2** in
+Vinnie's blue, and each of you sees the other move.
+
+Peers cannot find each other unaided, so a small rendezvous hands them each
+other's connection details. Nothing about the game passes through it — once the
+two browsers have been introduced they talk directly.
+
+Run it locally, which serves the game as well, so the link is same-origin:
+
+```sh
+node scripts/signal-server.js 8080
+```
+
+Then open <http://localhost:8080>. For a friend on another network, expose that
+port with a tunnel (`cloudflared tunnel --url http://localhost:8080`, `ngrok http
+8080`) and send them the address it gives you.
+
+To run the rendezvous on Cloudflare instead — one Durable Object per room, which
+is what gives both peers a single consistent place to meet:
+
+```sh
+cd scripts/cloudflare && npx wrangler deploy
+```
+
+Then serve the game from anywhere and point it at the Worker with
+`?signal=https://ratatatata-signal.<your-subdomain>.workers.dev`.
+
+**Co-op play itself is not wired up yet** — the lobby connects, but deploying
+starts your own game. Both players running in one level is the next piece.
+
 ## Controls
 
 | Action | Keyboard |
