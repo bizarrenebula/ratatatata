@@ -110,3 +110,108 @@ Once the beat clock exists, spend it:
   Delete it, or fold it into the new set.
 - The ambient bed has 10 segments for 11 stages, so the Extermination Core
   currently reuses an earlier stage's music. Give the final stage its own track.
+
+---
+
+## Buildings as the level's vertical dimension
+
+**The pitch.** A block stops being a two-room shortcut off the street and becomes
+the level itself. It runs off the top of the screen — you never see its roof from
+the pavement — and the way up is the stairs. Every storey is a floor plan, not a
+platform: a hallway you walk by default, apartments you enter through doors the
+same way you enter the building, and inside those apartments the tables, chairs
+and kitchen appliances that a firefight needs — things to shoot, things to hide
+behind, things to loot. You learn a building the way you learn a level. The one
+time you see the roof is when you climb all the way up and step out of a top
+window onto its terrace, which is the pay-off for having climbed.
+
+### Why it fits
+
+Most of the structure landed already:
+
+- `addBuilding` in [index.html](index.html) generates three-to-five storey blocks
+  with whole floors wall to wall, and flights alternating ends so each storey is
+  crossed to reach the next.
+- Blocks are already taller than the outdoor camera's framing, so roofs already
+  sit off-screen from the street. `updateCamera` follows the storey the brother
+  is on when a block is taller than the view, held between its own roof and
+  ground.
+- Doors already work as a mode switch: `doorAt`, `enterBuilding`, `exitBuilding`,
+  UP to enter and DOWN to leave, with `P.inB` scoping which platforms are solid
+  through `solidFor`. A room is the same idea one level down.
+- Window exits already exist — `openWindowAt` plus the crouch-and-jump gesture in
+  `updateBuildingState` — and already place the brother outside the shell.
+- Destructible cover already exists as obstacles with hp and blast flags, and
+  `PROP_SETS` is already themed per biome. Furniture is a fourth set, not a new
+  system.
+
+### What it would take
+
+**1. Rooms as a nested interior.** A storey becomes a hallway plus N apartments.
+The hallway is the floor the brother walks; each apartment is a box with its own
+door on that hallway. Entering one is the existing door interaction, so `P.inB`
+generalises into a small stack — building, then room — and `solidFor` scopes on
+the innermost. Keep the cutaway trick: `b.cut` already lerps a building open when
+you are inside it, and a room can do the same so the hallway dims behind you.
+
+**2. Furniture as themed, destructible cover.** Add a `PROP_SETS.apartment` entry
+— table, chairs, fridge, cooker, dresser, sofa — with hp and silhouettes, placed
+per room against the walls with a walkable gap. They should be `obstacle`-backed
+so the existing damage, blast and `dead` handling applies for free, which also
+means a shot fridge stops being cover. Waist-high pieces want to be crouch-cover
+specifically: the clearance-crouch code already exists.
+
+**3. A population per storey.** Each floor gets a group or a single unit, plus its
+own collectibles, rather than the current flat per-building spawn list. The spawn
+plumbing is there — `lv.spawns` entries already carry `inB`, and
+`interiorSpawnSupported` already checks a floor is under their feet — so this is
+mostly a placement pass that walks storeys and rooms instead of the building as a
+whole. Keep enemies in the rooms they were placed in until they see you, so
+clearing a floor means opening doors rather than sweeping a corridor.
+
+**4. The terrace pay-off.** Give the top storey a window that opens onto a real
+terrace platform on the roof, and let the roof be reachable only that way. The
+window exit already drops the brother outside at a computed position; a terrace
+is a solid ledge next to it plus roof furniture — aerials, water tanks, a fire
+escape down. The camera needs to release its "hold inside the block" clamp when
+he steps out, so the sky is visible and the whole climb reads as having gone
+somewhere.
+
+**5. Level flow.** If a block is the level's vertical dimension, the objective and
+the exit should live in it: the thing to recover a few floors up, the way out on
+the terrace or back down at the street. `lv.exit` and the objective placement
+already accept arbitrary positions.
+
+### Watch out for
+
+- **Reading the floor plan.** With rooms, hallways, stairs and furniture on one
+  cutaway, the interior gets busy fast. The hallway needs to stay obviously the
+  default surface — brighter, unobstructed — and doors need to read as doors at a
+  glance.
+- **Getting lost.** A five-storey block with four rooms a floor is twenty rooms.
+  Some minimal legibility — a floor indicator, or the objective marker already
+  drawn over buildings — matters more than more content.
+- **Enemy behaviour in rooms.** `holdEnemyTerritory` keeps enemies on their
+  platform; rooms need them to hold a room instead, and to not shoot through
+  walls they cannot see through. `enemySightBlocked` already blocks on interior
+  geometry and would need room walls added.
+- **Spawn density.** Per-storey population multiplied by five storeys is a lot
+  more enemies per block than today. Budget it against the stage's outdoor count
+  rather than adding on top.
+
+### Still open from the building pass
+
+Small pieces of the same work, not yet done:
+
+- **Windows on the side facades only.** Move the breakable, exitable windows off
+  the front face onto the left and right facades, with both sides skewed enough
+  to be partly visible, and emphasise them so it reads that they can be shot out
+  and jumped through. Today `addBuilding` puts three windows per storey on the
+  front face plus one `sideExit` on the right only.
+- **Dynamic versus static.** Anything interactable — breakable, lootable,
+  enterable — should be distinguishable at a glance from scenery that is only
+  painted.
+- **Props stay solid indoors.** Outdoor prop platforms carry no `inside` marker,
+  so `solidFor` does not scope them to the outdoors: a crate standing in front of
+  a building is still solid while the brother is inside it. Interiors should hold
+  nothing walkable but their floors and stairs.
