@@ -590,7 +590,7 @@ function makePlayer(b){
      jumps:0,coyote:0,anim:0,dead:false,checkX:80,checkY:300,swapCd:0,fireT:0,lean:0,
      inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,rollPow:1,
      rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,airBoost:0,jumpLock:0,
-     interiorFade:0,exitFocus:0,entryLock:0,stair:null,stairT:0,ladder:null,dropT:0};
+     interiorFade:0,exitFocus:0,entryLock:0,ladder:null,dropT:0};
 }
 
 /* ==================== LEVEL ==================== */
@@ -724,21 +724,34 @@ function addBuilding(lv,rng,x,gy,kind){
   lv.plats.push({x:x+w-1,y:b.y,w:10*S,h:b.h,inside:b});
   for(f=1;f<floors;f++){
     var fy=gy-f*fh, lower=gy-(f-1)*fh;
-    var steps=6, stw=24*S, sth=fh/steps, runW=steps*stw, riser=sth+15*S;
-    // A flight can only be climbed from its low end, so odd storeys run left-to-right
-    // starting just past the door, and even storeys run back the other way. The top
-    // tread always meets its landing, and there is headroom under the upper treads.
+    /* Treads are half the size they used to be — twice as many, half as deep and
+       half as tall — so a flight reads as a staircase instead of a ladder of
+       crates. They are scenery and enemy collision only: what the player walks
+       on is the flight's ramp platform below, whose surface is a continuous
+       function of x. A ramp has no seams, so there is nowhere along a flight —
+       visible or not — for the player to drop between two treads. */
+    var steps=12, stw=12*S, sth=fh/steps, runW=steps*stw, riser=sth+6*S;
+    // A flight runs from the floor it leaves to the landing it meets, so odd
+    // storeys run left-to-right starting just past the door and even storeys run
+    // back the other way. Both ends are flush: the low end sits on the floor
+    // below and the top tread hands straight over to its landing slab.
     var goRight=(f%2===1), lowX=goRight?(x+66*S):(x+w-40*S-runW), sl;
-    b.stairs.push({lowX:goRight?lowX:lowX+runW,lowY:lower,
-      highX:goRight?lowX+runW:lowX,highY:fy,goRight:goRight,floor:f});
+    var flLowX=goRight?lowX:lowX+runW, flHighX=goRight?lowX+runW:lowX;
+    b.stairs.push({lowX:flLowX,lowY:lower,highX:flHighX,highY:fy,goRight:goRight,floor:f});
+    lv.plats.push({x:lowX,y:fy,w:runW,h:lower-fy,inside:b,step:true,
+      ramp:{x1:flLowX,y1:lower,x2:flHighX,y2:fy}});
     for(i=0;i<steps;i++){
-      var stx=lowX+(goRight?i:(steps-1-i))*stw, sty=lower-(i+1)*sth;
+      // Tread tops straddle the ramp line, so feet always look planted on one.
+      var stx=lowX+(goRight?i:(steps-1-i))*stw, sty=lower-(i+0.5)*sth;
       lv.plats.push({x:stx,y:sty,w:stw+1,h:riser,inside:b,step:true});
       b.steps.push({x:stx,y:sty,w:stw+1,h:riser});
     }
-    if(goRight) sl={x:lowX+runW+3*S,y:fy,w:(x+w-8*S)-(lowX+runW+3*S),h:11*S};
-    else        sl={x:x+8*S,y:fy,w:(lowX-3*S)-(x+8*S),h:11*S};
-    if(sl.w>40*S){b.slabs.push(sl);lv.plats.push({x:sl.x,y:sl.y,w:sl.w,h:sl.h,inside:b,interiorFloor:true});}
+    if(goRight) sl={x:lowX+runW,y:fy,w:(x+w-8*S)-(lowX+runW),h:11*S};
+    else        sl={x:x+8*S,y:fy,w:lowX-(x+8*S),h:11*S};
+    /* Landings are one-way: you land on them from above and pass straight up
+       through them from below, so a jump made under a floor reaches it instead
+       of stopping dead on its underside. Crouch + JUMP still drops back down. */
+    if(sl.w>40*S){b.slabs.push(sl);lv.plats.push({x:sl.x,y:sl.y,w:sl.w,h:sl.h,inside:b,interiorFloor:true,oneway:true});}
   }
   for(f=0;f<floors;f++){
     var base=gy-f*fh;
@@ -1049,7 +1062,7 @@ function startStage(n){
   var i;for(i=0;i<level.items.length;i++)items.push(level.items[i]);
   P.x=60;P.y=380;P.vx=0;P.vy=0;P.inv=110;P.dead=false;P.checkX=60;P.checkY=380;
   P.inB=null;P.doorT=0;P.atDoor=null;P.nadeReady=false;P.nadeCharge=0;
-  P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.stair=null;P.stairT=0;P.ladder=null;P.dropT=0;
+  P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.ladder=null;P.dropT=0;
   P.jumpHold=0;P.airBoost=0;P.jumpLock=0;
   cam.x=0;cam.shake=0;cam.zoom=1;
   if(level.boss)spawnBoss();
@@ -1428,13 +1441,41 @@ function throwNade(charge){
   nades.push({x:P.x+P.w/2,y:P.y+8,vx:v.vx,vy:v.vy,life:80,r:7,mine:true,sp:0,power:v.power});
   tone(340+300*v.power,0.08,'triangle',0.04,660+420*v.power);
 }
+/* The rise an object takes in its stride: low ledges, kerbs and stair treads are
+   stepped over rather than walked into, and a floor edge this close overhead is
+   pulled up onto rather than missed. */
+var STEP_UP=17;
 function solidFor(p,o){
   if(p.dead||(p.obstacle&&p.obstacle.dead))return false;
   if(o===P&&P.dropT>0&&(p.oneway||p.interiorFloor))return false;
   if(p.oneway)return false;
-  if(p.step&&o===P)return false;              // player stairs use guided traversal
+  if(p.ramp)return false;                     // a flight supports from above, never blocks
+  if(p.step&&o===P)return false;              // treads are scenery; the ramp carries the player
   if(p.inside&&p.inside!==o.inB)return false;   // interior walls/floors/stairs
   return true;
+}
+/* A stair flight is one continuous surface rather than a row of separate treads:
+   its height is a function of x across the whole run, which is what makes
+   walking, running and rolling up or down it work like sloped ground and leaves
+   no seam anywhere to fall through. Its ends meet the floor below and the
+   landing above exactly, so a flight is simply where one floor becomes the next. */
+function rampSurfaceY(p,cx){
+  var r=p.ramp;
+  return lerp(r.y1,r.y2,clamp((cx-r.x1)/(r.x2-r.x1),0,1));
+}
+function rampCarries(p,o){
+  var cx=o.x+o.w/2;
+  if(cx<=p.x||cx>=p.x+p.w||o.vy<0)return false;
+  var sy=rampSurfaceY(p,cx),feet=o.y+o.h;
+  if(feet<sy-2)return false;
+  /* Stepping onto a flight is stepping up, so the surface may sit a step's
+     height above the feet and still take them — the same allowance ordinary
+     ground steps get, and enough that arriving at a run or in a roll gets on
+     the flight rather than skating underneath it. Once on, each frame's climb
+     is a fraction of that, so the ride up stays glued. Further along, the
+     underside is metres overhead and walking beneath it stays walking beneath
+     it. */
+  return feet-o.vy<=sy+STEP_UP;
 }
 function droppableSurfaceBelow(o){
   if(!o.onGround)return false;
@@ -1476,7 +1517,7 @@ function collidePlatforms(o,useOneway,stepAssist){
     var top=1e9,ok=true;
     for(i=0;i<hits.length;i++){
       var rise=(o.y+o.h)-hits[i].y;
-      if(rise<=0||rise>17){ok=false;break;}
+      if(rise<=0||rise>STEP_UP){ok=false;break;}
       if(hits[i].y<top)top=hits[i].y;
     }
     if(ok&&!blockedAt(o,o.x+2,top-o.h,o.w-4)){o.y=top-o.h;o.vy=0;o.onGround=true;hits.length=0;}
@@ -1492,15 +1533,22 @@ function collidePlatforms(o,useOneway,stepAssist){
     if(p.dead||(p.obstacle&&p.obstacle.dead))continue;
     if(o===P&&P.dropT>0&&(p.oneway||p.interiorFloor))continue;
     if(p.inside&&p.inside!==o.inB)continue;
-    if(p.step&&o===P){
-      if(useOneway&&o.vy>=0&&o.y+o.h-o.vy<=p.y+3&&hit(o,r)){
-        o.y=p.y-o.h;o.vy=0;o.onGround=true;
+    if(p.ramp){
+      if(o===P&&rampCarries(p,o)){
+        o.y=rampSurfaceY(p,o.x+o.w/2)-o.h;o.vy=0;o.onGround=true;
       }
       continue;
     }
+    if(p.step&&o===P)continue;                 // treads are scenery; the flight's ramp carries him
     if(p.oneway){
       if(!useOneway)continue;
-      if(o.vy>=0&&o.y+o.h-o.vy<=p.y+2&&hit(o,r)){o.y=p.y-o.h;o.vy=0;o.onGround=true;}
+      /* Storeys stand a shade taller than a jump, so a jump made under one would
+         otherwise always die a few pixels short of the floor it was aimed at.
+         Cresting within a step's height of an interior floor pulls the player up
+         onto it — the same allowance ground steps get, and enough that jumping
+         up to the floor above is a jump rather than a measurement. */
+      var reach=(o===P&&p.interiorFloor)?STEP_UP+3:2;
+      if(o.vy>=0&&o.y+o.h-o.vy<=p.y+reach&&hit(o,r)){o.y=p.y-o.h;o.vy=0;o.onGround=true;}
       continue;
     }
     if(hit(o,r)){
@@ -1534,13 +1582,12 @@ function openWindowAt(b,strict){
 function enterBuilding(b){
   P.inB=b;P.doorT=0;P.winCd=14;P.entryLock=16;P.vx*=.25;
   P.x=clamp(P.x,b.x+12,b.x+b.w-P.w-12);P.checkX=P.x;P.checkY=P.y;
-  P.stair=null;
   burst(P.x+P.w/2,P.y+P.h-8,'#e8d6a8',10,2.6);
   tone(320,0.10,'triangle',0.045,520);
   if(b.objective&&level.objective&&level.objective.type==='raid')completeObjective();
 }
 function exitBuilding(){
-  P.inB=null;P.doorT=0;P.winCd=14;P.entryLock=10;P.stair=null;
+  P.inB=null;P.doorT=0;P.winCd=14;P.entryLock=10;
   tone(520,0.10,'triangle',0.045,300);
 }
 function updateBuildingState(){
@@ -1594,51 +1641,10 @@ function updateBuildingState(){
     b.doorOpen=lerp(b.doorOpen,(P.inB===b)?1:0,0.20);
   }
 }
-function updateStairTraversal(B){
-  if(!P.inB||!P.inB.stairs){P.stair=null;return false;}
-  var i,fl,cx=P.x+P.w/2,feet=P.y+P.h;
-  if(!P.stair){
-    for(i=0;i<P.inB.stairs.length;i++){
-      fl=P.inB.stairs[i];
-      if(pressed('up')&&Math.abs(cx-fl.lowX)<52&&Math.abs(feet-fl.lowY)<24){
-        P.stair={flight:fl,dir:1};P.stairT=0;break;
-      }
-      if(pressed('down')&&Math.abs(cx-fl.highX)<52&&Math.abs(feet-fl.highY)<24){
-        P.stair={flight:fl,dir:-1};P.stairT=1;break;
-      }
-    }
-    if(!P.stair)return false;
-    P.rollT=0;P.prone=false;P.vx=0;P.vy=0;P.onGround=true;
-  }
-  fl=P.stair.flight;
-  if(pressed('jump')){
-    P.stair=null;applyJumpLaunch(jumpLaunch(B));P.onGround=false;P.jumps=1;P.coyote=0;P.jumpLock=7;SFX.jump();
-    updateBuildingState();return true;
-  }
-  var flightSign=fl.highX>=fl.lowX?1:-1;
-  var axis=(inp.right?1:0)-(inp.left?1:0),travel=axis*flightSign;
-  // A vertical stick/key direction also works once attached to the flight,
-  // which makes mobile stair movement controllable without a diagonal hold.
-  if(!axis)travel=(inp.up?1:0)-(inp.down?1:0);
-  var stairLen=Math.hypot(fl.highX-fl.lowX,fl.highY-fl.lowY);
-  if(travel){
-    P.stairT=clamp(P.stairT+travel*(B.speed/stairLen),0,1);
-    P.anim+=Math.abs(travel)*0.22;
-  }
-  var sx=lerp(fl.lowX,fl.highX,P.stairT),sy=lerp(fl.lowY,fl.highY,P.stairT);
-  P.x=sx-P.w/2;P.y=sy-P.h;P.vx=0;P.vy=0;P.onGround=true;P.prone=false;
-  if(travel)P.facing=flightSign*(travel>0?1:-1);
-  // Continuing to walk beyond either landing immediately hands control back
-  // to normal movement instead of holding the player until input is released.
-  if((travel>0&&P.stairT>=1)||(travel<0&&P.stairT<=0)){
-    P.stair=null;P.checkX=P.x;P.checkY=P.y;
-  }
-  // Stair traversal owns movement, but never suppresses combat input.
-  var stairWeapon=WEAPONS[P.weapon],stairBite=pressed('fire')&&tryBite();
-  if(!stairBite&&inp.fire&&(stairWeapon.auto||mobileAutoFire||pressed('fire')))fireWeapon();
-  updateBuildingState();
-  return true;
-}
+/* Stairs are no longer a scripted traversal mode. A flight is terrain — its ramp
+   is the floor below turning into the floor above — so walking, running, rolling
+   and jumping across one all use the ordinary movement rules, in either
+   direction, with nothing to attach to and nothing to release. */
 function updateLadderTraversal(){
   if(P.inB||!level.ladders)return false;
   var i,L,cx=P.x+P.w/2,feet=P.y+P.h;
@@ -1674,9 +1680,8 @@ function updatePlayer(){
   }
   if(updateLadderTraversal())return;
   dropNow=P.prone&&inp.down&&pressed('jump')&&droppableSurfaceBelow(P);
-  if(!dropNow&&updateStairTraversal(B))return;
   if(dropNow){
-    P.stair=null;P.dropT=13;P.onGround=false;P.coyote=0;P.vy=3.8;P.y+=6;
+    P.dropT=13;P.onGround=false;P.coyote=0;P.vy=3.8;P.y+=6;
     P.prone=false;P.h=P_STAND*charScale;burst(P.x+P.w/2,P.y+P.h,'#9b8d72',5,1.6);tone(210,.05,'triangle',.025,130);
   }
   if(P.onGround&&P.rollAir)P.rollAir=false;
@@ -1725,10 +1730,11 @@ function updatePlayer(){
   P.lean=lerp(P.lean,clamp(P.vx/B.speed,-1,1),0.2);
   if(P.onGround)P.coyote=7;else if(P.coyote>0)P.coyote--;
   /* Up on the move stick jumps — but only once the contextual climbs have had
-     their turn. Ladders and stairs return out of updatePlayer above this line
-     when they engage, and a door is checked explicitly, so "up" reads as climb
-     wherever climbing is possible and as jump everywhere else. */
-  var stickJump=pressed('upjump')&&!P.ladder&&!P.stair&&!P.atDoor;
+     their turn. A ladder returns out of updatePlayer above this line when it
+     engages and a door is checked explicitly, so "up" reads as climb wherever
+     climbing is possible and as jump everywhere else. Stairs need no such turn:
+     they are walked, run and rolled like any other ground. */
+  var stickJump=pressed('upjump')&&!P.ladder&&!P.atDoor;
   if(!rolling&&(pressed('jump')||stickJump)&&!dropNow){
     /* Both triggers read the same analogue launch, so tapping JUMP with the
        stick held up-and-back leaps backwards exactly like the stick gesture. */
@@ -1823,6 +1829,7 @@ function enemyFloorAhead(e,dir,useOneway){
     p=level.plats[i];
     if(p.inside&&p.inside!==e.inB)continue;
     if(p.oneway&&!useOneway)continue;
+    if(p.ramp)continue;                        // flights carry the player, not patrols
     if(probe>=p.x+2&&probe<=p.x+p.w-2&&p.y>=foot-5&&p.y<=foot+22)return true;
   }
   return false;
@@ -2523,12 +2530,14 @@ function paintBuildings(){
       var by=b.gy-f*b.fh;
       g.fillStyle='rgba(0,0,0,.30)';g.fillRect(b.x+6,by-14,b.w-12,14);
     }
-    for(i=0;i<b.steps.length;i++){                             // staircases
+    // Staircases: each tread is drawn at its full collision depth, so the solid
+    // the player walks on is exactly the solid he can see.
+    for(i=0;i<b.steps.length;i++){
       var st=b.steps[i];
-      g.fillStyle=lin(g,st.x,st.y,st.x,st.y+22,[[0,'#6b5334'],[1,'#33261a']]);
-      g.fillRect(st.x,st.y,st.w,Math.min(st.h,26));
-      g.fillStyle='rgba(255,225,180,.20)';g.fillRect(st.x,st.y,st.w,2.5);
-      g.fillStyle='rgba(0,0,0,.35)';g.fillRect(st.x,st.y+2.5,2,Math.min(st.h,26)-2.5);
+      g.fillStyle=lin(g,st.x,st.y,st.x,st.y+st.h,[[0,'#6b5334'],[1,'#33261a']]);
+      g.fillRect(st.x,st.y,st.w,st.h);
+      g.fillStyle='rgba(255,225,180,.20)';g.fillRect(st.x,st.y,st.w,2);
+      g.fillStyle='rgba(0,0,0,.35)';g.fillRect(st.x,st.y+2,1.5,st.h-2);
     }
     /* Rails follow the generated flights rather than fixed offsets, so they stay
        glued to the treads at any BUILD_SCALE. */
@@ -2687,7 +2696,7 @@ function paintBuildings(){
       g.fillStyle='#e8c25a';g.font='bold 19px Impact,sans-serif';g.textAlign='center';g.fillText('!',omx,omy+7);g.textAlign='left';
     }
 
-    if(P.inB===b&&!P.stair){
+    if(P.inB===b){
       var openW=openWindowAt(b,true);
       if(openW){var wax=openW.sideExit?sideX+sideW*.55:openW.x+openW.w/2,way=openW.y-15;g.globalAlpha=.55+.45*Math.abs(Math.sin(tick*.11));
         g.fillStyle='rgba(8,9,10,.82)';ell(g,wax,way,14,14);g.fill();g.fillStyle='#9be36a';
