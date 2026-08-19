@@ -158,6 +158,40 @@ window.addEventListener('keydown',function(e){var n=KEYS[e.code];
 window.addEventListener('keyup',function(e){var n=KEYS[e.code];if(n){kb[n]=false;e.preventDefault();}});
 window.addEventListener('blur',function(){var i;for(i=0;i<NAMES.length;i++){kb[NAMES[i]]=false;tc[NAMES[i]]=false;}
   moveStick.ax=0;moveStick.ay=0;aimStick.ax=0;aimStick.ay=0;wepSwipe.id=-1;padOwner={};});
+
+/* Is there anything worth spending a round on? Same space as the brother —
+   a rat in another building is not a reason to fire down a corridor — and close
+   enough to matter. The boss always counts. */
+function threatNear(){
+  if(!level||state!=='PLAY'||P.dead)return false;
+  if(boss&&boss.state!=='dead')return true;
+  var px=P.x+P.w/2,py=P.y+P.h/2,i,e;
+  for(i=0;i<enemies.length;i++){
+    e=enemies[i];
+    if(e.dead||e.hidden||e.fallDead)continue;
+    if((e.inB||null)!==(P.inB||null))continue;
+    if(Math.abs(e.x+e.w/2-px)>TRIGGER_REACH_X)continue;
+    if(Math.abs(e.y+e.h/2-py)>TRIGGER_REACH_Y)continue;
+    return true;
+  }
+  return false;
+}
+function updateAimTrigger(){
+  if(!coarsePointer()){mobileAutoFire=false;triggerLive=false;return;}
+  var mag=Math.hypot(aimStick.ax,aimStick.ay);
+  // A wide gap between the push that fires and the push that stops: steering
+  // across the line should not cost a round.
+  if(aimHot){if(mag<AUTOFIRE_OFF)aimHot=false;}
+  else if(mag>AUTOFIRE_ON)aimHot=true;
+  /* Held out at the rim, the safety is overruled — deliberate, and it stays
+     overruled until the thumb comes back, so a crate can be worked on. */
+  if(mag>RIM_PUSH)rimHeld++;else rimHeld=0;
+  if(rimHeld>RIM_HOLD)rimOverride=true;
+  if(!aimHot)rimOverride=false;
+  triggerLive=aimHot&&(rimOverride||threatNear());
+  mobileAutoFire=triggerLive;
+  tc.fire=triggerLive;
+}
 function poll(){var i,n;anyKey=keyPulse;keyPulse=false;for(i=0;i<NAMES.length;i++){n=NAMES[i];prev[n]=inp[n];inp[n]=!!(kb[n]||tc[n]);}}
 function pressed(n){return inp[n]&&!prev[n];}
 function anyButtonPressed(){for(var i=0;i<NAMES.length;i++)if(pressed(NAMES[i]))return true;return false;}
@@ -184,9 +218,25 @@ var BTNS=[
   {n:'jump', l:'A', sub:'JUMP',  x:0,y:0,r:0,p:0,hue:'#e2402f',side:'R'},
   {n:'swap', l:'D', sub:'SWAP',  x:0,y:0,r:0,p:0,hue:'#e8b23a',side:'R'}
 ];
-/* Push the aim stick past this and the weapon fires; a lighter push only turns
-   and aims, so you can face a threat without burning ammo. */
-var AUTOFIRE_MIN=0.55, mobileAutoFire=false;
+/* The aim stick has to carry two intentions at once — where the brother looks
+   and whether he shoots — and turning to face the way you are walking put the
+   thumb straight through the trigger. So the gun keeps its own safety:
+
+   - it holds fire while nothing worth shooting is near, so corridors and empty
+     rooms cost no ammo at all;
+   - it goes live by itself the moment something is, with no input from the
+     player and nothing to arm, so it can never be caught switched off when a
+     room turns out to be occupied;
+   - and pushing the stick out to the rim and holding fires anyway, which is how
+     you blow the lock off a crate with nothing alive nearby.
+
+   The push that fires is out near the rim now rather than half way, and it lets
+   go again only when the thumb comes well back, so drifting across the line
+   while steering does not squeeze off a round. */
+var AUTOFIRE_ON=0.80, AUTOFIRE_OFF=0.60, RIM_PUSH=0.93, RIM_HOLD=10;
+var TRIGGER_REACH_X=460, TRIGGER_REACH_Y=280;
+var AUTOFIRE_MIN=AUTOFIRE_ON;              // the ring the pad draws
+var mobileAutoFire=false, aimHot=false, rimHeld=0, rimOverride=false, triggerLive=false;
 var SMALL=[
   {n:'start',l:'START',x:0,y:0,r:0,p:0},
   {n:'pause',l:'PAUSE',x:0,y:0,r:0,p:0}
@@ -285,9 +335,9 @@ function padTouch(e){
      up-and-back diagonal is how you ask for a backward leap. How far past the
      threshold the thumb sits is the jump's power (see stickUpThrottle). */
   tc.upjump = moveStick.ay<-0.55&&Math.abs(moveStick.ay)>Math.abs(moveStick.ax);
-  /* Aim stick doubles as the trigger. */
-  mobileAutoFire = Math.hypot(aimStick.ax,aimStick.ay)>AUTOFIRE_MIN;
-  tc.fire = tc.fire||mobileAutoFire;
+  /* The stick only reports where the thumb is; whether that pulls a trigger is
+     decided once a frame in updateAimTrigger, which is the only place that can
+     know whether there is anything to shoot at. */
 }
 ['touchstart','touchmove','touchend','touchcancel'].forEach(function(n){
   pcv.addEventListener(n,padTouch,{passive:false});
@@ -4510,9 +4560,14 @@ function drawFloatStick(s,label,isAim){
   s.vx=lerp(s.vx,s.ax,.35);s.vy=lerp(s.vy,s.ay,.35);
   var sx=s.cx,sy=s.cy,R=s.r,kx=sx+s.vx*R*.48,ky=sy+s.vy*R*.48;
   var live=Math.hypot(s.ax,s.ay)>.24;
-  var firing=isAim&&Math.hypot(s.ax,s.ay)>AUTOFIRE_MIN;
-  pg.fillStyle=firing?'rgba(60,12,8,.26)':'rgba(5,8,10,.20)';ell(pg,sx,sy,R,R);pg.fill();
-  pg.strokeStyle=firing?'rgba(255,120,90,.75)':live?'rgba(255,220,125,.46)':'rgba(225,235,238,.25)';
+  var firing=isAim&&triggerLive;
+  // Pushed hard with the safety on: show the thumb is at the trigger and the
+  // gun is choosing not to fire, rather than leaving it looking broken.
+  var safed=isAim&&!firing&&Math.hypot(s.ax,s.ay)>AUTOFIRE_ON;
+  pg.fillStyle=firing?'rgba(60,12,8,.26)':safed?'rgba(20,30,26,.24)':'rgba(5,8,10,.20)';
+  ell(pg,sx,sy,R,R);pg.fill();
+  pg.strokeStyle=firing?'rgba(255,120,90,.75)':safed?'rgba(150,205,150,.55)':
+    live?'rgba(255,220,125,.46)':'rgba(225,235,238,.25)';
   pg.lineWidth=firing?3:2;ell(pg,sx,sy,R,R);pg.stroke();
   if(isAim){
     /* The band between "aiming" and "firing" is worth showing: inside it you can
@@ -4544,7 +4599,7 @@ function drawPad(){
   pg.clearRect(0,0,w,h);
   // Floating mobile controls: low-contrast until touched, bright enough to read over action.
   drawFloatStick(moveStick,'MOVE  ·  ↑ JUMP  ·  ↓ ROLL',false);
-  drawFloatStick(aimStick,'AIM  ·  PUSH = FIRE',true);
+  drawFloatStick(aimStick,triggerLive?'AIM  ·  FIRING':(threatNear()?'AIM  ·  READY':'AIM  ·  HOLDING FIRE'),true);
   for(i=0;i<BTNS.length;i++){
     var mb=BTNS[i],pressedAlpha=mb.p?.32:.14;
     pg.fillStyle='rgba(12,16,18,'+pressedAlpha+')';ell(pg,mb.x,mb.y,mb.r,mb.r);pg.fill();
@@ -4692,7 +4747,7 @@ function updateCamera(){
   if(cam.shake>0.4)cam.shake*=0.87;else cam.shake=0;
 }
 function step(){
-  tick++;poll();
+  tick++;updateAimTrigger();poll();
   if(wepSwipe.shown>0)wepSwipe.shown--;
   var anyStart=anyKey||anyButtonPressed()||tapped;
   if(state==='TITLE'){
