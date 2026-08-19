@@ -170,9 +170,13 @@ function flatten(st,c){
   for(i=0;i<st.length;i++)out.push([st[i][0],mixCol(st[i][1],mid,f)]);
   return out;
 }
+/* House line weight. Every outline in the game is drawn relative to this, so
+   the whole drawing can be made finer or heavier from one number while the
+   relative weights — a boot heavier than a collar — stay as they were. */
+var INK_SCALE=0.6;
 function ink(c,col,lw){
   var ch=TH?TH.characters:null;
-  var w=(lw||2)*(ch?ch.outline:1);
+  var w=(lw||2)*INK_SCALE*(ch?ch.outline:1);
   if(w<=0)return;
   c.strokeStyle=(TH&&TH.ink&&!c.__noTheme)?TH.ink:(col||'rgba(10,8,10,.75)');
   c.lineWidth=w;c.stroke();
