@@ -196,7 +196,7 @@ function themeSchema(){
       contrast:{v:1,min:0.5,max:2,step:0.02,label:'CONTRAST'},
       brightness:{v:1,min:0.5,max:1.5,step:0.02,label:'BRIGHTNESS'},
       warmth:{v:0,min:-1,max:1,step:0.02,label:'WARMTH'},
-      mono:{v:0,min:0,max:1,step:0.02,label:'DRAIN TO GREY'},
+      mono:{v:0,min:0,max:1,step:0.02,label:'GREY DRAIN'},
       accentKeep:{v:0,min:0,max:1,step:0.02,label:'KEEP ACCENTS'},
       posterize:{v:0,min:0,max:12,step:1,label:'COLOUR STEPS'}
     },
@@ -204,15 +204,15 @@ function themeSchema(){
       scaleX:{v:1,min:0.8,max:1.3,step:0.01,label:'BODY WIDTH'},
       scaleY:{v:1,min:0.8,max:1.3,step:0.01,label:'BODY HEIGHT'},
       bulk:{v:1,min:0.7,max:1.6,step:0.02,label:'BULK'},
-      outline:{v:1,min:0,max:4,step:0.05,label:'OUTLINE WEIGHT'},
-      roughness:{v:0,min:0,max:1,step:0.02,label:'OUTLINE ROUGHNESS'}
+      outline:{v:1,min:0,max:4,step:0.05,label:'INK WEIGHT'},
+      roughness:{v:0,min:0,max:1,step:0.02,label:'INK ROUGHNESS'}
     },
     environment:{
-      detail:{v:1,min:0,max:1.5,step:0.05,label:'ENVIRONMENT DETAIL'},
+      detail:{v:1,min:0,max:1.5,step:0.05,label:'ENV DETAIL'},
       grime:{v:0,min:0,max:1,step:0.02,label:'GRIME'},
       grain:{v:0,min:0,max:1,step:0.02,label:'FILM GRAIN'},
       lighting:{v:1,min:0,max:2.5,step:0.05,label:'LIGHTING'},
-      shadow:{v:1,min:0,max:2,step:0.05,label:'SHADOW DEPTH'},
+      shadow:{v:1,min:0,max:2,step:0.05,label:'SHADOWS'},
       vignette:{v:1,min:0,max:2,step:0.05,label:'VIGNETTE'}
     },
     effects:{
@@ -296,10 +296,14 @@ function parseCol(v){
 function themeColor(v){
   var p=TH?TH.palette:null;
   if(!p||!Theme.shifts)return v;
-  var hit=Theme.cache[v];
+  /* The cache belongs to the theme, not to the moment: the Art Director draws
+     eight live previews a frame, each under its own theme, and one shared cache
+     would be thrown away eight times a frame. */
+  var cache=TH.__cache||(TH.__cache={});
+  var hit=cache[v];
   if(hit!==undefined)return hit;
   var c=parseCol(v);
-  if(!c){Theme.cache[v]=v;return v;}
+  if(!c){cache[v]=v;return v;}
   var r=c.r/255,g0=c.g/255,b=c.b/255,i;
   if(p.warmth){r=r+p.warmth*0.10;b=b-p.warmth*0.10;}
   if(p.hue){
@@ -333,7 +337,7 @@ function themeColor(v){
   }
   var out='rgba('+Math.round(clamp(r,0,1)*255)+','+Math.round(clamp(g0,0,1)*255)+','+
           Math.round(clamp(b,0,1)*255)+','+(isFinite(c.a)?c.a:1)+')';
-  Theme.cache[v]=out;
+  cache[v]=out;
   return out;
 }
 
@@ -367,16 +371,27 @@ var Theme={
   },
   use:function(id,quiet){
     var t=THEME_BY_ID[id]||THEMES[0];
-    TH=t;Theme.idx=THEMES.indexOf(t);Theme.cache={};
+    TH=t;Theme.idx=THEMES.indexOf(t);
     var p=t.palette;
     /* Nothing to convert on the baseline theme: skip the whole colour path so
        Classic costs exactly what it did before there were themes. */
-    Theme.shifts=!!(p.hue||p.saturation!==1||p.contrast!==1||p.brightness!==1||p.warmth||p.mono||p.posterize>=2);
+    Theme.shifts=Theme.shifting(t);
     Theme.grainTile=null;Theme.surfaceKey='';
     try{localStorage.setItem('rat.theme',t.id);}catch(err){}
     if(!quiet){Theme.toast=110;Theme.toastName=t.name;}
     if(typeof themeChip!=='undefined'&&themeChip)themeChip.textContent=t.name;
     return t;
+  },
+  shifting:function(t){
+    var p=t.palette;
+    return !!(p.hue||p.saturation!==1||p.contrast!==1||p.brightness!==1||p.warmth||p.mono||p.posterize>=2);
+  },
+  /* Run something with a different theme in force and put the old one back —
+     which is how eight previews of eight directions share one canvas. */
+  with:function(t,fn){
+    var oldT=TH,oldS=Theme.shifts;
+    TH=t;Theme.shifts=Theme.shifting(t);
+    try{fn();}finally{TH=oldT;Theme.shifts=oldS;}
   },
   step:function(d){
     if(!THEMES.length)return;
@@ -391,9 +406,8 @@ var Theme={
       work.id=TH.id;work.name=TH.name;TH=work;
     }
     TH[gr][key]=clamp(Number(val),sc.min,sc.max);
-    Theme.cache={};Theme.grainTile=null;Theme.surfaceKey='';
-    var p=TH.palette;
-    Theme.shifts=!!(p.hue||p.saturation!==1||p.contrast!==1||p.brightness!==1||p.warmth||p.mono||p.posterize>=2);
+    TH.__cache={};Theme.grainTile=null;Theme.surfaceKey='';
+    Theme.shifts=Theme.shifting(TH);
   },
   reset:function(){
     if(!TH)return;
@@ -503,6 +517,7 @@ window.addEventListener('keydown',function(e){
 Theme.install();
 Theme.loadVariants();
 Theme.use(Theme.remembered()||'classic',true);
+artSel=Math.max(0,Theme.idx);
 
 
 /* ==================== INPUT ==================== */
@@ -658,6 +673,14 @@ function padTouch(e){
 var tapped=false,selectDeployTap=false;
 function stageTouch(e){
   e.preventDefault();initAudio();if(!landscapeAsked)requestLandscape();
+  if(state==='ART'){
+    if(!e.touches||!e.touches.length){artPointer(0,0,'up');return;}
+    var ar=gcv.getBoundingClientRect();
+    var ax=(e.touches[0].clientX-ar.left)/ar.width*view.cssW;
+    var ay=(e.touches[0].clientY-ar.top)/ar.height*view.cssH;
+    artPointer(ax,ay,e.type==='touchmove'?'move':'down');
+    return;
+  }
   if(state==='MODE'&&e.touches&&e.touches.length){
     var mr=gcv.getBoundingClientRect(),mx=(e.touches[0].clientX-mr.left)/mr.width*view.cssW;
     var my=(e.touches[0].clientY-mr.top)/mr.height*view.cssH,mb=modeBoxes(),mi;
@@ -683,8 +706,20 @@ function stageTouch(e){
   tapped=true;
 }
 gcv.addEventListener('touchstart',stageTouch,{passive:false});
+['touchmove','touchend','touchcancel'].forEach(function(n){gcv.addEventListener(n,stageTouch,{passive:false});});
+window.addEventListener('mousemove',function(e){
+  if(state!=='ART'||!artDrag&&artDrag!==0)return;
+  var ar=gcv.getBoundingClientRect();
+  artPointer((e.clientX-ar.left)/ar.width*view.cssW,(e.clientY-ar.top)/ar.height*view.cssH,'move');
+});
+window.addEventListener('mouseup',function(){if(state==='ART')artPointer(0,0,'up');});
 gcv.addEventListener('mousedown',function(e){
   initAudio();
+  if(state==='ART'){
+    var ar=gcv.getBoundingClientRect();
+    artPointer((e.clientX-ar.left)/ar.width*view.cssW,(e.clientY-ar.top)/ar.height*view.cssH,'down');
+    return;
+  }
   if(state==='MODE'){
     var mr=gcv.getBoundingClientRect(),mx=(e.clientX-mr.left)/mr.width*view.cssW;
     var my=(e.clientY-mr.top)/mr.height*view.cssH,mb=modeBoxes(),mi;
@@ -1082,7 +1117,7 @@ var STAGE_FLOW=[
 ];
 
 /* ==================== STATE ==================== */
-var state='TITLE', stage=1, score=0, lives=3, selIdx=0, hiScore=0,aimHelp=true;
+var state='ART', stage=1, score=0, lives=3, selIdx=0, hiScore=0,aimHelp=true;
 var modeIdx=0, MODES=['LOCAL','CREATE','JOIN'];
 var level=null, cam={x:0,y:0,shake:0,zoom:1}, tick=0, stateT=0,introTypeMark=-1;
 var campaignSeed=1,campaign=null;
@@ -4630,6 +4665,247 @@ function titleHeroAction(offset){
   } else if(p>=354&&p<404)a.fire=(p%10)<5?6:0;
   return a;
 }
+
+/* ==================== ART DIRECTOR ====================
+   A room you stand in before the game starts, to decide what the game looks
+   like. Every card is the renderer running for real under a different theme —
+   the same drawBrother, the same enemy, the same muzzle flash the game uses —
+   because a swatch cannot tell you whether a direction is any good and a
+   screenshot cannot tell you what it does to a fight.
+
+   The sliders are the theme schema, not decoration: each one is a field the
+   renderer genuinely reads, so there is nothing here that does nothing. That
+   same schema is what an art direction written in words would eventually be
+   turned into — the prompt box below is the front door for that, disabled
+   until there is something behind it. */
+var ART_SLIDERS=[
+  ['palette','saturation'],['palette','contrast'],['palette','brightness'],
+  ['palette','mono'],['palette','posterize'],['palette','hue'],['palette','warmth'],
+  ['characters','outline'],['characters','roughness'],['characters','bulk'],
+  ['environment','lighting'],['environment','shadow'],['environment','grime'],
+  ['effects','particles'],['effects','glow'],['render','pixel']
+];
+var artSel=0, artDrag=null, artPreview=null, artPhase=0;
+function artLayout(){
+  var w=view.cssW,h=view.cssH;
+  var pad=Math.max(10,w*0.014);
+  var gridW=w*0.56,cols=4,rows=Math.ceil(THEMES.length/cols);
+  var cw=(gridW-pad*(cols-1))/cols, chh=Math.min((h*0.62-pad*(rows-1))/rows,cw*0.62);
+  var gx=pad,gy=h*0.155,cards=[],i;
+  for(i=0;i<THEMES.length;i++)
+    cards.push({x:gx+(i%cols)*(cw+pad),y:gy+Math.floor(i/cols)*(chh+pad),w:cw,h:chh,i:i});
+  var panelX=gx+gridW+pad*1.6,panelW=w-panelX-pad;
+  var sl=[],sh=Math.max(15,h*0.035),scols=2,srow=Math.ceil(ART_SLIDERS.length/scols);
+  var sw=(panelW-pad)/scols;
+  for(i=0;i<ART_SLIDERS.length;i++)
+    sl.push({x:panelX+(i%scols)*(sw+pad*0.5),y:h*0.155+Math.floor(i/scols)*sh,
+             w:sw-pad*0.5,h:sh-4,g:ART_SLIDERS[i][0],k:ART_SLIDERS[i][1]});
+  var by=h*0.155+srow*sh+pad*0.6,bw=(panelW-pad*2)/3,bh=Math.min(30,h*0.055);
+  var btns=[
+    {id:'reset',label:'RESET',x:panelX,y:by,w:bw,h:bh},
+    {id:'random',label:'SHUFFLE',x:panelX+bw+pad,y:by,w:bw,h:bh},
+    {id:'save',label:'SAVE VARIANT',x:panelX+(bw+pad)*2,y:by,w:bw,h:bh}
+  ];
+  var prompt={x:panelX,y:by+bh+pad*0.8,w:panelW,h:Math.min(62,h*0.115)};
+  var gy2=gy+rows*(chh+pad)+pad*0.4,gw=(gridW-pad*2)/3,gh=Math.min(38,h*0.068);
+  var go=[
+    {id:'explore',label:'EXPLORE THEME',sub:'TO THE MENU',x:gx,y:gy2,w:gw,h:gh},
+    {id:'quick',label:'QUICK PLAY',sub:'STRAIGHT IN',x:gx+gw+pad,y:gy2,w:gw,h:gh},
+    {id:'last',label:'CONTINUE',sub:artLastName(),x:gx+(gw+pad)*2,y:gy2,w:gw,h:gh}
+  ];
+  return {cards:cards,sliders:sl,btns:btns,go:go,prompt:prompt,pad:pad};
+}
+function artLastName(){
+  var id=Theme.remembered(),t=id&&THEME_BY_ID[id];
+  return t?t.name:'';
+}
+/* The preview is a real scene, kept off to one side of the world so it can use
+   the same enemy the game uses without ever being part of a level. */
+function artScene(){
+  if(artPreview)return artPreview;
+  var e=null;
+  try{e=spawnEnemy('mouse',-9000,-9000);enemies.pop();}catch(err){e=null;}
+  artPreview={enemy:e};
+  return artPreview;
+}
+function drawArtPreview(r,t,sel){
+  /* The scene is composed once in its own coordinate space and scaled into
+     whatever the card happens to be, so a phone shows the same picture as a
+     desktop rather than a crop of it. */
+  var sc=artScene(),ph=artPhase,VW=300,VH=170;
+  g.save();
+  g.beginPath();rr(g,r.x,r.y,r.w,r.h,8);g.clip();
+  g.translate(r.x,r.y);g.scale(r.w/VW,r.h/VH);
+  Theme.with(t,function(){
+    var gy=VH*0.80;
+    g.fillStyle=lin(g,0,0,0,VH,[[0,'#11181c'],[0.6,'#1d2a2c'],[1,'#0a0e10']]);
+    g.fillRect(0,0,VW,VH);
+    g.fillStyle=rad(g,VW*0.74,VH*0.22,2,VH*0.8,[[0,'rgba(255,206,140,.38)'],[1,'rgba(0,0,0,0)']]);
+    g.fillRect(0,0,VW,VH);
+    // a lamp, a pipe, a floor: enough environment to read a mood
+    g.fillStyle='#2b2a22';g.fillRect(0,gy,VW,VH-gy);
+    g.fillStyle='#3a3a2c';g.fillRect(0,gy,VW,3);
+    g.fillStyle='#4a5a52';rr(g,VW*0.06,gy-26,VW*0.16,26,4);g.fill();ink(g,'rgba(10,8,10,.75)',2);
+    g.fillStyle='#6f6250';g.fillRect(VW*0.72,gy-58,5,58);
+    g.fillStyle='#ffd98a';ell(g,VW*0.725,gy-60,6,6);g.fill();
+    // the game's own enemy and the game's own brother, at the game's own code
+    if(sc.enemy){
+      var e=sc.enemy;
+      e.x=VW*0.66;e.y=gy-e.h;e.facing=-1;e.anim=ph*0.12;e.flash=0;e.squash=0;
+      shadowBlob(e.x+e.w/2,gy+1,e.w*0.5,0.3);
+      try{drawMouseThug(e);}catch(err){}
+    }
+    shadowBlob(VW*0.30,gy+1,15,0.32);
+    drawBrother(VW*0.30,gy,1,0,{x:1,y:0},ph*0.14,false,false,1,'machinegun',(ph%46)<8?8:0,1.25);
+    // muzzle flash and a round in flight
+    var mfx=VW*0.40,mfy=gy-30;
+    if((ph%46)<8){
+      var fa=(1-(ph%46)/8)*TH.effects.flash;
+      g.save();g.globalCompositeOperation='lighter';
+      g.fillStyle='rgba(255,226,150,'+(0.85*Math.min(1,fa))+')';
+      g.beginPath();g.moveTo(mfx,mfy);g.lineTo(mfx+26,mfy-9);g.lineTo(mfx+34,mfy);g.lineTo(mfx+26,mfy+9);g.closePath();g.fill();
+      g.restore();
+    }
+    g.fillStyle='#ffd98a';rr(g,mfx+20+((ph*6)%70),mfy-2,11,4,2);g.fill();
+    // an explosion on a slow cycle, thrown at the theme's own particle budget
+    var boom=(ph%150)/150;
+    if(boom<0.30){
+      var ba=1-boom/0.30,ex=VW*0.70,ey=gy-26,rr2=52*(0.35+boom*2.2);
+      g.save();g.globalCompositeOperation='lighter';
+      g.fillStyle=rad(g,ex,ey,0,rr2,[[0,'rgba(255,214,140,'+(0.75*ba*Math.min(2,TH.environment.lighting))+')'],[1,'rgba(0,0,0,0)']]);
+      g.beginPath();g.arc(ex,ey,rr2,0,6.283);g.fill();
+      g.restore();
+      var n=Math.max(3,Math.round(11*TH.effects.particles)),k;
+      for(k=0;k<n;k++){
+        var a=(k/n)*6.283,d=boom*62*(0.6+(k%3)*0.2);
+        g.fillStyle=k%3?'#e8b26a':'#8f8069';
+        g.fillRect(ex+Math.cos(a)*d,ey+Math.sin(a)*d-boom*14,3,3);
+      }
+    }
+    if(TH.environment.grain>0||TH.environment.grime>0){
+      g.save();g.globalAlpha=Math.min(0.55,TH.environment.grain*0.32+TH.environment.grime*0.38);
+      g.globalCompositeOperation='multiply';
+      g.drawImage(grainTile(),0,0,VW,VH);
+      g.restore();
+    }
+    if(TH.environment.vignette>0){
+      g.fillStyle=rad(g,VW/2,VH/2,VH*0.22,VH*0.8,
+        [[0,'rgba(0,0,0,0)'],[1,'rgba(0,0,0,'+Math.min(0.88,0.5*TH.environment.vignette)+')']]);
+      g.fillRect(0,0,VW,VH);
+    }
+    if(TH.render.pixel>0.02){
+      /* Stand in for the coarse grid the real frame would be resolved on. */
+      g.save();g.globalAlpha=0.30;g.fillStyle='rgba(0,0,0,.5)';
+      var stepPx=Math.max(2,Math.round(TH.render.pixel*9));
+      for(var yy=0;yy<VH;yy+=stepPx)g.fillRect(0,yy,VW,1);
+      g.restore();
+    }
+  });
+  g.restore();
+  g.strokeStyle=sel?t.accent:'#2c3230';g.lineWidth=sel?3:1.5;
+  rr(g,r.x,r.y,r.w,r.h,8);g.stroke();
+  var nm=Math.min(11.5,r.w*0.075);
+  g.fillStyle='rgba(6,8,9,.74)';g.fillRect(r.x,r.y+r.h-nm-9,r.w,nm+9);
+  txt(t.name,r.x+r.w/2,r.y+r.h-6,nm,sel?t.accent:'#cfc4ad','center');
+}
+function drawArtSlider(sl,t){
+  var sc=themeSchema()[sl.g][sl.k],v=t[sl.g][sl.k];
+  var frac=(v-sc.min)/(sc.max-sc.min);
+  var lw=Math.min(10,sl.w*0.082),tw=sl.w*0.42,tx=sl.x+sl.w-tw;
+  txt(sc.label,sl.x,sl.y+sl.h*0.78,lw,'#8f9b87','left','Arial,sans-serif');
+  g.fillStyle='rgba(255,255,255,.08)';rr(g,tx,sl.y+sl.h*0.34,tw,5,2.5);g.fill();
+  g.fillStyle=hexA(t.accent,0.85);rr(g,tx,sl.y+sl.h*0.34,Math.max(3,tw*frac),5,2.5);g.fill();
+  g.fillStyle='#efe6d2';ell(g,tx+tw*frac,sl.y+sl.h*0.34+2.5,4.5,4.5);g.fill();
+}
+function drawArt(){
+  var w=view.cssW,h=view.cssH,L=artLayout(),i;
+  artPhase++;
+  g.fillStyle=lin(g,0,0,0,h,[[0,'#0b0f12'],[1,'#05070a']]);g.fillRect(0,0,w,h);
+  var t=TH||THEMES[0];
+  txt('RATATATATA ART DIRECTOR',L.pad,h*0.075,Math.min(30,w*0.038),'#e8c25a','left');
+  txt('CHOOSE HOW THE GAME LOOKS — GAMEPLAY IS UNAFFECTED',L.pad,h*0.075+20,
+    Math.min(12,w*0.019),'#7d8a70','left','Arial,sans-serif');
+  for(i=0;i<L.cards.length;i++)drawArtPreview(L.cards[i],THEMES[L.cards[i].i],L.cards[i].i===artSel);
+  for(i=0;i<L.go.length;i++){
+    var b=L.go[i],dim=(b.id==='last'&&!b.sub);
+    g.fillStyle=dim?'rgba(255,255,255,.02)':hexA(t.accent,0.13);
+    rr(g,b.x,b.y,b.w,b.h,8);g.fill();
+    g.strokeStyle=dim?'#232826':hexA(t.accent,0.75);g.lineWidth=2;rr(g,b.x,b.y,b.w,b.h,8);g.stroke();
+    txt(b.label,b.x+b.w/2,b.y+b.h*(b.sub?0.46:0.64),Math.min(14,b.w*0.11),dim?'#4a524e':'#efe6d2','center');
+    if(b.sub)txt(b.sub,b.x+b.w/2,b.y+b.h*0.82,Math.min(9.5,b.w*0.075),'#7d8a70','center','Arial,sans-serif');
+  }
+  txt('ADJUSTMENTS — '+t.name,L.sliders[0].x,h*0.075,Math.min(15,w*0.021),t.accent,'left');
+  txt('EVERY SLIDER IS A VALUE THE RENDERER READS',L.sliders[0].x,h*0.075+16,
+    Math.min(10,w*0.016),'#5c6b4a','left','Arial,sans-serif');
+  for(i=0;i<L.sliders.length;i++)drawArtSlider(L.sliders[i],t);
+  for(i=0;i<L.btns.length;i++){
+    var q=L.btns[i];
+    g.fillStyle='rgba(255,255,255,.05)';rr(g,q.x,q.y,q.w,q.h,7);g.fill();
+    g.strokeStyle='#3a423e';g.lineWidth=1.5;rr(g,q.x,q.y,q.w,q.h,7);g.stroke();
+    txt(q.label,q.x+q.w/2,q.y+q.h*0.66,Math.min(11.5,q.w*0.14),'#cfc4ad','center');
+  }
+  var pr=L.prompt;
+  g.fillStyle='rgba(255,255,255,.02)';rr(g,pr.x,pr.y,pr.w,pr.h,8);g.fill();
+  g.strokeStyle='#2a302e';g.lineWidth=1.5;g.setLineDash([5,4]);
+  rr(g,pr.x,pr.y,pr.w,pr.h,8);g.stroke();g.setLineDash([]);
+  txt('DESCRIBE HOW YOU IMAGINE RATATATATA',pr.x+10,pr.y+16,Math.min(11,pr.w*0.028),'#5c6b4a','left','Arial,sans-serif');
+  txt('"dirty late-90s underground comic, heavy ink, rusty machinery…"',
+    pr.x+10,pr.y+32,Math.min(10,pr.w*0.026),'#3f4a44','left','Arial,sans-serif');
+  txt('EXPERIMENTAL — NO INTERPRETER CONNECTED YET',pr.x+10,pr.y+pr.h-9,
+    Math.min(9.5,pr.w*0.024),'#6b4a3a','left','Arial,sans-serif');
+  txt(matchMedia('(pointer:coarse)').matches?'TAP A DIRECTION  •  DRAG A SLIDER':
+      '← → pick a direction  •  X to explore  •  drag sliders  •  [ ] cycle themes in game',
+    L.pad,h-10,Math.min(11.5,w*0.018),'#5c6b4a','left','Arial,sans-serif');
+}
+/* One pointer path for mouse and touch alike. */
+function artPointer(x,y,phase){
+  var L=artLayout(),i;
+  if(phase==='move'){
+    if(artDrag===null)return;          // slider zero is a slider too
+    var sl=L.sliders[artDrag],sc=themeSchema()[sl.g][sl.k];
+    var tw=sl.w*0.42,tx=sl.x+sl.w-tw;
+    var f=clamp((x-tx)/tw,0,1),v=sc.min+f*(sc.max-sc.min);
+    if(sc.step>=1)v=Math.round(v);
+    Theme.edit(sl.g,sl.k,v);
+    return;
+  }
+  if(phase==='up'){artDrag=null;return;}
+  for(i=0;i<L.sliders.length;i++){
+    var s2=L.sliders[i];
+    if(x>=s2.x&&x<=s2.x+s2.w&&y>=s2.y-3&&y<=s2.y+s2.h+3){artDrag=i;artPointer(x,y,'move');return;}
+  }
+  for(i=0;i<L.cards.length;i++){
+    var c=L.cards[i];
+    if(x>=c.x&&x<=c.x+c.w&&y>=c.y&&y<=c.y+c.h){
+      artSel=c.i;Theme.use(THEMES[c.i].id,true);SFX.selectMove();return;
+    }
+  }
+  for(i=0;i<L.btns.length;i++){
+    var b=L.btns[i];
+    if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){
+      SFX.selectMove();
+      if(b.id==='reset')Theme.reset();
+      else if(b.id==='random')Theme.randomize();
+      else if(b.id==='save'){var sv=Theme.saveVariant();if(sv)artSel=THEMES.indexOf(sv);}
+      return;
+    }
+  }
+  for(i=0;i<L.go.length;i++){
+    var q=L.go[i];
+    if(x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h)return artGo(q.id);
+  }
+}
+function artGo(id){
+  if(id==='last'&&!artLastName())return;
+  SFX.selectConfirm();
+  if(id==='quick'){
+    Music.menu();makePlayer(0);lives=3;score=0;
+    campaignSeed=(Date.now()^(Math.random()*0x7fffffff))>>>0;
+    campaign=CAMPAIGNS[campaignSeed%CAMPAIGNS.length];startStage(1);
+    return;
+  }
+  Music.menu();state='TITLE';stateT=0;tapped=false;
+}
 function drawTitle(){
   var w=view.cssW,h=view.cssH,i;
   g.fillStyle=lin(g,0,0,0,h,[[0,'#0a1216'],[0.55,'#1b3032'],[1,'#05090a']]);
@@ -5034,6 +5310,13 @@ function step(){
   tick++;poll();
   if(wepSwipe.shown>0)wepSwipe.shown--;
   var anyStart=anyKey||anyButtonPressed()||tapped;
+  if(state==='ART'){
+    if(pressed('left')&&artSel>0){artSel--;Theme.use(THEMES[artSel].id,true);SFX.selectMove();}
+    if(pressed('right')&&artSel<THEMES.length-1){artSel++;Theme.use(THEMES[artSel].id,true);SFX.selectMove();}
+    if(pressed('fire')||pressed('start'))artGo('explore');
+    tapped=false;
+    return;
+  }
   if(state==='TITLE'){
     if(anyStart){
       Music.menu();SFX.start();stateT=0;tapped=false;
@@ -5131,6 +5414,7 @@ function renderFrame(){
   g.setTransform(DPR,0,0,DPR,0,0);
   g.clearRect(0,0,view.cssW,view.cssH);
   if(state==='TITLE'){drawTitle();paintVignette();return;}
+  if(state==='ART'){drawArt();return;}
   if(state==='MODE'){drawMode();paintVignette();return;}
   if(state==='SELECT'){drawSelect();paintVignette();return;}
   if(state==='INTRO'){drawIntro();paintVignette();return;}
@@ -5343,6 +5627,9 @@ function loop(t){
     pg.setTransform(DPR,0,0,DPR,0,0);pg.clearRect(0,0,pad.cssW,pad.cssH);
   }
   mobilePause.style.visibility=(state==='PLAY'||state==='PAUSE')?'visible':'hidden';
+  var inArt=(state==='ART');
+  if(themeChip)themeChip.style.display=inArt?'none':'block';
+  var szc=document.getElementById('sizeCtl');if(szc)szc.style.display=inArt?'none':'flex';
 }
 resize();
 makePlayer(0);

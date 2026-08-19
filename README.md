@@ -12,6 +12,35 @@ python3 -m http.server 8000
 
 Then open <http://localhost:8000>.
 
+## Art Director
+
+The game opens on the Art Director rather than the menu: eight visual directions
+laid out as live previews — each card is the renderer running for real under that
+theme, with a rat, an enemy, a shot, an explosion and a piece of environment, so
+you can see what a direction does to a fight rather than reading a description of
+it.
+
+Pick one and **Explore Theme** carries on to the menu, **Quick Play** drops
+straight into a stage, and **Continue** takes whatever you chose last time. The
+sliders beside the grid are the theme schema itself — every one is a value the
+renderer genuinely reads — and **Save Variant** keeps an adjusted direction as
+`Grimy Underground #2` alongside the built-in ones.
+
+Themes are not skins over the top: colour runs through the drawing pipeline, one
+conversion per colour per theme, and outlines, proportions, lighting, shadow,
+particle budget, environment detail and frame resolution are parameters the
+procedural drawing reads as it draws. Classic is every value at its default and
+stays the baseline.
+
+**Theme Lab.** Press `[` and `]` in play, or tap the theme chip on a phone, to
+cycle directions mid-fight. Nothing restarts — the level, the enemies and your
+position carry on — which is the point: a direction is judged while moving and
+shooting, not in a screenshot.
+
+Gameplay is independent of all of it. Hitboxes, physics, levels and enemy
+behaviour read nothing from a theme, and the jump arc and collision box measure
+identical under all eight.
+
 ## Two players
 
 The title screen asks whether you are playing alone or with someone. **Create
