@@ -136,7 +136,11 @@ function rr(c,x,y,w,h,r){
   c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();
 }
 function ell(c,x,y,rx,ry){c.beginPath();c.ellipse(x,y,Math.abs(rx),Math.abs(ry),0,0,6.283);}
-function ink(c,col,lw){c.strokeStyle=col||'rgba(10,8,10,.75)';c.lineWidth=lw||2;c.stroke();}
+/* House line weight. Every outline in the game is drawn relative to this, so
+   the whole drawing can be made finer or heavier from one number while the
+   relative weights — a boot heavier than a collar — stay as they were. */
+var INK_SCALE=0.6;
+function ink(c,col,lw){c.strokeStyle=col||'rgba(10,8,10,.75)';c.lineWidth=(lw||2)*INK_SCALE;c.stroke();}
 
 /* ==================== INPUT ==================== */
 /* upjump is a synthetic control: a decisive upward push of the move stick,
