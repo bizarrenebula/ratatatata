@@ -26,11 +26,20 @@ sliders beside the grid are the theme schema itself — every one is a value the
 renderer genuinely reads — and **Save Variant** keeps an adjusted direction as
 `Grimy Underground #2` alongside the built-in ones.
 
-Themes are not skins over the top: colour runs through the drawing pipeline, one
-conversion per colour per theme, and outlines, proportions, lighting, shadow,
-particle budget, environment detail and frame resolution are parameters the
-procedural drawing reads as it draws. Classic is every value at its default and
-stays the baseline.
+Themes are not skins over the top. **The rats are built differently under each
+one**: head size, ear size, snout length, eye size, limb thickness and posture
+are proportions the anatomy is drawn from rather than fixed numbers, so the
+Saturday Cartoon rat genuinely has a bigger head, bigger ears and a shorter
+snout than the Graphic Novel one — same skeleton, same animation, different
+creature.
+
+How the shapes are filled changes too: flat cel shading collapses the gradients,
+comics shade with halftone dots, a graphic novel with crosshatching, and noir
+lets the figure fall to black against a rim of light. Each treatment lands on the
+character and nowhere else. Colour runs through the drawing pipeline, one
+conversion per colour per theme, and outlines, lighting, shadow, particle budget,
+environment detail and frame resolution are parameters the drawing reads as it
+draws. Classic is every value at its default and stays the baseline.
 
 **Theme Lab.** Press `[` and `]` in play, or tap the theme chip on a phone, to
 cycle directions mid-fight. Nothing restarts — the level, the enemies and your

@@ -131,9 +131,11 @@ function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);
   t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function lin(c,x0,y0,x1,y1,st){var q=c.createLinearGradient(x0,y0,x1,y1),i;
+  st=flatten(st,c);
   if(Theme.shifts&&!c.__noTheme)for(i=0;i<st.length;i++)st[i][1]=themeColor(st[i][1]);
   for(i=0;i<st.length;i++)q.addColorStop(st[i][0],st[i][1]);return q;}
 function rad(c,x,y,r0,r1,st){var q=c.createRadialGradient(x,y,r0,x,y,r1),i;
+  st=flatten(st,c);
   if(Theme.shifts&&!c.__noTheme)for(i=0;i<st.length;i++)st[i][1]=themeColor(st[i][1]);
   for(i=0;i<st.length;i++)q.addColorStop(st[i][0],st[i][1]);return q;}
 function rr(c,x,y,w,h,r){
@@ -149,6 +151,25 @@ function ell(c,x,y,rx,ry){c.beginPath();c.ellipse(x,y,Math.abs(rx),Math.abs(ry),
    place a theme has to touch to restyle the game's line work: weight, colour,
    and how steady the hand holding the pen is. A rough line is drawn twice, the
    second pass nudged and faded, which reads as dirty ink rather than a wobble. */
+/* Cel styles do not shade with gradients, they shade with flat areas of colour,
+   so flatness pulls every stop of a gradient toward its own middle. At 1 the
+   gradient is a single colour and the drawing reads as printed rather than lit —
+   which is most of the difference between a cartoon and this game's default
+   look, for one hook in the one place gradients are made. */
+function mixCol(a,b,t){
+  var ca=parseCol(a),cb=parseCol(b);
+  if(!ca||!cb)return t>0.5?b:a;
+  return 'rgba('+Math.round(ca.r+(cb.r-ca.r)*t)+','+Math.round(ca.g+(cb.g-ca.g)*t)+','+
+         Math.round(ca.b+(cb.b-ca.b)*t)+','+(ca.a+(cb.a-ca.a)*t)+')';
+}
+function flatten(st,c){
+  var f=(TH&&!c.__noTheme)?TH.style.flat:0,i,out;
+  if(f<=0.01||st.length<2)return st;
+  var mid=st[Math.floor(st.length/2)][1];
+  out=[];
+  for(i=0;i<st.length;i++)out.push([st[i][0],mixCol(st[i][1],mid,f)]);
+  return out;
+}
 function ink(c,col,lw){
   var ch=TH?TH.characters:null;
   var w=(lw||2)*(ch?ch.outline:1);
@@ -207,6 +228,20 @@ function themeSchema(){
       outline:{v:1,min:0,max:4,step:0.05,label:'INK WEIGHT'},
       roughness:{v:0,min:0,max:1,step:0.02,label:'INK ROUGHNESS'}
     },
+    form:{
+      head:{v:1,min:0.7,max:1.5,step:0.01,label:'HEAD SIZE'},
+      ears:{v:1,min:0.5,max:1.8,step:0.02,label:'EAR SIZE'},
+      snout:{v:1,min:0.6,max:1.5,step:0.02,label:'SNOUT LENGTH'},
+      eyes:{v:1,min:0.5,max:2,step:0.02,label:'EYE SIZE'},
+      limbs:{v:1,min:0.6,max:1.6,step:0.02,label:'LIMB THICKNESS'},
+      hunch:{v:0,min:0,max:1,step:0.02,label:'HUNCH'}
+    },
+    style:{
+      flat:{v:0,min:0,max:1,step:0.02,label:'FLAT SHADING'},
+      halftone:{v:0,min:0,max:1,step:0.02,label:'HALFTONE DOTS'},
+      hatch:{v:0,min:0,max:1,step:0.02,label:'CROSSHATCHING'},
+      silhouette:{v:0,min:0,max:1,step:0.02,label:'SILHOUETTE'}
+    },
     environment:{
       detail:{v:1,min:0,max:1.5,step:0.05,label:'ENV DETAIL'},
       grime:{v:0,min:0,max:1,step:0.02,label:'GRIME'},
@@ -226,7 +261,7 @@ function themeSchema(){
     }
   };
 }
-var THEME_GROUPS=['palette','characters','environment','effects','render'];
+var THEME_GROUPS=['palette','characters','form','style','environment','effects','render'];
 var THEMES=[], THEME_BY_ID={};
 
 /* A theme is data. Anything missing falls back to the schema default, and every
@@ -464,30 +499,40 @@ registerTheme({id:'classic',name:'RATATATATA CLASSIC',accent:'#c9a24a',
 registerTheme({id:'arcade-comic',name:'90s ARCADE COMIC',accent:'#ff5a3c',
   blurb:'THICK INK, LOUD COLOUR, EVERYTHING READS ACROSS THE ROOM',
   palette:{saturation:1.5,contrast:1.16,brightness:1.06},
+  form:{head:1.14,ears:1.3,snout:0.88,eyes:1.35,limbs:1.2,hunch:0},
+  style:{flat:0.85,halftone:0.5},
   characters:{scaleX:1.09,scaleY:1.05,bulk:1.2,outline:2.3,roughness:0.12},
   environment:{lighting:1.15,vignette:0.7,shadow:0.9},
   effects:{particles:1.6,flash:1.35,glow:0.25}});
 registerTheme({id:'grimy-underground',name:'GRIMY UNDERGROUND',accent:'#b8863a',ink:'#140f0b',
   blurb:'DIRTY INK, RUST, TUNGSTEN AND DEEP SHADOW',
   palette:{saturation:0.55,warmth:0.38,contrast:1.14,brightness:0.84},
+  form:{head:0.96,ears:1.05,snout:1.22,eyes:0.86,limbs:1.08,hunch:0.55},
+  style:{flat:0.25,hatch:0.4},
   characters:{scaleY:1.02,bulk:1.06,outline:1.9,roughness:0.62},
   environment:{grime:0.78,grain:0.5,lighting:0.92,shadow:1.4,vignette:1.35,detail:1.15},
   effects:{particles:1.15,flash:0.9}});
 registerTheme({id:'saturday-cartoon',name:'SATURDAY CARTOON',accent:'#ffd23c',
   blurb:'CLEAN LINES, BRIGHT AIR, PLAYFUL PROPORTIONS',
   palette:{saturation:1.34,brightness:1.14,contrast:0.9},
+  form:{head:1.3,ears:1.45,snout:0.76,eyes:1.6,limbs:0.86,hunch:0},
+  style:{flat:1},
   characters:{scaleX:1.06,scaleY:1.08,bulk:1.14,outline:1.5,roughness:0},
   environment:{lighting:1.25,shadow:0.6,vignette:0.45,grain:0,detail:0.9},
   effects:{particles:1.25,flash:1.1}});
 registerTheme({id:'noir-rats',name:'NOIR RATS',accent:'#c8342a',ink:'#000000',
   blurb:'ONE COLOUR LEFT ALIVE, EVERYTHING ELSE IS SHADOW',
   palette:{mono:0.93,accentKeep:0.6,contrast:1.5,brightness:0.9,saturation:1.2},
+  form:{head:0.94,ears:0.92,snout:1.1,eyes:0.8,limbs:0.95,hunch:0.4},
+  style:{flat:0.55,silhouette:0.5},
   characters:{scaleY:1.04,outline:2.5,roughness:0.15},
   environment:{lighting:0.72,shadow:1.7,vignette:1.55,grain:0.3,detail:0.85},
   effects:{particles:0.7,flash:1.2,glow:0.15}});
 registerTheme({id:'retro-pixel',name:'RETRO PIXEL-ISH',accent:'#7fd85a',
   blurb:'COARSE RESOLUTION AND A SHORT PALETTE, STILL DRAWN NOT SPRITED',
   palette:{posterize:6,saturation:1.15,contrast:1.12},
+  form:{head:1.08,ears:1.15,snout:0.9,eyes:1.25,limbs:1.3,hunch:0},
+  style:{flat:1},
   characters:{outline:1.1,roughness:0},
   environment:{detail:0.55,vignette:0.6,grain:0,lighting:1.05},
   effects:{particles:0.8,flash:1},
@@ -495,12 +540,16 @@ registerTheme({id:'retro-pixel',name:'RETRO PIXEL-ISH',accent:'#7fd85a',
 registerTheme({id:'graphic-novel',name:'GRAPHIC NOVEL',accent:'#9c6a3f',ink:'#0b0a0a',
   blurb:'HEAVY BLACKS, HELD-BACK COLOUR, GROWN-UP PROPORTIONS',
   palette:{mono:0.58,accentKeep:0.35,saturation:0.72,contrast:1.38,brightness:0.86},
+  form:{head:0.88,ears:0.88,snout:1.3,eyes:0.75,limbs:1.02,hunch:0.65},
+  style:{flat:0.35,hatch:0.75},
   characters:{scaleX:0.96,scaleY:1.08,bulk:0.92,outline:2.7,roughness:0.34},
   environment:{shadow:1.45,vignette:1.3,grain:0.38,grime:0.3,lighting:0.88},
   effects:{particles:0.85,flash:0.95}});
 registerTheme({id:'toxic-neon',name:'TOXIC NEON',accent:'#7dff4f',
   blurb:'DEAD DARK ROOMS LIT ONLY BY THINGS THAT CAN HURT YOU',
   palette:{hue:-16,saturation:1.55,contrast:1.28,brightness:0.72},
+  form:{head:1.02,ears:1.2,snout:0.95,eyes:1.45,limbs:0.95,hunch:0.15},
+  style:{flat:0.6,silhouette:0.2},
   characters:{outline:1.7,roughness:0.1},
   environment:{lighting:1.85,shadow:1.2,vignette:1.4,grain:0.22,detail:1.05},
   effects:{particles:1.45,flash:1.7,glow:1.1}});
@@ -3636,7 +3685,7 @@ function shadowBlob(x,y,w,a){
   ell(g,x,y,w*(0.85+0.15*sh),w*0.28);g.fill();
 }
 function limb(x1,y1,x2,y2,w,col){
-  g.strokeStyle=col;g.lineWidth=w;g.lineCap='round';
+  g.strokeStyle=col;g.lineWidth=w*(TH?TH.form.limbs:1);g.lineCap='round';
   g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();g.lineCap='butt';
 }
 function drawWeaponArm(B,ang,wep,fireT){
@@ -3682,16 +3731,21 @@ function drawWeaponArm(B,ang,wep,fireT){
   g.restore();
 }
 function ratHead(B,big,aimUp){
+  /* The skull is drawn from proportions rather than fixed numbers: ears, muzzle
+     and eye are each scaled by the theme, so a cartoon rat is genuinely built
+     with bigger ears and a shorter snout rather than the same rat under a
+     different colour. None of it is known to the collision box. */
+  var F=TH?TH.form:null,EAR=F?F.ears:1,SNT=F?F.snout:1,EYE=F?F.eyes:1;
   // origin at the neck joint; head faces +x
   // ---- back ear
   g.fillStyle=B.furD;
-  g.save();g.translate(-12,-13);g.rotate(-0.30);
+  g.save();g.translate(-12,-13-(EAR-1)*4);g.rotate(-0.30);g.scale(EAR,EAR);
   ell(g,0,0,big?8.5:9,big?10:11.5);g.fill();ink(g,'rgba(8,6,8,.7)',1.6);
   g.fillStyle=B.skin;ell(g,0.5,0.5,big?4.6:5,big?6:7);g.fill();
   g.restore();
   // ---- front ear (large, rounded, ref-style)
   g.fillStyle=B.fur;
-  g.save();g.translate(big?-2:-3,big?-18:-20);g.rotate(big?0.10:0.02);
+  g.save();g.translate(big?-2:-3,(big?-18:-20)-(EAR-1)*6);g.rotate(big?0.10:0.02);g.scale(EAR,EAR);
   if(big){
     // A cat tore away the exposed upper half of Rocco's front ear.
     g.beginPath();g.moveTo(-3,11);g.bezierCurveTo(-11,8,-12,0,-8,-7);
@@ -3710,26 +3764,27 @@ function ratHead(B,big,aimUp){
   }
   g.restore();
   // ---- skull + long muzzle
+  var sn=function(x){return x<=0?x:x*SNT;};      // only the muzzle end stretches
   g.fillStyle=lin(g,-12,-15,22,10,[[0,B.furL],[0.55,B.fur],[1,B.furD]]);
   g.beginPath();
   g.moveTo(-13,-2);
   g.quadraticCurveTo(-13,-16,0,-17);
-  g.quadraticCurveTo(12,-17,17,-9);
-  g.quadraticCurveTo(26,-3,28,2);
-  g.quadraticCurveTo(29,8,21,10);
-  g.quadraticCurveTo(6,13,-6,11);
+  g.quadraticCurveTo(sn(12),-17,sn(17),-9);
+  g.quadraticCurveTo(sn(26),-3,sn(28),2);
+  g.quadraticCurveTo(sn(29),8,sn(21),10);
+  g.quadraticCurveTo(sn(6),13,-6,11);
   g.quadraticCurveTo(-13,8,-13,-2);
   g.closePath();g.fill();ink(g,'rgba(8,6,8,.8)',2);
   g.fillStyle='rgba(0,0,0,.12)';
-  g.beginPath();g.moveTo(4,4);g.quadraticCurveTo(16,7,23,6.5);
-  g.quadraticCurveTo(14,12,2,10);g.closePath();g.fill();
+  g.beginPath();g.moveTo(sn(4),4);g.quadraticCurveTo(sn(16),7,sn(23),6.5);
+  g.quadraticCurveTo(sn(14),12,sn(2),10);g.closePath();g.fill();
   // nose
-  g.fillStyle=B.skin;ell(g,26,2.5,4.2,3.4);g.fill();ink(g,'rgba(8,6,8,.55)',1.2);
-  g.fillStyle='rgba(255,255,255,.32)';ell(g,25,1.4,1.4,1);g.fill();
+  g.fillStyle=B.skin;ell(g,sn(26),2.5,4.2,3.4);g.fill();ink(g,'rgba(8,6,8,.55)',1.2);
+  g.fillStyle='rgba(255,255,255,.32)';ell(g,sn(25),1.4,1.4,1);g.fill();
   // ---- eye + brow
-  g.fillStyle='#f6f1e2';ell(g,9,-4.5,5,4.6);g.fill();
-  g.fillStyle='#171310';ell(g,10.8,-4,2.2,2.9);g.fill();
-  g.fillStyle='rgba(255,255,255,.9)';ell(g,11.6,-5.3,0.9,0.9);g.fill();
+  g.fillStyle='#f6f1e2';ell(g,9,-4.5,5*EYE,4.6*EYE);g.fill();
+  g.fillStyle='#171310';ell(g,10.8+(EYE-1)*1.4,-4,2.2*EYE,2.9*EYE);g.fill();
+  g.fillStyle='rgba(255,255,255,.9)';ell(g,11.6+(EYE-1)*1.6,-5.3-(EYE-1),0.9*EYE,0.9*EYE);g.fill();
   g.strokeStyle='rgba(12,9,8,.88)';g.lineWidth=big?2.8:2.2;g.lineCap='round';
   g.beginPath();
   if(big){g.moveTo(2.5,-10);g.lineTo(14,-6.5);}
@@ -3783,6 +3838,82 @@ function ratHead(B,big,aimUp){
   g.moveTo(21,7);g.lineTo(34,11);
   g.stroke();
 }
+
+/* ---- character treatments -------------------------------------------------
+   Shape is one half of a drawing style; how the shape is filled is the other.
+   A comic shades with dots, a graphic novel with hatching, a noir frame barely
+   shades at all and lets the figure go black against the light. None of that
+   can be done by tinting, because each one has to land on the figure and
+   nowhere else.
+
+   So a character is drawn into its own small buffer and the treatment is
+   composited with source-atop, which paints only where the figure already is.
+   The buffer is the size of the character, not the screen, and only exists for
+   themes that ask for a treatment. */
+var _cvBuf=null,_cvCtx=null,_patCache={};
+function stylePattern(kind,scale){
+  var key=kind+'@'+scale;
+  if(_patCache[key])return _patCache[key];
+  var size=kind==='dots'?Math.max(4,Math.round(6*scale)):Math.max(5,Math.round(8*scale));
+  var c=document.createElement('canvas');c.width=c.height=size;
+  var x=c.getContext('2d');x.__noTheme=true;
+  x.fillStyle='rgba(0,0,0,1)';
+  if(kind==='dots'){
+    x.beginPath();x.arc(size/2,size/2,Math.max(0.9,size*0.22),0,6.283);x.fill();
+  } else {
+    x.strokeStyle='rgba(0,0,0,1)';x.lineWidth=Math.max(1,size*0.14);
+    x.beginPath();x.moveTo(-size,size);x.lineTo(size,-size);
+    x.moveTo(0,size*2);x.lineTo(size*2,0);x.stroke();
+  }
+  _patCache[key]=c;
+  return c;
+}
+function characterTreated(){
+  var st=TH?TH.style:null;
+  return !!(st&&(st.halftone>0.02||st.hatch>0.02||st.silhouette>0.02));
+}
+/* bx,by,bw,bh are the character's bounds in current canvas space. */
+function drawCharacter(bx,by,bw,bh,draw){
+  if(!characterTreated()){draw();return;}
+  var st=TH.style,dpr=DPR,pw=Math.max(4,Math.ceil(bw*dpr)),ph=Math.max(4,Math.ceil(bh*dpr));
+  if(pw>1400||ph>1400){draw();return;}                 // absurd bounds: draw plainly
+  if(!_cvBuf){_cvBuf=document.createElement('canvas');_cvCtx=_cvBuf.getContext('2d');}
+  if(_cvBuf.width<pw||_cvBuf.height<ph){_cvBuf.width=Math.max(_cvBuf.width,pw);_cvBuf.height=Math.max(_cvBuf.height,ph);}
+  var real=g;
+  _cvCtx.setTransform(1,0,0,1,0,0);
+  _cvCtx.clearRect(0,0,pw,ph);
+  _cvCtx.setTransform(dpr,0,0,dpr,-bx*dpr,-by*dpr);
+  g=_cvCtx;
+  try{draw();}finally{g=real;}
+  _cvCtx.setTransform(dpr,0,0,dpr,-bx*dpr,-by*dpr);
+  _cvCtx.save();
+  _cvCtx.globalCompositeOperation='source-atop';
+  if(st.silhouette>0.02){
+    _cvCtx.fillStyle='rgba(6,6,8,'+st.silhouette+')';
+    _cvCtx.fillRect(bx,by,bw,bh);
+    /* The light still catches one edge, which is what keeps a silhouette a body
+       rather than a hole. A gradient reads as light falling across the figure;
+       a hard band reads as a mistake. */
+    _cvCtx.fillStyle=lin(_cvCtx,bx+bw*0.45,0,bx+bw,0,
+      [[0,'rgba(255,240,210,0)'],[1,'rgba(255,240,210,'+(0.30*st.silhouette)+')']]);
+    _cvCtx.fillRect(bx,by,bw,bh);
+  }
+  if(st.halftone>0.02){
+    _cvCtx.globalAlpha=st.halftone*0.32;   // shading, not soot: the colour underneath has to survive
+    _cvCtx.fillStyle=_cvCtx.createPattern(stylePattern('dots',1),'repeat');
+    _cvCtx.fillRect(bx,by,bw,bh);
+    _cvCtx.globalAlpha=1;
+  }
+  if(st.hatch>0.02){
+    _cvCtx.globalAlpha=st.hatch*0.42;
+    _cvCtx.fillStyle=_cvCtx.createPattern(stylePattern('hatch',1),'repeat');
+    _cvCtx.fillRect(bx,by,bw,bh);
+    _cvCtx.globalAlpha=1;
+  }
+  _cvCtx.restore();
+  // blit back into exactly the space it was captured from
+  g.drawImage(_cvBuf,0,0,pw,ph,bx,by,bw,bh);
+}
 function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
   var B=BROS[broIdx],big=B.big,i;
   g.save();
@@ -3793,15 +3924,18 @@ function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
      every collision in the game, are the same whatever the theme says a rat
      ought to look like. */
   g.translate(x,y);g.scale(face*k*(cp?cp.scaleX:1),k*(cp?cp.scaleY:1));
+  var F=TH?TH.form:null,LIMB=F?F.limbs:1,HUNCH=F?F.hunch:0;
   var cr=prone?34:0;
   var sw=Math.sin(walk),bob=inAir?0:Math.abs(Math.cos(walk))*1.6;
   var hip=-34+cr*0.42-bob*0.3;
-  var chest=-62+cr-bob, neck=-64+cr-bob;
+  /* A hunched rat drops its shoulders and pushes its head forward — the same
+     joints, held differently. */
+  var chest=-62+cr-bob+HUNCH*5, neck=-64+cr-bob+HUNCH*7;
   var bw=(big?18:13)*(cp?cp.bulk:1);
   var la=inAir?-8:sw*9, lb=inAir?9:-sw*9;
 
   // ================= tail =================
-  g.strokeStyle=B.tail;g.lineWidth=big?7.5:4.5;g.lineCap='round';
+  g.strokeStyle=B.tail;g.lineWidth=(big?7.5:4.5)*LIMB;g.lineCap='round';
   g.beginPath();g.moveTo(-bw+5,hip+3);
   g.quadraticCurveTo(-bw-27,hip-8+sw*7,-bw-37,hip+20+sw*4);g.stroke();
   g.lineCap='butt';
@@ -3815,11 +3949,11 @@ function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
   // ================= legs =================
   if(big){
     // knee-length cargo shorts, bare shins, work boots
-    g.strokeStyle=B.pantsD;g.lineWidth=15;g.lineCap='round';
+    g.strokeStyle=B.pantsD;g.lineWidth=15*LIMB;g.lineCap='round';
     g.beginPath();g.moveTo(-5,hip);g.lineTo(-5+la*0.4,hip+13);g.stroke();
     g.strokeStyle=B.pants;
     g.beginPath();g.moveTo(6,hip);g.lineTo(6+lb*0.4,hip+13);g.stroke();
-    g.strokeStyle=B.furD;g.lineWidth=9;g.lineCap='round';               // shins
+    g.strokeStyle=B.furD;g.lineWidth=9*LIMB;g.lineCap='round';          // shins
     g.beginPath();g.moveTo(-5+la*0.4,hip+13);g.lineTo(-5+la,hip+24);g.stroke();
     g.strokeStyle=B.fur;
     g.beginPath();g.moveTo(6+lb*0.4,hip+13);g.lineTo(6+lb,hip+24);g.stroke();
@@ -3832,7 +3966,7 @@ function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
     rr(g,-15+la,-4,22,4,2);g.fill();rr(g,-2+lb,-4,22,4,2);g.fill();
   } else {
     // full-length dark cargo pants with rolled cuffs + red sneakers
-    g.strokeStyle=B.pantsD;g.lineWidth=11;g.lineCap='round';
+    g.strokeStyle=B.pantsD;g.lineWidth=11*LIMB;g.lineCap='round';
     g.beginPath();g.moveTo(-5,hip);g.lineTo(-5+la*0.5,hip+14);g.lineTo(-5+la,hip+24);g.stroke();
     g.strokeStyle=B.pants;
     g.beginPath();g.moveTo(5,hip);g.lineTo(5+lb*0.5,hip+14);g.lineTo(5+lb,hip+24);g.stroke();
@@ -3902,7 +4036,8 @@ function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
   g.beginPath();g.moveTo(bw-1,chest+5);g.quadraticCurveTo(bw+4,chest+16,bw-1,hip+6);g.stroke();
 
   // ================= head =================
-  g.save();g.translate(3,neck-12);
+  g.save();g.translate(3+HUNCH*6,neck-12);
+  if(F&&F.head!==1)g.scale(F.head,F.head);
   ratHead(B,big,aim.y<0);
   g.restore();
 
@@ -4678,10 +4813,15 @@ function titleHeroAction(offset){
    same schema is what an art direction written in words would eventually be
    turned into — the prompt box below is the front door for that, disabled
    until there is something behind it. */
+/* Shape first: what a rat is built like is the thing worth experimenting with,
+   so those sliders lead and the surface ones follow. */
 var ART_SLIDERS=[
-  ['palette','saturation'],['palette','contrast'],['palette','brightness'],
-  ['palette','mono'],['palette','posterize'],['palette','hue'],['palette','warmth'],
-  ['characters','outline'],['characters','roughness'],['characters','bulk'],
+  ['form','head'],['form','ears'],['form','snout'],['form','eyes'],
+  ['form','limbs'],['form','hunch'],['characters','bulk'],['characters','scaleY'],
+  ['style','flat'],['style','halftone'],['style','hatch'],['style','silhouette'],
+  ['characters','outline'],['characters','roughness'],
+  ['palette','saturation'],['palette','contrast'],['palette','brightness'],['palette','mono'],
+  ['palette','posterize'],['palette','hue'],
   ['environment','lighting'],['environment','shadow'],['environment','grime'],
   ['effects','particles'],['effects','glow'],['render','pixel']
 ];
@@ -4695,7 +4835,7 @@ function artLayout(){
   for(i=0;i<THEMES.length;i++)
     cards.push({x:gx+(i%cols)*(cw+pad),y:gy+Math.floor(i/cols)*(chh+pad),w:cw,h:chh,i:i});
   var panelX=gx+gridW+pad*1.6,panelW=w-panelX-pad;
-  var sl=[],sh=Math.max(15,h*0.035),scols=2,srow=Math.ceil(ART_SLIDERS.length/scols);
+  var sl=[],sh=Math.max(13,h*0.030),scols=2,srow=Math.ceil(ART_SLIDERS.length/scols);
   var sw=(panelW-pad)/scols;
   for(i=0;i<ART_SLIDERS.length;i++)
     sl.push({x:panelX+(i%scols)*(sw+pad*0.5),y:h*0.155+Math.floor(i/scols)*sh,
@@ -4753,10 +4893,12 @@ function drawArtPreview(r,t,sel){
       var e=sc.enemy;
       e.x=VW*0.66;e.y=gy-e.h;e.facing=-1;e.anim=ph*0.12;e.flash=0;e.squash=0;
       shadowBlob(e.x+e.w/2,gy+1,e.w*0.5,0.3);
-      try{drawMouseThug(e);}catch(err){}
+      try{drawCharacter(e.x-e.w*0.8,e.y-e.h*0.4,e.w*2.6,e.h*1.7,function(){drawMouseThug(e);});}catch(err){}
     }
     shadowBlob(VW*0.30,gy+1,15,0.32);
-    drawBrother(VW*0.30,gy,1,0,{x:1,y:0},ph*0.14,false,false,1,'machinegun',(ph%46)<8?8:0,1.25);
+    drawCharacter(VW*0.30-52,gy-96,104,104,function(){
+      drawBrother(VW*0.30,gy,1,0,{x:1,y:0},ph*0.14,false,false,1,'machinegun',(ph%46)<8?8:0,1.25);
+    });
     // muzzle flash and a round in flight
     var mfx=VW*0.40,mfy=gy-30;
     if((ph%46)<8){
@@ -5457,11 +5599,15 @@ function renderFrame(){
       g.beginPath();g.arc(e.x+e.w/2,e.y+e.h/2,Math.max(e.w,e.h)*.72,0,6.283);g.stroke();g.globalCompositeOperation='source-over';
       g.fillStyle=ep===1?'#ff7768':ep===2?'#ffd25c':'#82ec8d';g.font='bold 13px Impact,sans-serif';g.textAlign='center';g.fillText(e.name,e.x+e.w/2,e.y-18);g.textAlign='left';
     }
-    if(e.t==='mouse')drawMouseThug(e);
-    else if(e.t==='bat')drawBatBomber(e);
-    else if(e.t==='weasel')drawWeasel(e);
-    else if(e.t==='lizard')drawLizard(e);
-    else drawCatBrute(e);
+    (function(en){
+      drawCharacter(en.x-en.w*0.9,en.y-en.h*0.5,en.w*2.8,en.h*1.9,function(){
+        if(en.t==='mouse')drawMouseThug(en);
+        else if(en.t==='bat')drawBatBomber(en);
+        else if(en.t==='weasel')drawWeasel(en);
+        else if(en.t==='lizard')drawLizard(en);
+        else drawCatBrute(en);
+      });
+    })(e);
   }
   if(boss){shadowBlob(boss.x+boss.w/2,472,boss.w*0.52,0.42);drawBoss();}
   paintAimGuide();
@@ -5486,7 +5632,12 @@ function renderFrame(){
         g.strokeStyle='rgba(255,205,90,'+(0.45+Math.sin(tick*.2)*.18)+')';g.lineWidth=3;
         g.beginPath();g.arc(P.x+P.w/2,P.y+P.h+2,13,0,6.283);g.stroke();
       }
-      drawBrother(P.x+P.w/2,P.y+P.h,P.facing,P.bro,aimVector(),P.anim,P.prone,!P.onGround,1,P.weapon,P.fireT,charScale);
+      (function(){
+        var bw2=P.w*3.4,bh2=P.h*1.7;
+        drawCharacter(P.x+P.w/2-bw2/2,P.y+P.h-bh2*0.88,bw2,bh2,function(){
+          drawBrother(P.x+P.w/2,P.y+P.h,P.facing,P.bro,aimVector(),P.anim,P.prone,!P.onGround,1,P.weapon,P.fireT,charScale);
+        });
+      })();
     }
   }
   paintProjectiles();
