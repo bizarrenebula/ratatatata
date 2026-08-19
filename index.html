@@ -188,7 +188,11 @@ function updateAimTrigger(){
   if(mag>RIM_PUSH)rimHeld++;else rimHeld=0;
   if(rimHeld>RIM_HOLD)rimOverride=true;
   if(!aimHot)rimOverride=false;
-  triggerLive=aimHot&&(rimOverride||threatNear());
+  /* The gun stays live for a moment after the last thing worth shooting has
+     gone, so finishing a burst over a body does not die mid-trigger. */
+  if(threatNear())triggerGrace=TRIGGER_GRACE;
+  else if(triggerGrace>0)triggerGrace--;
+  triggerLive=aimHot&&(rimOverride||triggerGrace>0);
   mobileAutoFire=triggerLive;
   tc.fire=triggerLive;
 }
@@ -234,9 +238,9 @@ var BTNS=[
    go again only when the thumb comes well back, so drifting across the line
    while steering does not squeeze off a round. */
 var AUTOFIRE_ON=0.80, AUTOFIRE_OFF=0.60, RIM_PUSH=0.93, RIM_HOLD=10;
-var TRIGGER_REACH_X=460, TRIGGER_REACH_Y=280;
+var TRIGGER_REACH_X=460, TRIGGER_REACH_Y=280, TRIGGER_GRACE=80;
 var AUTOFIRE_MIN=AUTOFIRE_ON;              // the ring the pad draws
-var mobileAutoFire=false, aimHot=false, rimHeld=0, rimOverride=false, triggerLive=false;
+var mobileAutoFire=false, aimHot=false, rimHeld=0, rimOverride=false, triggerLive=false, triggerGrace=0;
 var SMALL=[
   {n:'start',l:'START',x:0,y:0,r:0,p:0},
   {n:'pause',l:'PAUSE',x:0,y:0,r:0,p:0}
@@ -1346,7 +1350,7 @@ function makeMotes(){
 function spawnEnemy(t,x,y){
   var e={t:t,x:x,y:y,vx:0,vy:0,facing:-1,hp:20,w:26,h:34,onGround:false,timer:0,
          flash:0,anim:Math.random()*6,state:'patrol',touchCd:0,baseX:x,baseY:y,dmg:12,squash:0,
-         engaged:false,climbCd:0,patrolDir:Math.random()<0.5?-1:1,patrolTimer:55+Math.random()*75,
+         engaged:false,climbCd:0,recoverT:0,retreatT:0,evadeCd:0,patrolDir:Math.random()<0.5?-1:1,patrolTimer:55+Math.random()*75,
          patrolPause:0,patrolRadius:90+Math.random()*80};
   /* Health is graded by kind so nothing pops on a single swipe, but the rank
      and file stay quick to clear. Reference point is Rocco's opening claw,
@@ -1467,7 +1471,9 @@ function explode(x,y,radius,dmg,fromPlayer){
 function damageEnemy(e,d){
   if(e.miniBoss){
     e.miniFightStarted=true;
-    d*=0.55; // Elite armor keeps high-DPS weapons from erasing phase transitions.
+    /* Elite armour keeps a high-DPS weapon from erasing the fight — except while
+       it is reloading, when it is open and hitting it is the point. */
+    d*=miniRecovering(e)?1.2:MINI_ARMOUR;
     if(e.hp-d<=0&&(e.miniFightTicks||0)<1800)e.hp=1;
     else e.hp-=d;
   }else e.hp-=d;
@@ -2124,7 +2130,13 @@ function canStomp(e){
 }
 function doStomp(e){
   var d=STOMP[e.t]||12;
-  if(e.t!=='mouse')d=playerDmg(d);                           // Rocco lands heavier
+  if(e.miniBoss){
+    /* A mini-boss is not squashed in one go whatever it is made of, but Rocco
+       landing on it is worth a great deal — and worth twice as much while it is
+       reloading, which is the fast way to take one down with him. */
+    d=(e.maxHp*(miniRecovering(e)?0.20:0.11))/MINI_ARMOUR;
+  }
+  else if(e.t!=='mouse')d=playerDmg(d);                      // Rocco lands heavier
   var lethal=(e.hp-d<=0);
   damageEnemy(e,d);
   e.squash=10;e.touchCd=26;e.vx*=0.3;
@@ -2158,6 +2170,69 @@ function enemyFloorAhead(e,dir,useOneway){
 /* An enraged mini-boss hunts in two dimensions: it springs at floors above it,
    steps off the ledges an ordinary patrol refuses, and drops after a player who
    has gone below. It is chasing a person, not walking a beat. */
+
+/* ---- mini-boss tactics ----------------------------------------------------
+   A mini-boss should be beatable by fighting it properly rather than by out-
+   typing it, which means it needs habits a player can read and answer:
+
+     it shoots and then gets out of the way,
+     it jumps when a round is on its way in,
+     and after emptying a volley it has to reload.
+
+   That last one is the whole fight. The reload is the invitation: while it is
+   reloading it cannot shoot, it barely moves, and it takes better than twice
+   the damage. Catzilla's rockets are murder to stand in front of and trivial to
+   roll through, so Vinnie goes in during the volley and collects in the pause
+   afterwards. Rocco has no such dodge, but he lands on people, and a stomp
+   during a reload is worth two of them.
+
+   None of it is scripted per boss: the same three habits with different numbers,
+   which is why a weasel plays differently from a cat without either being a
+   special case. */
+var MINI_ARMOUR=0.55;                 // elite armour, so a high-DPS weapon cannot erase a fight
+function miniRecovering(e){return !!(e.miniBoss&&e.recoverT>0);}
+/* Is one of the player's rounds on its way in? Only what is genuinely coming
+   at the boss counts: behind it or going the other way is not a threat. */
+function incomingShot(e){
+  var ex=e.x+e.w/2,ey=e.y+e.h/2,i,b;
+  for(i=0;i<bullets.length;i++){
+    b=bullets[i];
+    var dx=ex-b.x;
+    if(Math.abs(dx)>150||Math.abs(ey-b.y)>46)continue;
+    if(dx*(b.vx||0)<=0)continue;                 // travelling away
+    return true;
+  }
+  for(i=0;i<nades.length;i++){
+    b=nades[i];
+    if(b.mine&&Math.abs(ex-b.x)<120&&Math.abs(ey-b.y)<90)return true;
+  }
+  return false;
+}
+function miniTactics(e,pcx,pcy){
+  if(!e.miniBoss||e.blastLoose>0||e.dead)return;
+  if(e.evadeCd>0)e.evadeCd--;
+  if(e.recoverT>0){
+    /* Reloading: no shooting, barely moving, and wide open. */
+    e.recoverT--;
+    e.timer=Math.max(e.timer,e.recoverT);
+    e.miniMove=0.22;
+    if(e.recoverT%9===0)addPart(e.x+e.w/2,e.y-4,rnd(-.6,.6),-1.1,'#ffe6a8',20,2.4,.02);
+    return;
+  }
+  if(e.retreatT>0){
+    // Shoot and run: having emptied a volley it backs off rather than standing there.
+    e.retreatT--;
+    e.miniMove=-0.85;
+    return;
+  }
+  if(e.t!=='bat'&&e.onGround&&e.evadeCd<=0&&incomingShot(e)){
+    // A round on the way in gets jumped, and an enraged boss jumps sideways out of the lane.
+    e.vy=miniEnraged(e)?-8.4:-7.2;e.onGround=false;
+    e.evadeCd=miniEnraged(e)?52:78;
+    if(miniEnraged(e))e.vx=(pcx<e.x+e.w/2?1:-1)*3.0;
+    burst(e.x+e.w/2,e.y+e.h,'#cfe8ff',5,2.2);
+  }
+}
 function miniClimb(e,pcx,pcy){
   if(!miniHunting(e)||e.t==='bat')return;
   if(e.climbCd>0)e.climbCd--;
@@ -2271,6 +2346,11 @@ function updateMiniBossPhase(e,pcx,pcy){
     aimedShot(cx+dir*25,cy,pcx,pcy,5.6,{rocket:true,r:8,dmg:28,life:210});
     aimedShot(cx+dir*25,cy+12,pcx,pcy+70,5.2,{rocket:true,r:8,dmg:28,life:210});SFX.boom();
   }
+  /* Everything that empties a magazine has to fill it again. Rockets take the
+     longest, which is exactly why rolling through them pays. */
+  e.recoverT=e.t==='cat'?96:e.t==='bat'?78:72;
+  e.retreatT=0;
+  tone(120,.18,'triangle',.03,90);
 }
 function updateEnemies(){
   var i,e;
@@ -2316,6 +2396,7 @@ function updateEnemies(){
     var pcx=P.x+P.w/2,pcy=P.y+P.h/2,ecx=e.x+e.w/2,ecy=e.y+e.h/2;
     updateMiniBossPhase(e,pcx,pcy);
     miniClimb(e,pcx,pcy);
+    miniTactics(e,pcx,pcy);
     if(e.blastLoose>0){
       e.vy+=e.t==='bat'?0.18:0.55;e.vx*=0.992;
       collidePlatforms(e,true,true);holdEnemyTerritory(e);
@@ -2401,7 +2482,11 @@ function updateEnemies(){
             aimedShot(ecx+e.facing*15,e.y+13,pcx,pcy-4,6.4,{dmg:12,r:4,life:150,pistol:true});
             addLight(ecx+e.facing*20,e.y+13,72,'#ffe08a',7);
             tone(700,0.05,'square',0.035,260);noise(0.05,0.05,2400);
-          } else {e.shots=e.t==='lizard'?5:e.miniBoss&&miniEnraged(e)?4:stage>5?3:2;e.timer=(e.t==='lizard'?48:64+Math.random()*46)*(e.miniAttackRate||1);}
+          } else {
+            e.shots=e.t==='lizard'?5:e.miniBoss&&miniEnraged(e)?4:stage>5?3:2;
+            e.timer=(e.t==='lizard'?48:64+Math.random()*46)*(e.miniAttackRate||1);
+            if(e.miniBoss){e.retreatT=28;e.recoverT=Math.max(e.recoverT||0,34);}   // shoot, then break off
+          }
         }
         if(e.y>640){recoverEnemyTerritory(e);continue;}
       }
@@ -4291,8 +4376,9 @@ function paintHUD(){
     g.fillStyle='rgba(255,245,205,.65)';g.fillRect(mx+mw*MINI_RAGE_AT,my-2,1.5,14);
     g.strokeStyle=rage?'rgba(255,245,205,.95)':'rgba(255,215,120,.45)';g.lineWidth=rage?1.8:1;
     rr(g,mx+.5,my+.5,mw,10,3);g.stroke();
-    txt(mini.name+' — '+mini.title+(rage?'  //  ENRAGED — HUNTING YOU':''),
-      w/2,my+26,12,barCol,'center');
+    txt(miniRecovering(mini)?mini.name+' — RELOADING — HIT IT NOW':
+        mini.name+' — '+mini.title+(rage?'  //  ENRAGED — HUNTING YOU':''),
+      w/2,my+26,12,miniRecovering(mini)?'#fffbe8':barCol,'center');
   }
   if(boss&&boss.state!=='dead'){
     var bw2=w*0.72,bx2=(w-bw2)/2,by2=hh+10;
@@ -4599,7 +4685,7 @@ function drawPad(){
   pg.clearRect(0,0,w,h);
   // Floating mobile controls: low-contrast until touched, bright enough to read over action.
   drawFloatStick(moveStick,'MOVE  ·  ↑ JUMP  ·  ↓ ROLL',false);
-  drawFloatStick(aimStick,triggerLive?'AIM  ·  FIRING':(threatNear()?'AIM  ·  READY':'AIM  ·  HOLDING FIRE'),true);
+  drawFloatStick(aimStick,triggerLive?'AIM  ·  FIRING':(triggerGrace>0?'AIM  ·  READY':'AIM  ·  HOLDING FIRE'),true);
   for(i=0;i<BTNS.length;i++){
     var mb=BTNS[i],pressedAlpha=mb.p?.32:.14;
     pg.fillStyle='rgba(12,16,18,'+pressedAlpha+')';ell(pg,mb.x,mb.y,mb.r,mb.r);pg.fill();
@@ -4882,10 +4968,12 @@ function render(){
       g.fillText('!',e.x+e.w/2,e.y-9-Math.sin(tick*.11)*3);g.textAlign='left';
     }
     if(e.miniBoss){
-      var ec=miniEnraged(e)?'255,195,55':'235,70,55';
+      var ec=miniRecovering(e)?'255,255,235':miniEnraged(e)?'255,195,55':'235,70,55';
       g.globalCompositeOperation='lighter';g.strokeStyle='rgba('+ec+','+(.32+.16*Math.sin(tick*.13))+')';g.lineWidth=e.specialT>0?7:4;
       g.beginPath();g.arc(e.x+e.w/2,e.y+e.h/2,Math.max(e.w,e.h)*.72,0,6.283);g.stroke();g.globalCompositeOperation='source-over';
-      g.fillStyle=miniEnraged(e)?'#ffd25c':'#ff7768';g.font='bold 13px Impact,sans-serif';g.textAlign='center';g.fillText(e.name,e.x+e.w/2,e.y-18);g.textAlign='left';
+      g.fillStyle=miniRecovering(e)?'#fffbe8':miniEnraged(e)?'#ffd25c':'#ff7768';
+      g.font='bold 13px Impact,sans-serif';g.textAlign='center';
+      g.fillText(miniRecovering(e)?'RELOADING':e.name,e.x+e.w/2,e.y-18);g.textAlign='left';
     }
     if(e.t==='mouse')drawMouseThug(e);
     else if(e.t==='bat')drawBatBomber(e);
