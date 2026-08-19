@@ -27,6 +27,11 @@
     background:rgba(255,255,255,.08);color:rgba(255,255,255,.86);font:bold 17px Arial,sans-serif;line-height:1;}
   #sizeCtl button:active{background:rgba(232,194,90,.32);}
   #sizeVal{min-width:44px;text-align:center;color:#e8c25a;font:bold 13px Arial,sans-serif;letter-spacing:.5px;}
+  #themeCtl{position:fixed;right:max(10px,env(safe-area-inset-right));top:calc(max(9px,env(safe-area-inset-top)) + 46px);
+    z-index:11;max-width:46vw;padding:5px 10px;border:1px solid rgba(255,255,255,.24);border-radius:9px;
+    background:rgba(8,12,14,.42);backdrop-filter:blur(3px);color:rgba(255,255,255,.80);
+    font:bold 11px Arial,sans-serif;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #themeCtl:active{background:rgba(232,194,90,.32);}
   #pauseModal{display:none;position:fixed;inset:0;z-index:12;align-items:center;justify-content:center;background:rgba(2,4,5,.70);}
   #pauseCard{min-width:min(330px,72vw);padding:25px;border:1px solid rgba(232,194,90,.48);border-radius:14px;
     background:linear-gradient(#172024,#080b0d);box-shadow:0 18px 60px #000;text-align:center;color:#e8c25a;}
@@ -61,6 +66,7 @@
   <div id="panel"><canvas id="pad"></canvas></div>
 </div>
 <button id="mobilePause" aria-label="Pause game">Ⅱ</button>
+<button id="themeCtl" title="Theme Lab: tap to cycle ( [ and ] on a keyboard )">THEME</button>
 <div id="sizeCtl">
   <button id="sizeDown" type="button" aria-label="Decrease character size">&minus;</button>
   <span id="sizeVal">1.00&times;</span>
@@ -77,6 +83,7 @@ var rotateEl=document.getElementById('rotate'),landscapeAsked=false;
 var mobilePause=document.getElementById('mobilePause'),pauseModal=document.getElementById('pauseModal');
 var gcv=document.getElementById('game'), g=gcv.getContext('2d');
 var pcv=document.getElementById('pad'),  pg=pcv.getContext('2d');
+pg.__noTheme=true;   // the touch controls are furniture, not art direction
 var titleLogo=new Image();titleLogo.src='assets/images/ui/ratatatata-title-cutout.png';
 
 var view={w:520,h:900,scale:1,cssW:360,cssH:640};
@@ -124,8 +131,10 @@ function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);
   t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 function lin(c,x0,y0,x1,y1,st){var q=c.createLinearGradient(x0,y0,x1,y1),i;
+  if(Theme.shifts&&!c.__noTheme)for(i=0;i<st.length;i++)st[i][1]=themeColor(st[i][1]);
   for(i=0;i<st.length;i++)q.addColorStop(st[i][0],st[i][1]);return q;}
 function rad(c,x,y,r0,r1,st){var q=c.createRadialGradient(x,y,r0,x,y,r1),i;
+  if(Theme.shifts&&!c.__noTheme)for(i=0;i<st.length;i++)st[i][1]=themeColor(st[i][1]);
   for(i=0;i<st.length;i++)q.addColorStop(st[i][0],st[i][1]);return q;}
 function rr(c,x,y,w,h,r){
   r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2);
@@ -136,7 +145,365 @@ function rr(c,x,y,w,h,r){
   c.lineTo(x,y+r);c.quadraticCurveTo(x,y,x+r,y);c.closePath();
 }
 function ell(c,x,y,rx,ry){c.beginPath();c.ellipse(x,y,Math.abs(rx),Math.abs(ry),0,0,6.283);}
-function ink(c,col,lw){c.strokeStyle=col||'rgba(10,8,10,.75)';c.lineWidth=lw||2;c.stroke();}
+/* Every outline in the game goes down through here, which makes it the one
+   place a theme has to touch to restyle the game's line work: weight, colour,
+   and how steady the hand holding the pen is. A rough line is drawn twice, the
+   second pass nudged and faded, which reads as dirty ink rather than a wobble. */
+function ink(c,col,lw){
+  var ch=TH?TH.characters:null;
+  var w=(lw||2)*(ch?ch.outline:1);
+  if(w<=0)return;
+  c.strokeStyle=(TH&&TH.ink&&!c.__noTheme)?TH.ink:(col||'rgba(10,8,10,.75)');
+  c.lineWidth=w;c.stroke();
+  if(ch&&ch.roughness>0){
+    var j=ch.roughness*1.6;
+    c.save();c.globalAlpha=(c.globalAlpha||1)*0.5*ch.roughness;
+    c.translate(rnd(-j,j),rnd(-j,j));c.lineWidth=w*(1+ch.roughness*0.5);c.stroke();
+    c.restore();
+  }
+}
+
+/* ==================== THEME LAYER ====================
+   The renderer draws the same shapes whatever the game looks like; a theme is
+   the set of numbers that decide how those shapes are put down. It sits between
+   the procedural drawing and the canvas:
+
+     game state -> models -> procedural drawing -> THEME -> canvas
+
+   Nothing here knows about gameplay, and gameplay knows nothing about it:
+   physics, hitboxes, levels and enemy behaviour read none of these values, so a
+   theme can be swapped mid-fight without disturbing the fight.
+
+   A theme is plain data — see registerTheme below — which is what makes it a
+   target for something other than a person to write later. Every field is a
+   number or a colour, validated on the way in, so a generated configuration is
+   the same kind of object as a hand-written one.
+
+   The colour work happens per drawing call rather than as a filter over the
+   finished frame: every fillStyle and strokeStyle the drawing code sets passes
+   through the theme's transform first, cached by input colour so each distinct
+   colour is converted once per theme. A filter over the top could not do what
+   this does — pick out a palette, hold an accent while draining everything
+   else, or quantise to a handful of levels — and could not leave the HUD alone. */
+
+function themeSchema(){
+  /* Every knob the renderer actually reads. Anything not listed here has no
+     effect, which is the contract a generated theme is validated against. */
+  return {
+    palette:{
+      hue:{v:0,min:-180,max:180,step:1,label:'HUE SHIFT'},
+      saturation:{v:1,min:0,max:2,step:0.02,label:'SATURATION'},
+      contrast:{v:1,min:0.5,max:2,step:0.02,label:'CONTRAST'},
+      brightness:{v:1,min:0.5,max:1.5,step:0.02,label:'BRIGHTNESS'},
+      warmth:{v:0,min:-1,max:1,step:0.02,label:'WARMTH'},
+      mono:{v:0,min:0,max:1,step:0.02,label:'DRAIN TO GREY'},
+      accentKeep:{v:0,min:0,max:1,step:0.02,label:'KEEP ACCENTS'},
+      posterize:{v:0,min:0,max:12,step:1,label:'COLOUR STEPS'}
+    },
+    characters:{
+      scaleX:{v:1,min:0.8,max:1.3,step:0.01,label:'BODY WIDTH'},
+      scaleY:{v:1,min:0.8,max:1.3,step:0.01,label:'BODY HEIGHT'},
+      bulk:{v:1,min:0.7,max:1.6,step:0.02,label:'BULK'},
+      outline:{v:1,min:0,max:4,step:0.05,label:'OUTLINE WEIGHT'},
+      roughness:{v:0,min:0,max:1,step:0.02,label:'OUTLINE ROUGHNESS'}
+    },
+    environment:{
+      detail:{v:1,min:0,max:1.5,step:0.05,label:'ENVIRONMENT DETAIL'},
+      grime:{v:0,min:0,max:1,step:0.02,label:'GRIME'},
+      grain:{v:0,min:0,max:1,step:0.02,label:'FILM GRAIN'},
+      lighting:{v:1,min:0,max:2.5,step:0.05,label:'LIGHTING'},
+      shadow:{v:1,min:0,max:2,step:0.05,label:'SHADOW DEPTH'},
+      vignette:{v:1,min:0,max:2,step:0.05,label:'VIGNETTE'}
+    },
+    effects:{
+      particles:{v:1,min:0,max:2.5,step:0.05,label:'PARTICLES'},
+      flash:{v:1,min:0,max:2.5,step:0.05,label:'MUZZLE / BLAST'},
+      glow:{v:0,min:0,max:1.5,step:0.05,label:'GLOW'},
+      shake:{v:1,min:0,max:2,step:0.05,label:'CAMERA SHAKE'}
+    },
+    render:{
+      pixel:{v:0,min:0,max:1,step:0.02,label:'PIXELATION'}
+    }
+  };
+}
+var THEME_GROUPS=['palette','characters','environment','effects','render'];
+var THEMES=[], THEME_BY_ID={};
+
+/* A theme is data. Anything missing falls back to the schema default, and every
+   value is clamped into range, so a partial or generated configuration is still
+   a valid one. */
+function registerTheme(cfg){
+  var sc=themeSchema(),out={id:cfg.id,name:cfg.name,blurb:cfg.blurb||'',
+    accent:cfg.accent||'#c9a24a',ink:cfg.ink||null,ui:cfg.ui||{},builtin:!cfg.variant,variant:!!cfg.variant};
+  THEME_GROUPS.forEach(function(gr){
+    out[gr]={};
+    var src=cfg[gr]||{};
+    for(var k in sc[gr]){
+      var def=sc[gr][k],raw=(src[k]===undefined)?def.v:Number(src[k]);
+      if(!isFinite(raw))raw=def.v;
+      out[gr][k]=clamp(raw,def.min,def.max);
+    }
+  });
+  if(THEME_BY_ID[out.id]){
+    THEMES[THEMES.indexOf(THEME_BY_ID[out.id])]=out;
+  } else THEMES.push(out);
+  THEME_BY_ID[out.id]=out;
+  return out;
+}
+function themeToConfig(t){
+  var out={id:t.id,name:t.name,blurb:t.blurb,accent:t.accent,ink:t.ink,variant:t.variant};
+  THEME_GROUPS.forEach(function(gr){out[gr]={};for(var k in t[gr])out[gr][k]=t[gr][k];});
+  return out;
+}
+
+/* ---- colour transform ---------------------------------------------------- */
+function rgb2hsl(r,g0,b){
+  var mx=Math.max(r,g0,b),mn=Math.min(r,g0,b),h=0,s=0,l=(mx+mn)/2,d=mx-mn;
+  if(d){
+    s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    if(mx===r)h=(g0-b)/d+(g0<b?6:0);else if(mx===g0)h=(b-r)/d+2;else h=(r-g0)/d+4;
+    h/=6;
+  }
+  return [h,s,l];
+}
+function hue2rgb(p,q,t){
+  if(t<0)t+=1;if(t>1)t-=1;
+  if(t<1/6)return p+(q-p)*6*t;
+  if(t<1/2)return q;
+  if(t<2/3)return p+(q-p)*(2/3-t)*6;
+  return p;
+}
+function hsl2rgb(h,s,l){
+  if(!s)return [l,l,l];
+  var q=l<0.5?l*(1+s):l+s-l*s,p=2*l-q;
+  return [hue2rgb(p,q,h+1/3),hue2rgb(p,q,h),hue2rgb(p,q,h-1/3)];
+}
+function parseCol(v){
+  if(typeof v!=='string')return null;
+  var s=v.trim();
+  if(s.charAt(0)==='#'){
+    if(s.length===4)return {r:parseInt(s[1]+s[1],16),g:parseInt(s[2]+s[2],16),b:parseInt(s[3]+s[3],16),a:1};
+    if(s.length===7)return {r:parseInt(s.substr(1,2),16),g:parseInt(s.substr(3,2),16),b:parseInt(s.substr(5,2),16),a:1};
+    return null;
+  }
+  if(s.substr(0,4)==='rgb('||s.substr(0,5)==='rgba('){
+    var m=s.substring(s.indexOf('(')+1,s.lastIndexOf(')')).split(',');
+    if(m.length<3)return null;
+    return {r:parseFloat(m[0]),g:parseFloat(m[1]),b:parseFloat(m[2]),a:m.length>3?parseFloat(m[3]):1};
+  }
+  return null;
+}
+function themeColor(v){
+  var p=TH?TH.palette:null;
+  if(!p||!Theme.shifts)return v;
+  var hit=Theme.cache[v];
+  if(hit!==undefined)return hit;
+  var c=parseCol(v);
+  if(!c){Theme.cache[v]=v;return v;}
+  var r=c.r/255,g0=c.g/255,b=c.b/255,i;
+  if(p.warmth){r=r+p.warmth*0.10;b=b-p.warmth*0.10;}
+  if(p.hue){
+    var hsl=rgb2hsl(clamp(r,0,1),clamp(g0,0,1),clamp(b,0,1));
+    var rgb=hsl2rgb((hsl[0]+p.hue/360+1)%1,hsl[1],hsl[2]);
+    r=rgb[0];g0=rgb[1];b=rgb[2];
+  }
+  var lum=0.2126*r+0.7152*g0+0.0722*b;
+  if(p.saturation!==1){r=lum+(r-lum)*p.saturation;g0=lum+(g0-lum)*p.saturation;b=lum+(b-lum)*p.saturation;}
+  if(p.mono>0){
+    /* Draining to grey spares one hue — the theme's accent — and only in
+       proportion to how vivid and how close to it a colour already is. Sparing
+       everything saturated would leave the whole picture in colour, which is
+       the opposite of the point: it is one red coat in a grey street that reads
+       as the subject of the shot. */
+    var mx=Math.max(r,g0,b),mn=Math.min(r,g0,b),chroma=mx-mn,spare=0;
+    if(p.accentKeep>0&&chroma>0.04){
+      var ah=Theme.accentHue(),ch=rgb2hsl(clamp(r,0,1),clamp(g0,0,1),clamp(b,0,1))[0];
+      var dh=Math.abs(ch-ah);if(dh>0.5)dh=1-dh;                 // hue distance, wrapped
+      var near=clamp(1-dh/0.13,0,1);                            // within ~47 degrees
+      spare=p.accentKeep*near*clamp(chroma/0.30,0,1);
+    }
+    var m=p.mono*(1-spare);
+    r=r+(lum-r)*m;g0=g0+(lum-g0)*m;b=b+(lum-b)*m;
+  }
+  if(p.contrast!==1){r=(r-0.5)*p.contrast+0.5;g0=(g0-0.5)*p.contrast+0.5;b=(b-0.5)*p.contrast+0.5;}
+  if(p.brightness!==1){r*=p.brightness;g0*=p.brightness;b*=p.brightness;}
+  if(p.posterize>=2){
+    var n=Math.round(p.posterize)-1;
+    r=Math.round(clamp(r,0,1)*n)/n;g0=Math.round(clamp(g0,0,1)*n)/n;b=Math.round(clamp(b,0,1)*n)/n;
+  }
+  var out='rgba('+Math.round(clamp(r,0,1)*255)+','+Math.round(clamp(g0,0,1)*255)+','+
+          Math.round(clamp(b,0,1)*255)+','+(isFinite(c.a)?c.a:1)+')';
+  Theme.cache[v]=out;
+  return out;
+}
+
+var TH=null;
+var Theme={
+  idx:0, cache:{}, shifts:false, toast:0, toastName:'',
+  variants:[], _ah:null, _ahFor:null, surface:null, surfaceKey:'',
+  accentHue:function(){
+    var a=(TH&&TH.accent)||'#c9a24a';
+    if(Theme._ahFor!==a){
+      var c=parseCol(a)||{r:200,g:60,b:50};
+      Theme._ah=rgb2hsl(c.r/255,c.g/255,c.b/255)[0];Theme._ahFor=a;
+    }
+    return Theme._ah;
+  },
+  /* Colours the drawing code sets are converted on the way to the canvas. The
+     cache makes that a dictionary lookup per call after the first frame. */
+  install:function(){
+    var proto=window.CanvasRenderingContext2D&&window.CanvasRenderingContext2D.prototype;
+    if(!proto||proto.__themed)return;
+    ['fillStyle','strokeStyle'].forEach(function(prop){
+      var d=Object.getOwnPropertyDescriptor(proto,prop);
+      if(!d||!d.set)return;
+      Object.defineProperty(proto,prop,{
+        configurable:true,enumerable:d.enumerable,
+        get:function(){return d.get.call(this);},
+        set:function(v){d.set.call(this,(this.__noTheme||typeof v!=='string')?v:themeColor(v));}
+      });
+    });
+    proto.__themed=true;
+  },
+  use:function(id,quiet){
+    var t=THEME_BY_ID[id]||THEMES[0];
+    TH=t;Theme.idx=THEMES.indexOf(t);Theme.cache={};
+    var p=t.palette;
+    /* Nothing to convert on the baseline theme: skip the whole colour path so
+       Classic costs exactly what it did before there were themes. */
+    Theme.shifts=!!(p.hue||p.saturation!==1||p.contrast!==1||p.brightness!==1||p.warmth||p.mono||p.posterize>=2);
+    Theme.grainTile=null;Theme.surfaceKey='';
+    try{localStorage.setItem('rat.theme',t.id);}catch(err){}
+    if(!quiet){Theme.toast=110;Theme.toastName=t.name;}
+    if(typeof themeChip!=='undefined'&&themeChip)themeChip.textContent=t.name;
+    return t;
+  },
+  step:function(d){
+    if(!THEMES.length)return;
+    Theme.use(THEMES[(Theme.idx+d+THEMES.length)%THEMES.length].id);
+  },
+  /* Live edits go to a working copy so the registered theme stays pristine. */
+  edit:function(gr,key,val){
+    if(!TH)return;
+    var sc=themeSchema()[gr][key];
+    if(!TH.variant){
+      var work=registerTheme(themeToConfig(TH));
+      work.id=TH.id;work.name=TH.name;TH=work;
+    }
+    TH[gr][key]=clamp(Number(val),sc.min,sc.max);
+    Theme.cache={};Theme.grainTile=null;Theme.surfaceKey='';
+    var p=TH.palette;
+    Theme.shifts=!!(p.hue||p.saturation!==1||p.contrast!==1||p.brightness!==1||p.warmth||p.mono||p.posterize>=2);
+  },
+  reset:function(){
+    if(!TH)return;
+    var base=THEME_BY_ID[TH.id];
+    if(base)Theme.use(base.id,true);
+  },
+  randomize:function(){
+    if(!TH)return;
+    var sc=themeSchema();
+    THEME_GROUPS.forEach(function(gr){
+      for(var k in sc[gr]){
+        var d=sc[gr][k],span=d.max-d.min;
+        /* Wander around where the theme already sits rather than throwing dice
+           across the whole range: a random theme should still be a theme. */
+        var v=TH[gr][k]+rnd(-0.22,0.22)*span;
+        Theme.edit(gr,k,clamp(v,d.min,d.max));
+      }
+    });
+    Theme.toast=110;Theme.toastName=TH.name+' (SHUFFLED)';
+  },
+  saveVariant:function(){
+    if(!TH)return null;
+    var base=THEME_BY_ID[TH.id]||TH,n=2;
+    while(THEME_BY_ID[base.id+'-'+n])n++;
+    var cfg=themeToConfig(TH);
+    cfg.id=base.id+'-'+n;cfg.name=base.name+' #'+n;cfg.variant=true;
+    var saved=registerTheme(cfg);
+    Theme.variants.push(cfg);
+    try{localStorage.setItem('rat.variants',JSON.stringify(Theme.variants));}catch(err){}
+    Theme.use(saved.id);
+    return saved;
+  },
+  loadVariants:function(){
+    var raw=null;
+    try{raw=localStorage.getItem('rat.variants');}catch(err){}
+    if(!raw)return;
+    try{
+      var list=JSON.parse(raw);
+      if(!list||!list.length)return;
+      Theme.variants=list;
+      list.forEach(function(cfg){cfg.variant=true;registerTheme(cfg);});
+    }catch(err){}
+  },
+  remembered:function(){
+    try{return localStorage.getItem('rat.theme')||'';}catch(err){return '';}
+  }
+};
+
+/* ---- the eight starting directions ---------------------------------------
+   Classic is the baseline: every value at its default, so it draws exactly what
+   the game drew before this layer existed and stays the regression reference. */
+registerTheme({id:'classic',name:'RATATATATA CLASSIC',accent:'#c9a24a',
+  blurb:'THE GAME AS BUILT — WARM SEWER GRIME, HONEST INK'});
+registerTheme({id:'arcade-comic',name:'90s ARCADE COMIC',accent:'#ff5a3c',
+  blurb:'THICK INK, LOUD COLOUR, EVERYTHING READS ACROSS THE ROOM',
+  palette:{saturation:1.5,contrast:1.16,brightness:1.06},
+  characters:{scaleX:1.09,scaleY:1.05,bulk:1.2,outline:2.3,roughness:0.12},
+  environment:{lighting:1.15,vignette:0.7,shadow:0.9},
+  effects:{particles:1.6,flash:1.35,glow:0.25}});
+registerTheme({id:'grimy-underground',name:'GRIMY UNDERGROUND',accent:'#b8863a',ink:'#140f0b',
+  blurb:'DIRTY INK, RUST, TUNGSTEN AND DEEP SHADOW',
+  palette:{saturation:0.55,warmth:0.38,contrast:1.14,brightness:0.84},
+  characters:{scaleY:1.02,bulk:1.06,outline:1.9,roughness:0.62},
+  environment:{grime:0.78,grain:0.5,lighting:0.92,shadow:1.4,vignette:1.35,detail:1.15},
+  effects:{particles:1.15,flash:0.9}});
+registerTheme({id:'saturday-cartoon',name:'SATURDAY CARTOON',accent:'#ffd23c',
+  blurb:'CLEAN LINES, BRIGHT AIR, PLAYFUL PROPORTIONS',
+  palette:{saturation:1.34,brightness:1.14,contrast:0.9},
+  characters:{scaleX:1.06,scaleY:1.08,bulk:1.14,outline:1.5,roughness:0},
+  environment:{lighting:1.25,shadow:0.6,vignette:0.45,grain:0,detail:0.9},
+  effects:{particles:1.25,flash:1.1}});
+registerTheme({id:'noir-rats',name:'NOIR RATS',accent:'#c8342a',ink:'#000000',
+  blurb:'ONE COLOUR LEFT ALIVE, EVERYTHING ELSE IS SHADOW',
+  palette:{mono:0.93,accentKeep:0.6,contrast:1.5,brightness:0.9,saturation:1.2},
+  characters:{scaleY:1.04,outline:2.5,roughness:0.15},
+  environment:{lighting:0.72,shadow:1.7,vignette:1.55,grain:0.3,detail:0.85},
+  effects:{particles:0.7,flash:1.2,glow:0.15}});
+registerTheme({id:'retro-pixel',name:'RETRO PIXEL-ISH',accent:'#7fd85a',
+  blurb:'COARSE RESOLUTION AND A SHORT PALETTE, STILL DRAWN NOT SPRITED',
+  palette:{posterize:6,saturation:1.15,contrast:1.12},
+  characters:{outline:1.1,roughness:0},
+  environment:{detail:0.55,vignette:0.6,grain:0,lighting:1.05},
+  effects:{particles:0.8,flash:1},
+  render:{pixel:0.42}});
+registerTheme({id:'graphic-novel',name:'GRAPHIC NOVEL',accent:'#9c6a3f',ink:'#0b0a0a',
+  blurb:'HEAVY BLACKS, HELD-BACK COLOUR, GROWN-UP PROPORTIONS',
+  palette:{mono:0.58,accentKeep:0.35,saturation:0.72,contrast:1.38,brightness:0.86},
+  characters:{scaleX:0.96,scaleY:1.08,bulk:0.92,outline:2.7,roughness:0.34},
+  environment:{shadow:1.45,vignette:1.3,grain:0.38,grime:0.3,lighting:0.88},
+  effects:{particles:0.85,flash:0.95}});
+registerTheme({id:'toxic-neon',name:'TOXIC NEON',accent:'#7dff4f',
+  blurb:'DEAD DARK ROOMS LIT ONLY BY THINGS THAT CAN HURT YOU',
+  palette:{hue:-16,saturation:1.55,contrast:1.28,brightness:0.72},
+  characters:{outline:1.7,roughness:0.1},
+  environment:{lighting:1.85,shadow:1.2,vignette:1.4,grain:0.22,detail:1.05},
+  effects:{particles:1.45,flash:1.7,glow:1.1}});
+
+var themeChip=document.getElementById('themeCtl');
+if(themeChip)themeChip.addEventListener('click',function(e){e.preventDefault();Theme.step(1);});
+/* Theme Lab: the point is to compare directions in the same fight, so switching
+   touches nothing but the theme — no reload, no restart, the level and every
+   enemy in it carry on exactly where they were. */
+window.addEventListener('keydown',function(e){
+  if(e.code==='BracketLeft'){Theme.step(-1);e.preventDefault();}
+  else if(e.code==='BracketRight'){Theme.step(1);e.preventDefault();}
+});
+Theme.install();
+Theme.loadVariants();
+Theme.use(Theme.remembered()||'classic',true);
+
 
 /* ==================== INPUT ==================== */
 /* upjump is a synthetic control: a decisive upward push of the move stick,
@@ -1366,7 +1733,14 @@ function recoverEnemyTerritory(e){
   e.vx=0;e.vy=0;e.onGround=!t.air;e.engaged=false;e.returnT=35;
 }
 function addPart(x,y,vx,vy,col,life,size,grav){
-  parts.push({x:x,y:y,vx:vx,vy:vy,col:col,life:life||30,max:life||30,s:size||3,gr:grav===undefined?0.16:grav});
+  /* Particle budget is a visual decision, so it is the theme's to make — and a
+     theme that asks for fewer is also the cheaper theme on a phone. */
+  var pf=TH?TH.effects.particles:1;
+  if(pf<=0)return;
+  if(pf<1&&Math.random()>pf)return;
+  parts.push({x:x,y:y,vx:vx,vy:vy,col:col,life:life||30,max:life||30,s:(size||3)*(0.85+0.15*pf),gr:grav===undefined?0.16:grav});
+  if(pf>1.35&&Math.random()<pf-1.35)
+    parts.push({x:x,y:y,vx:vx*rnd(0.6,1.3),vy:vy*rnd(0.6,1.3),col:col,life:(life||30)*0.8,max:(life||30)*0.8,s:(size||3)*0.8,gr:grav===undefined?0.16:grav});
 }
 function burst(x,y,col,count,pow){
   var i;for(i=0;i<count;i++){var a=Math.random()*6.283,s=rnd(0.6,pow||4);
@@ -3221,8 +3595,10 @@ function playerReachedExit(){
 
 /* ==================== CHARACTER PAINTING ==================== */
 function shadowBlob(x,y,w,a){
-  g.fillStyle='rgba(0,0,0,'+(a||0.35)+')';
-  ell(g,x,y,w,w*0.28);g.fill();
+  var sh=TH?TH.environment.shadow:1;
+  if(sh<=0)return;
+  g.fillStyle='rgba(0,0,0,'+Math.min(0.95,(a||0.35)*sh)+')';
+  ell(g,x,y,w*(0.85+0.15*sh),w*0.28);g.fill();
 }
 function limb(x1,y1,x2,y2,w,col){
   g.strokeStyle=col;g.lineWidth=w;g.lineCap='round';
@@ -3377,13 +3753,16 @@ function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
   g.save();
   g.globalAlpha=alpha===undefined?1:alpha;
   /* Title and select screens keep their own layout scale, so mul is opt-in. */
-  var k=0.55*(mul===undefined?1:mul);
-  g.translate(x,y);g.scale(face*k,k);
+  var k=0.55*(mul===undefined?1:mul),cp=TH?TH.characters:null;
+  /* Proportions are a drawing transform and nothing else — P.w and P.h, and so
+     every collision in the game, are the same whatever the theme says a rat
+     ought to look like. */
+  g.translate(x,y);g.scale(face*k*(cp?cp.scaleX:1),k*(cp?cp.scaleY:1));
   var cr=prone?34:0;
   var sw=Math.sin(walk),bob=inAir?0:Math.abs(Math.cos(walk))*1.6;
   var hip=-34+cr*0.42-bob*0.3;
   var chest=-62+cr-bob, neck=-64+cr-bob;
-  var bw=big?18:13;
+  var bw=(big?18:13)*(cp?cp.bulk:1);
   var la=inAir?-8:sw*9, lb=inAir?9:-sw*9;
 
   // ================= tail =================
@@ -4034,10 +4413,11 @@ function paintProjectiles(){
   }
 }
 function paintLighting(){
-  var i;
+  var i,env=TH?TH.environment:null,fx=TH?TH.effects:null;
+  var lit=env?env.lighting:1, blast=fx?fx.flash:1, glow=fx?fx.glow:0;
   g.globalCompositeOperation='lighter';
   for(i=0;i<flashes.length;i++){
-    var f=flashes[i],a=f.life/f.max,L=34*f.s*a+10;
+    var f=flashes[i],a=(f.life/f.max)*blast,L=(34*f.s*(f.life/f.max)+10)*(1+glow*0.35);
     g.save();g.translate(f.x,f.y);g.rotate(f.a);
     g.fillStyle='rgba(255,226,150,'+(0.9*a)+')';
     g.beginPath();g.moveTo(0,0);g.lineTo(L,-L*0.36);g.lineTo(L*1.3,0);g.lineTo(L,L*0.36);g.closePath();g.fill();
@@ -4046,9 +4426,9 @@ function paintLighting(){
     g.restore();
   }
   for(i=0;i<lights.length;i++){
-    var l=lights[i],aa=l.life/l.max;
-    g.fillStyle=rad(g,l.x,l.y,0,l.r,[[0,hexA(l.col,0.42*aa)],[0.5,hexA(l.col,0.14*aa)],[1,'rgba(0,0,0,0)']]);
-    g.beginPath();g.arc(l.x,l.y,l.r,0,6.283);g.fill();
+    var l=lights[i],aa=(l.life/l.max)*lit,lr=l.r*(1+glow*0.5);
+    g.fillStyle=rad(g,l.x,l.y,0,lr,[[0,hexA(l.col,0.42*aa)],[0.5,hexA(l.col,0.14*aa)],[1,'rgba(0,0,0,0)']]);
+    g.beginPath();g.arc(l.x,l.y,lr,0,6.283);g.fill();
   }
   g.globalCompositeOperation='source-over';
 }
@@ -4124,9 +4504,13 @@ function paintVignette(){
   var w=view.cssW,h=view.cssH,k=Math.round(w)+'x'+Math.round(h);
   if(k!==_vigK){_vigK=k;_vigG=rad(g,w*0.5,h*0.52,h*0.30,h*0.92,
     [[0,'rgba(0,0,0,0)'],[0.65,'rgba(0,0,0,.34)'],[1,'rgba(0,0,0,.80)']]);}
+  var vg=TH?TH.environment.vignette:1;
+  if(vg<=0)return;
+  g.save();g.globalAlpha=Math.min(1,vg);
   g.fillStyle=_vigG;
   g.fillRect(0,0,w,h);
   g.fillStyle='rgba(70,40,20,.10)';g.fillRect(0,0,w,h);
+  g.restore();
 }
 function paintHUD(){
   var w=view.cssW,B=BROS[P.bro],pad=10;
@@ -4743,7 +5127,7 @@ function step(){
     state='EXITING';stateT=0;score+=1000+stage*250;SFX.clear();
   }
 }
-function render(){
+function renderFrame(){
   g.setTransform(DPR,0,0,DPR,0,0);
   g.clearRect(0,0,view.cssW,view.cssH);
   if(state==='TITLE'){drawTitle();paintVignette();return;}
@@ -4751,15 +5135,17 @@ function render(){
   if(state==='SELECT'){drawSelect();paintVignette();return;}
   if(state==='INTRO'){drawIntro();paintVignette();return;}
 
-  var shx=cam.shake?rnd(-cam.shake,cam.shake):0, shy=cam.shake?rnd(-cam.shake,cam.shake):0;
+  var sk=cam.shake*(TH?TH.effects.shake:1);
+  var shx=sk?rnd(-sk,sk):0, shy=sk?rnd(-sk,sk):0;
   var sc=DPR*view.scale*cam.zoom;
   g.setTransform(sc,0,0,sc,(-cam.x+shx)*sc,(-cam.y+shy)*sc);
 
+  var det=TH?TH.environment.detail:1;
   paintSky();
   silhouette(0,level.theme.sil,0.55,520);
-  paintFog();
-  silhouette(1,level.theme.sil2,0.78,540);
-  paintRays();
+  if(det>0.25)paintFog();
+  if(det>0.15)silhouette(1,level.theme.sil2,0.78,540);
+  if(det>0.6)paintRays();
   paintLamps();
   paintGround();
   paintSetpieces();
@@ -4847,6 +5233,101 @@ function render(){
   if(fadeA>0){g.fillStyle='rgba(0,0,0,'+clamp(fadeA,0,1)+')';g.fillRect(0,0,view.cssW,view.cssH);}
 }
 var last=0,acc=0;
+
+/* ---- surface treatment ---------------------------------------------------
+   Grain and grime are drawn, not filtered: one noise tile is built per theme
+   and laid over the finished frame, coarse and dark for grime, fine and bright
+   for grain. Building the tile once and repeating it is what keeps it honest on
+   a phone — no per-pixel work per frame. */
+function grainTile(){
+  if(Theme.grainTile)return Theme.grainTile;
+  var c=document.createElement('canvas');c.width=c.height=128;
+  var x=c.getContext('2d');x.__noTheme=true;
+  var img=x.createImageData(128,128),d=img.data,i;
+  for(i=0;i<d.length;i+=4){
+    var v=Math.random();
+    var speck=v>0.986?255:(v<0.02?0:128);
+    d[i]=d[i+1]=d[i+2]=speck;
+    d[i+3]=speck===128?0:Math.round(70+Math.random()*130);
+  }
+  x.putImageData(img,0,0);
+  Theme.grainTile=c;
+  return c;
+}
+/* The whole surface treatment — fine grain and coarse filth — is composited
+   once into a screen-sized layer when the theme or the window changes, and after
+   that costs one drawImage a frame. Compositing it live was doubling the frame
+   time on a dirty theme, which is exactly the sort of cost a phone cannot pay
+   for something that never moves. */
+function buildSurface(env){
+  var w=Math.max(2,Math.round(view.cssW)),h=Math.max(2,Math.round(view.cssH));
+  var c=document.createElement('canvas');c.width=w;c.height=h;
+  var x=c.getContext('2d');x.__noTheme=true;
+  var tile=grainTile();
+  if(env.grime>0){
+    x.globalAlpha=env.grime*0.42;
+    x.imageSmoothingEnabled=true;
+    x.drawImage(tile,0,0,128,128,-40,-30,w+80,h+60);
+  }
+  if(env.grain>0){
+    x.globalAlpha=env.grain*0.34;
+    x.fillStyle=x.createPattern(tile,'repeat');
+    x.fillRect(0,0,w,h);
+  }
+  return c;
+}
+function paintSurface(){
+  var env=TH?TH.environment:null;
+  if(!env||(env.grain<=0&&env.grime<=0))return;
+  var key=TH.id+'|'+env.grain.toFixed(2)+'|'+env.grime.toFixed(2)+'|'+Math.round(view.cssW)+'x'+Math.round(view.cssH);
+  if(Theme.surfaceKey!==key){Theme.surface=buildSurface(env);Theme.surfaceKey=key;}
+  g.save();
+  g.setTransform(DPR,0,0,DPR,0,0);
+  g.globalCompositeOperation='multiply';
+  g.drawImage(Theme.surface,0,0,view.cssW,view.cssH);
+  g.restore();
+}
+/* Pixelation is a resolution decision, so the frame is drawn small and blown up
+   with smoothing off — every shape stays procedural, it is simply resolved at a
+   coarser grid. */
+var pxcv=null,pxg=null,_realG=null;
+function render(){
+  var px=TH?TH.render.pixel:0;
+  if(px>0.02){
+    if(!pxcv){pxcv=document.createElement('canvas');pxg=pxcv.getContext('2d');}
+    var scale=Math.max(0.08,1-px*0.86);
+    var pw=Math.max(2,Math.round(view.cssW*scale)),ph=Math.max(2,Math.round(view.cssH*scale));
+    if(pxcv.width!==pw||pxcv.height!==ph){pxcv.width=pw;pxcv.height=ph;}
+    _realG=g;var realDPR=DPR;
+    g=pxg;DPR=scale;
+    renderFrame();
+    paintSurface();
+    g=_realG;DPR=realDPR;
+    g.setTransform(DPR,0,0,DPR,0,0);
+    g.imageSmoothingEnabled=false;
+    g.clearRect(0,0,view.cssW,view.cssH);
+    g.drawImage(pxcv,0,0,pw,ph,0,0,view.cssW,view.cssH);
+    g.imageSmoothingEnabled=true;
+  } else {
+    renderFrame();
+    paintSurface();
+  }
+  drawThemeToast();
+}
+/* Say which way the game is looking now, then get out of the way. */
+function drawThemeToast(){
+  if(Theme.toast<=0)return;
+  Theme.toast--;
+  var w=view.cssW,h=view.cssH,a=Math.min(1,Theme.toast/26);
+  g.save();g.setTransform(DPR,0,0,DPR,0,0);g.globalAlpha=a;
+  var label=Theme.toastName,size=Math.min(17,w*0.03);
+  g.font='bold '+size+'px Impact,sans-serif';
+  var tw=g.measureText(label).width+30,bx=(w-tw)/2,by=h*0.80;
+  g.fillStyle='rgba(8,10,12,.78)';rr(g,bx,by,tw,size+16,8);g.fill();
+  g.strokeStyle=hexA(TH?TH.accent:'#c9a24a',0.8);g.lineWidth=2;rr(g,bx,by,tw,size+16,8);g.stroke();
+  txt(label,w/2,by+size+4,size,TH?TH.accent:'#c9a24a','center');
+  g.restore();
+}
 function loop(t){
   requestAnimationFrame(loop);
   if(!last)last=t;
