@@ -349,10 +349,17 @@ function padTouch(e){
 var tapped=false,selectDeployTap=false;
 function stageTouch(e){
   e.preventDefault();initAudio();if(!landscapeAsked)requestLandscape();
-  if(state==='LEVELS'&&e.touches&&e.touches.length){
+  if(state==='GAMEOVER'&&e.touches&&e.touches.length){
+    var or3=gcv.getBoundingClientRect();
+    if(gameOverPointer((e.touches[0].clientX-or3.left)/or3.width*view.cssW,
+                       (e.touches[0].clientY-or3.top)/or3.height*view.cssH))return;
+  }
+  if(state==='LEVELS'){
+    if(!e.touches||!e.touches.length){levelPointer(0,0,'up');return;}
     var lr=gcv.getBoundingClientRect();
-    levelPointer((e.touches[0].clientX-lr.left)/lr.width*view.cssW,
-                 (e.touches[0].clientY-lr.top)/lr.height*view.cssH);
+    var lx=(e.touches[0].clientX-lr.left)/lr.width*view.cssW;
+    var ly=(e.touches[0].clientY-lr.top)/lr.height*view.cssH;
+    levelPointer(lx,ly,e.type==='touchmove'?'move':'down');
     return;
   }
   if(state==='MODE'&&e.touches&&e.touches.length){
@@ -380,11 +387,30 @@ function stageTouch(e){
   tapped=true;
 }
 gcv.addEventListener('touchstart',stageTouch,{passive:false});
+['touchmove','touchend','touchcancel'].forEach(function(n){
+  gcv.addEventListener(n,function(e){if(state==='LEVELS')stageTouch(e);},{passive:false});
+});
+window.addEventListener('mousemove',function(e){
+  if(state!=='LEVELS'||!levelDrag)return;
+  var lr=gcv.getBoundingClientRect();
+  levelPointer((e.clientX-lr.left)/lr.width*view.cssW,(e.clientY-lr.top)/lr.height*view.cssH,'move');
+});
+window.addEventListener('mouseup',function(){if(state==='LEVELS')levelPointer(0,0,'up');});
+gcv.addEventListener('wheel',function(e){
+  if(state!=='LEVELS')return;
+  e.preventDefault();
+  levelScroll=clamp(levelScroll+e.deltaY*0.6,0,levelMaxScroll());
+},{passive:false});
 gcv.addEventListener('mousedown',function(e){
   initAudio();
+  if(state==='GAMEOVER'){
+    var or2=gcv.getBoundingClientRect();
+    gameOverPointer((e.clientX-or2.left)/or2.width*view.cssW,(e.clientY-or2.top)/or2.height*view.cssH);
+    return;
+  }
   if(state==='LEVELS'){
     var lr=gcv.getBoundingClientRect();
-    levelPointer((e.clientX-lr.left)/lr.width*view.cssW,(e.clientY-lr.top)/lr.height*view.cssH);
+    levelPointer((e.clientX-lr.left)/lr.width*view.cssW,(e.clientY-lr.top)/lr.height*view.cssH,'down');
     return;
   }
   if(state==='MODE'){
@@ -790,7 +816,7 @@ var state='TITLE', stage=1, score=0, lives=3, selIdx=0, hiScore=0,aimHelp=true;
    where it dropped you rather than sending you back to the start — which is what
    a token has bought in an arcade since arcades existed. */
 var TOKEN_START=5, tokens=TOKEN_START;
-var pendingStage=0;
+var pendingStage=0, overTap=0;
 var modeIdx=0, MODES=['LOCAL','CREATE','JOIN','LEVELS'];
 var level=null, cam={x:0,y:0,shake:0,zoom:1}, tick=0, stateT=0,introTypeMark=-1;
 var campaignSeed=1,campaign=null;
@@ -4508,83 +4534,187 @@ function titleHeroAction(offset){
 }
 
 /* ==================== LEVEL SELECT ====================
-   Every job the brothers have done is listed; the ones they have finished can be
-   taken again. A thumbnail is worth more than a name here, so each card paints
-   the stage's own sky, silhouette and ground from the same palette the stage
-   itself is built from — it is the level, in miniature, not a picture of one. */
-var levelIdx=0, levelScroll=0;
-function levelCards(){
-  var w=view.cssW,h=view.cssH,pad=Math.max(10,w*0.016);
-  var cols=w>820?4:2,rows=Math.ceil(STAGES.length/cols);
-  var cw=(w-pad*(cols+1))/cols, chh=Math.min((h*0.62-pad*(rows-1))/rows,h*0.30);
-  var out=[],i;
+   A column of jobs, scrolled. Each row is a small square of the place itself —
+   its own sky and ground colours, with the thing that stage is made of drawn on
+   top: pipes for the sewers, crates for the warehouse, a vent grille for the way
+   into the tower. A palette swatch alone made eleven cards that were hard to
+   tell apart; a pipe and a crate are not. */
+var levelIdx=0, levelScroll=0, levelDrag=null;
+function levelRowH(){
+  /* Rows stay small — the thumbnail is a stamp, not a poster. */
+  return clamp(view.cssH*0.16,58,84);
+}
+function levelListBox(){
+  /* The list is only tall enough for three and a bit rows, so the rest is
+     plainly below the fold and the screen is not filled edge to edge. */
+  var w=view.cssW,h=view.cssH,rh=levelRowH();
+  var top=h*0.20,bot=h-Math.min(38,h*0.07)-30;
+  var lh=Math.min(rh*3.5,Math.max(rh*2,bot-top));
+  return {x:Math.max(12,w*0.5-260),y:top,w:Math.min(520,w-24),h:lh};
+}
+function levelRows(){
+  var box=levelListBox(),rh=levelRowH(),out=[],i;
   for(i=0;i<STAGES.length;i++)
-    out.push({x:pad+(i%cols)*(cw+pad),y:h*0.17+Math.floor(i/cols)*(chh+pad),w:cw,h:chh,n:i+1});
+    out.push({x:box.x,y:box.y+i*rh-levelScroll,w:box.w,h:rh-8,n:i+1});
   return out;
 }
+function levelMaxScroll(){
+  var box=levelListBox();
+  return Math.max(0,STAGES.length*levelRowH()-box.h);
+}
+function levelScrollTo(i){
+  var box=levelListBox(),rh=levelRowH(),top=i*rh,bot=top+rh;
+  if(top<levelScroll)levelScroll=top;
+  else if(bot>levelScroll+box.h)levelScroll=bot-box.h;
+  levelScroll=clamp(levelScroll,0,levelMaxScroll());
+}
 function levelButtons(){
-  var w=view.cssW,h=view.cssH,bw=Math.min(w*0.26,260),bh=Math.min(38,h*0.07);
+  /* Under the list rather than pinned to the floor, so the screen reads as one
+     block on a tall window instead of two things at opposite ends. */
+  var w=view.cssW,h=view.cssH,box=levelListBox();
+  var bw=Math.min(w*0.24,220),bh=Math.min(38,h*0.07),y=Math.min(box.y+box.h+34,h-bh-12);
   return [
-    {id:'back',label:'BACK',x:w*0.5-bw-8,y:h-bh-12,w:bw,h:bh},
-    {id:'go',label:'CONTINUE',x:w*0.5+8,y:h-bh-12,w:bw,h:bh}
+    {id:'back',label:'BACK',x:w*0.5-bw-8,y:y,w:bw,h:bh},
+    {id:'go',label:'CONTINUE',x:w*0.5+8,y:y,w:bw,h:bh}
   ];
 }
-/* The stage painted small, from its own colours. */
-function drawLevelThumb(r,n){
+/* What each place is made of, drawn small. Origin is the middle of the square,
+   sized in units of it, so one routine serves any thumbnail size. */
+function drawLevelIcon(cx,cy,s,n,th){
+  var u=s/100,i;
+  g.save();g.translate(cx,cy);g.scale(u,u);
+  g.lineWidth=3;g.strokeStyle='rgba(8,7,6,.65)';
+  var lit=th.lamp,dark='rgba(10,12,12,.55)';
+  if(n===1||n===4){
+    // sewer: a big bore pipe across, a flange, and a valve wheel
+    g.fillStyle='#5d6b62';rr(g,-46,-16,92,32,6);g.fill();g.stroke();
+    g.fillStyle='#39443d';rr(g,-14,-20,12,40,3);g.fill();g.stroke();
+    g.fillStyle='#7d8b80';rr(g,-46,-16,92,7,3);g.fill();
+    if(n===4){
+      g.strokeStyle='#b9a06a';g.lineWidth=6;
+      g.beginPath();g.arc(24,-2,17,0,6.283);g.stroke();
+      for(i=0;i<4;i++){var a=i*1.5708;g.beginPath();g.moveTo(24,-2);g.lineTo(24+Math.cos(a)*17,-2+Math.sin(a)*17);g.stroke();}
+    } else {
+      g.fillStyle=hexA(lit,0.5);ell(g,26,4,9,7);g.fill();      // drip
+      g.fillStyle='#2a332e';ell(g,-30,26,20,6);g.fill();
+    }
+  } else if(n===2){
+    // street: a lamp over a manhole
+    g.fillStyle='#4a4450';rr(g,-6,-34,7,62,2);g.fill();g.stroke();
+    g.fillStyle='#4a4450';rr(g,-6,-38,34,7,3);g.fill();g.stroke();
+    g.fillStyle=lit;ell(g,26,-30,9,9);g.fill();
+    g.fillStyle=hexA(lit,0.22);ell(g,26,-6,26,22);g.fill();
+    g.fillStyle='#3a3542';ell(g,-4,30,30,10);g.fill();g.stroke();
+    g.fillStyle='#524a5c';ell(g,-4,28,24,7);g.fill();
+  } else if(n===3){
+    // tenement: a wall of lit windows
+    g.fillStyle='#4a3a2a';rr(g,-42,-36,84,72,4);g.fill();g.stroke();
+    for(i=0;i<6;i++){
+      var wx=-32+(i%3)*28,wy=-26+Math.floor(i/3)*30;
+      g.fillStyle=(i===1||i===4)?lit:'#241a12';
+      rr(g,wx,wy,20,20,2);g.fill();
+    }
+  } else if(n===5||n===6){
+    // warehouse: stacked crates
+    g.fillStyle='#8a6438';rr(g,-44,-4,42,40,3);g.fill();g.stroke();
+    g.fillStyle='#9c723f';rr(g,0,-4,42,40,3);g.fill();g.stroke();
+    g.fillStyle='#7a5730';rr(g,-24,-44,44,40,3);g.fill();g.stroke();
+    g.strokeStyle='rgba(40,26,10,.5)';g.lineWidth=3;
+    g.beginPath();g.moveTo(-44,16);g.lineTo(-2,16);g.moveTo(0,16);g.lineTo(42,16);
+    g.moveTo(-24,-24);g.lineTo(20,-24);g.stroke();
+    if(n===6){g.fillStyle='#c9a24a';rr(g,-10,-40,16,7,2);g.fill();}   // shipping tag
+  } else if(n===7){
+    // corporate avenue: a tower and a company van
+    g.fillStyle='#4b4322';rr(g,-40,-40,36,58,3);g.fill();g.stroke();
+    for(i=0;i<6;i++){g.fillStyle=(i%2)?lit:'#2c2810';rr(g,-34+(i%2)*14,-32+Math.floor(i/2)*17,10,11,1);g.fill();}
+    g.fillStyle='#c9c2a8';rr(g,2,0,42,20,4);g.fill();g.stroke();
+    g.fillStyle='#8f8a72';rr(g,2,0,14,12,2);g.fill();
+    g.fillStyle='#22201a';ell(g,12,22,7,7);g.fill();ell(g,36,22,7,7);g.fill();
+  } else if(n===8){
+    // ventilation: a grille with the fan behind it
+    g.fillStyle='#2b3550';rr(g,-40,-36,80,72,5);g.fill();g.stroke();
+    g.strokeStyle=hexA(lit,0.65);g.lineWidth=5;
+    for(i=0;i<5;i++){g.beginPath();g.moveTo(-32,-24+i*13);g.lineTo(32,-24+i*13);g.stroke();}
+    g.strokeStyle='rgba(8,7,6,.6)';g.lineWidth=3;rr(g,-40,-36,80,72,5);g.stroke();
+  } else if(n===9){
+    // hallway: a corridor of doors running away from you
+    g.fillStyle='#232a3a';rr(g,-44,-36,88,72,4);g.fill();g.stroke();
+    g.fillStyle='#3b465e';g.beginPath();g.moveTo(-44,36);g.lineTo(-14,4);g.lineTo(14,4);g.lineTo(44,36);g.closePath();g.fill();
+    g.fillStyle='#4e5a76';rr(g,-40,-22,18,34,2);g.fill();rr(g,22,-22,18,34,2);g.fill();
+    g.fillStyle=lit;rr(g,-8,-16,16,22,2);g.fill();
+  } else if(n===10){
+    // director's office: a desk, a chair, a lamp
+    g.fillStyle='#5a3a24';rr(g,-44,0,88,14,3);g.fill();g.stroke();
+    g.fillStyle='#3f291a';rr(g,-36,14,10,22,2);g.fill();rr(g,26,14,10,22,2);g.fill();
+    g.fillStyle='#2c2a30';rr(g,-14,-34,28,34,4);g.fill();g.stroke();
+    g.fillStyle=lit;ell(g,30,-10,9,9);g.fill();
+    g.fillStyle=hexA(lit,0.25);ell(g,30,2,20,10);g.fill();
+  } else {
+    // the core: a caged reactor, still running
+    g.fillStyle='#2a1030';ell(g,0,0,42,42);g.fill();g.stroke();
+    g.fillStyle=rad(g,0,0,2,38,[[0,hexA(lit,0.95)],[0.6,hexA(lit,0.35)],[1,'rgba(0,0,0,0)']]);
+    ell(g,0,0,38,38);g.fill();
+    g.strokeStyle='rgba(20,14,24,.85)';g.lineWidth=6;
+    for(i=0;i<3;i++){var an=i*1.047;g.beginPath();g.moveTo(-42*Math.cos(an),-42*Math.sin(an));g.lineTo(42*Math.cos(an),42*Math.sin(an));g.stroke();}
+    g.fillStyle='#f6f1e2';ell(g,0,0,9,9);g.fill();
+  }
+  g.restore();
+}
+/* A square of the place: its own sky and ground, with its own thing on top. */
+function drawLevelThumb(x,y,s,n){
   var th=STAGES[n-1];
   g.save();
-  g.beginPath();rr(g,r.x,r.y,r.w,r.h,6);g.clip();
-  g.fillStyle=lin(g,r.x,r.y,r.x,r.y+r.h,[[0,th.sky[0]],[0.55,th.sky[1]],[1,th.sky[2]]]);
-  g.fillRect(r.x,r.y,r.w,r.h);
-  var gy=r.y+r.h*0.74,i;
-  g.fillStyle=th.sil;
-  for(i=0;i<5;i++){
-    var bx=r.x+r.w*(i*0.23-0.05),bw2=r.w*0.19,bh2=r.h*(0.20+((i*37)%5)*0.07);
-    g.fillRect(bx,gy-bh2,bw2,bh2);
-  }
-  g.fillStyle=th.sil2;
-  for(i=0;i<4;i++){
-    var cx2=r.x+r.w*(i*0.29-0.02),ch2=r.h*(0.14+((i*53)%4)*0.05);
-    g.fillRect(cx2,gy-ch2,r.w*0.16,ch2);
-  }
-  g.fillStyle=hexA(th.fog,0.22);g.fillRect(r.x,gy-r.h*0.30,r.w,r.h*0.30);
-  g.fillStyle=th.gnd;g.fillRect(r.x,gy,r.w,r.h-(gy-r.y));
-  g.fillStyle=th.gtop;g.fillRect(r.x,gy,r.w,Math.max(2,r.h*0.035));
-  g.fillStyle=th.lamp;
-  g.beginPath();g.arc(r.x+r.w*0.76,gy-r.h*0.26,r.h*0.035,0,6.283);g.fill();
-  g.fillStyle=rad(g,r.x+r.w*0.76,gy-r.h*0.26,1,r.h*0.22,[[0,hexA(th.lamp,0.35)],[1,'rgba(0,0,0,0)']]);
-  g.fillRect(r.x,r.y,r.w,r.h);
+  g.beginPath();rr(g,x,y,s,s,5);g.clip();
+  g.fillStyle=lin(g,x,y,x,y+s,[[0,th.sky[0]],[0.6,th.sky[1]],[1,th.sky[2]]]);
+  g.fillRect(x,y,s,s);
+  g.fillStyle=hexA(th.fog,0.16);g.fillRect(x,y+s*0.45,s,s*0.55);
+  g.fillStyle=th.gnd;g.fillRect(x,y+s*0.80,s,s*0.20);
+  g.fillStyle=th.gtop;g.fillRect(x,y+s*0.80,s,Math.max(2,s*0.035));
+  drawLevelIcon(x+s*0.5,y+s*0.46,s*0.74,n,th);
   g.restore();
 }
 function drawLevels(){
-  var w=view.cssW,h=view.cssH,cards=levelCards(),i;
+  var w=view.cssW,h=view.cssH,box=levelListBox(),rows=levelRows(),i;
   g.fillStyle=lin(g,0,0,0,h,[[0,'#0c1014'],[1,'#05080a']]);g.fillRect(0,0,w,h);
-  txt('SELECT A JOB',w*0.5,h*0.085,Math.min(30,w*0.05),'#e8c25a','center');
-  txt('THE ONES YOU HAVE FINISHED CAN BE RUN AGAIN',w*0.5,h*0.085+20,
-    Math.min(12,w*0.021),'#7d8a70','center','Arial,sans-serif');
-  for(i=0;i<cards.length;i++){
-    var c=cards[i],n=c.n,open=stageUnlocked(n),sel=(levelIdx===i),th=STAGES[n-1],fl=STAGE_FLOW[n-1];
-    var thumbH=c.h*0.52;
-    g.save();
-    g.globalAlpha=open?1:0.34;
-    drawLevelThumb({x:c.x,y:c.y,w:c.w,h:thumbH},n);
-    g.fillStyle=open?'rgba(10,13,15,.72)':'rgba(10,13,15,.85)';
-    g.fillRect(c.x,c.y+thumbH,c.w,c.h-thumbH);
-    txt(n+'. '+th.name,c.x+7,c.y+thumbH+15,Math.min(13,c.w*0.085),open?'#efe6d2':'#6b7268','left');
-    txt('"'+th.sub+'"',c.x+7,c.y+thumbH+29,Math.min(10.5,c.w*0.062),'#8f9b87','left','Arial,sans-serif');
-    txt(fl?fl.label:'',c.x+7,c.y+thumbH+43,Math.min(10,c.w*0.058),open?'#8fbf6a':'#5c6b4a','left','Arial,sans-serif');
-    g.restore();
+  txt('SELECT A JOB',w*0.5,h*0.075,Math.min(28,w*0.048),'#e8c25a','center');
+  txt('THE ONES YOU HAVE FINISHED CAN BE RUN AGAIN',w*0.5,h*0.075+18,
+    Math.min(11.5,w*0.02),'#7d8a70','center','Arial,sans-serif');
+  g.save();
+  g.beginPath();rr(g,box.x-4,box.y-4,box.w+8,box.h+8,8);g.clip();
+  for(i=0;i<rows.length;i++){
+    var r=rows[i];
+    if(r.y+r.h<box.y-10||r.y>box.y+box.h+10)continue;         // off the list, skip it
+    var n=r.n,open=stageUnlocked(n),sel=(levelIdx===i),th=STAGES[n-1],fl=STAGE_FLOW[n-1];
+    var pad2=6,ts=r.h-pad2*2;
+    g.globalAlpha=open?1:0.42;
+    g.fillStyle=sel?'rgba(201,162,74,.12)':'rgba(255,255,255,.03)';
+    rr(g,r.x,r.y,r.w,r.h,7);g.fill();
+    drawLevelThumb(r.x+pad2,r.y+pad2,ts,n);
+    var tx=r.x+pad2*2+ts;
+    txt(n+'. '+th.name,tx,r.y+r.h*0.44,Math.min(16,r.w*0.036),open?'#efe6d2':'#6b7268','left');
+    txt('"'+th.sub+'"',tx,r.y+r.h*0.72,Math.min(12,r.w*0.026),open?'#9aa894':'#5c6b4a','left','Arial,sans-serif');
+    if(open&&sel&&fl)
+      txt(fl.label,r.x+r.w-10,r.y+r.h*0.72,Math.min(10.5,r.w*0.023),'#8fbf6a','right','Arial,sans-serif');
     if(!open){
-      // A padlock, so a locked job reads as locked and not as broken.
-      var lx=c.x+c.w-18,ly=c.y+thumbH-16;
-      g.fillStyle='rgba(230,222,200,.55)';rr(g,lx-6,ly,12,9,2);g.fill();
-      g.strokeStyle='rgba(230,222,200,.55)';g.lineWidth=2;
+      var lx=r.x+r.w-18,ly=r.y+r.h*0.42;
+      g.fillStyle='rgba(230,222,200,.5)';rr(g,lx-6,ly,12,9,2);g.fill();
+      g.strokeStyle='rgba(230,222,200,.5)';g.lineWidth=2;
       g.beginPath();g.arc(lx,ly,4,Math.PI,0);g.stroke();
     }
-    g.strokeStyle=sel?(open?'#e8c25a':'#7a4a44'):'#2c3230';g.lineWidth=sel?3:1.5;
-    rr(g,c.x,c.y,c.w,c.h,6);g.stroke();
+    g.globalAlpha=1;
+    g.strokeStyle=sel?(open?'#e8c25a':'#7a4a44'):'#242a28';g.lineWidth=sel?2.5:1.2;
+    rr(g,r.x,r.y,r.w,r.h,7);g.stroke();
   }
-  var bs=levelButtons(),sel2=cards[levelIdx],canGo=sel2&&stageUnlocked(sel2.n);
+  g.restore();
+  // how far down the list you are
+  var maxS=levelMaxScroll();
+  if(maxS>0){
+    var trackH=box.h,bh2=Math.max(28,trackH*(box.h/(STAGES.length*levelRowH())));
+    var by2=box.y+(trackH-bh2)*(levelScroll/maxS);
+    g.fillStyle='rgba(255,255,255,.06)';rr(g,box.x+box.w+7,box.y,4,trackH,2);g.fill();
+    g.fillStyle='rgba(232,194,90,.55)';rr(g,box.x+box.w+7,by2,4,bh2,2);g.fill();
+  }
+  var bs=levelButtons(),selRow=rows[levelIdx],canGo=selRow&&stageUnlocked(selRow.n);
   for(i=0;i<bs.length;i++){
     var b=bs[i],live=(b.id!=='go')||canGo;
     g.fillStyle=live?'rgba(201,162,74,.13)':'rgba(255,255,255,.02)';
@@ -4593,31 +4723,72 @@ function drawLevels(){
     rr(g,b.x,b.y,b.w,b.h,8);g.stroke();
     txt(b.label,b.x+b.w/2,b.y+b.h*0.64,Math.min(15,b.w*0.11),live?'#efe6d2':'#4a524e','center');
   }
-  txt(matchMedia('(pointer:coarse)').matches?'TAP A JOB, THEN CONTINUE':'← → to pick  •  X to continue  •  ESC to go back',
-    w*0.5,h-Math.min(38,h*0.07)-22,Math.min(11.5,w*0.019),'#5c6b4a','center','Arial,sans-serif');
+  txt(matchMedia('(pointer:coarse)').matches?'DRAG TO SCROLL  •  TAP A JOB, THEN CONTINUE':
+      '↑ ↓ to pick  •  wheel to scroll  •  X to continue  •  ESC to go back',
+    w*0.5,bs[0].y+bs[0].h+18,Math.min(11,w*0.018),'#5c6b4a','center','Arial,sans-serif');
 }
-function levelPick(){
-  var cards=levelCards(),c=cards[levelIdx];
-  if(!c||!stageUnlocked(c.n))return;
-  /* Chosen here, confirmed on the character screen: the job is only started when
-     the player says which brother is taking it. */
-  pendingStage=c.n;SFX.selectConfirm();
-  Music.menu();state='SELECT';stateT=0;tapped=false;
+/* Two ways off the game over screen: buy your way back in, or leave. */
+function gameOverButtons(){
+  var w=view.cssW,h=view.cssH,bw=Math.min(w*0.28,250),bh=Math.min(50,h*0.095),y=h*0.62;
+  return [
+    {id:'token',label:'INSERT TOKEN',sub:'ONE LIFE, WHERE YOU FELL',x:w*0.5-bw-9,y:y,w:bw,h:bh},
+    {id:'quit', label:'QUIT TO MENU',sub:'END THE RUN',            x:w*0.5+9,   y:y,w:bw,h:bh}
+  ];
 }
-function levelPointer(x,y){
-  var cards=levelCards(),bs=levelButtons(),i;
-  for(i=0;i<cards.length;i++){
-    var c=cards[i];
-    if(x>=c.x&&x<=c.x+c.w&&y>=c.y&&y<=c.y+c.h){
-      if(levelIdx!==i){levelIdx=i;SFX.selectMove();}
-      return;
-    }
-  }
+function gameOverPointer(x,y){
+  if(state!=='GAMEOVER'||stateT<=40)return false;
+  var bs=gameOverButtons(),i;
   for(i=0;i<bs.length;i++){
     var b=bs[i];
     if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){
-      if(b.id==='back'){SFX.selectMove();state='MODE';stateT=0;}
-      else levelPick();
+      if(b.id==='token'&&tokens<=0)return true;
+      overTap=(b.id==='token')?1:2;
+      return true;
+    }
+  }
+  return false;
+}
+function levelPick(){
+  var rows=levelRows(),r=rows[levelIdx];
+  if(!r||!stageUnlocked(r.n))return;
+  /* Chosen here, confirmed on the character screen: the job is only started when
+     the player says which brother is taking it. */
+  pendingStage=r.n;SFX.selectConfirm();
+  Music.menu();state='SELECT';stateT=0;tapped=false;
+}
+/* One pointer path for wheel, mouse and thumb. A drag scrolls; only a press that
+   did not travel counts as a choice. */
+function levelPointer(x,y,phase){
+  var rows=levelRows(),bs=levelButtons(),i;
+  if(phase==='move'){
+    if(!levelDrag)return;
+    levelScroll=clamp(levelDrag.from+(levelDrag.y-y),0,levelMaxScroll());
+    if(Math.abs(levelDrag.y-y)>6)levelDrag.moved=true;
+    return;
+  }
+  if(phase==='up'){
+    var d=levelDrag;levelDrag=null;
+    if(!d||d.moved)return;                       // a scroll, not a choice
+    x=d.x;y=d.y;
+  }
+  if(phase==='down'){
+    for(i=0;i<bs.length;i++){
+      var b=bs[i];
+      if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){
+        SFX.selectMove();
+        if(b.id==='back'){state='MODE';stateT=0;}else levelPick();
+        return;
+      }
+    }
+    levelDrag={x:x,y:y,from:levelScroll,moved:false};
+    return;
+  }
+  var box=levelListBox();
+  if(y<box.y-6||y>box.y+box.h+6)return;
+  for(i=0;i<rows.length;i++){
+    var r=rows[i];
+    if(x>=r.x&&x<=r.x+r.w&&y>=r.y&&y<=r.y+r.h){
+      if(levelIdx!==i){levelIdx=i;SFX.selectMove();}
       return;
     }
   }
@@ -5047,10 +5218,10 @@ function step(){
     return;
   }
   if(state==='LEVELS'){
-    var lc=levelCards();
-    if(pressed('left')&&levelIdx>0){levelIdx--;SFX.selectMove();}
-    if(pressed('right')&&levelIdx<lc.length-1){levelIdx++;SFX.selectMove();}
-    if(pressed('pause')){state='MODE';stateT=0;return;}
+    var lastRow=STAGES.length-1;
+    if((pressed('up')||pressed('left'))&&levelIdx>0){levelIdx--;levelScrollTo(levelIdx);SFX.selectMove();}
+    if((pressed('down')||pressed('right'))&&levelIdx<lastRow){levelIdx++;levelScrollTo(levelIdx);SFX.selectMove();}
+    if(pressed('pause')){levelDrag=null;state='MODE';stateT=0;return;}
     if(pressed('fire')||pressed('start'))levelPick();
     tapped=false;
     return;
@@ -5067,7 +5238,7 @@ function step(){
         try{typed=window.prompt('Enter your friend\'s game code');}catch(err){}
         if(typed){Net.join(typed);selIdx=1;state='SELECT';}
       }
-      else {Net.reset();levelIdx=0;state='LEVELS';stateT=0;}
+      else {Net.reset();levelIdx=0;levelScroll=0;levelDrag=null;state='LEVELS';stateT=0;}
     }
     return;
   }
@@ -5117,15 +5288,27 @@ function step(){
     /* anyStart is the snapshot taken at the top of the frame. Reading `tapped`
        here instead would never see a touch: it is cleared further up step(),
        which is why these screens used to answer only to the keyboard. */
-    if(state==='GAMEOVER'&&tokens>0&&stateT>40&&(pressed('fire')||pressed('start'))){
-      /* Insert token, continue. One token, one life, and the stage carries on
-         from the checkpoint rather than starting over. */
-      tokens--;lives=1;
-      SFX.selectConfirm();tone(880,.1,'triangle',.05,1320);
-      respawnAtCheckpoint();
-      return;
+    if(state==='GAMEOVER'&&stateT>40){
+      if(tokens>0&&(pressed('fire')||pressed('start'))||overTap===1){
+        /* Insert token, continue. One token, one life, and the stage carries on
+           from the checkpoint rather than starting over. */
+        overTap=0;
+        if(tokens>0){
+          tokens--;lives=1;
+          SFX.selectConfirm();tone(880,.1,'triangle',.05,1320);
+          respawnAtCheckpoint();
+          return;
+        }
+      }
+      if(pressed('pause')||overTap===2){
+        // Walking away is a choice too, and should not need a token to make.
+        overTap=0;
+        if(score>hiScore)hiScore=score;Music.menu();state='MODE';stateT=0;tapped=false;
+        return;
+      }
     }
-    if(stateT>60&&anyStart){
+    overTap=0;
+    if(stateT>60&&anyStart&&(state==='WIN'||tokens<=0)){
       if(score>hiScore)hiScore=score;Music.menu();state='TITLE';stateT=0;
     }
     return;
@@ -5235,17 +5418,20 @@ function render(){
   if(state==='GAMEOVER'){
     overlay('GAME OVER','SCORE '+score,
       tokens>0?'':continuePrompt(),'#e05a4a');
-    if(tokens>0){
-      /* An arcade never asked you to start again while you still had money. */
-      var gw=view.cssW,gy2=view.cssH*0.60;
-      var pulse=0.6+0.4*Math.abs(Math.sin(tick*0.09));
-      txt('INSERT TOKEN TO CONTINUE',gw/2,gy2,Math.min(20,gw*0.034),
-        'rgba(255,214,106,'+pulse+')','center');
-      txt('YOU HAVE '+tokens+' — ONE BUYS ONE LIFE, RIGHT WHERE YOU FELL',
-        gw/2,gy2+24,Math.min(12,gw*0.021),'#a89a72','center','Arial,sans-serif');
-      txt(matchMedia('(pointer:coarse)').matches?'TAP TO SPEND ONE':'X OR ENTER TO SPEND ONE',
-        gw/2,gy2+44,Math.min(11,gw*0.019),'#7d8a70','center','Arial,sans-serif');
+    var gw=view.cssW,bs2=gameOverButtons(),bi;
+    for(bi=0;bi<bs2.length;bi++){
+      var gb=bs2[bi],liveB=(gb.id!=='token')||tokens>0;
+      g.fillStyle=liveB?(gb.id==='token'?'rgba(232,194,90,.15)':'rgba(255,255,255,.05)'):'rgba(255,255,255,.02)';
+      rr(g,gb.x,gb.y,gb.w,gb.h,8);g.fill();
+      g.strokeStyle=liveB?(gb.id==='token'?'rgba(255,214,106,'+(0.55+0.35*Math.abs(Math.sin(tick*0.09)))+')':'rgba(200,196,180,.5)'):'#2a2a28';
+      g.lineWidth=2;rr(g,gb.x,gb.y,gb.w,gb.h,8);g.stroke();
+      txt(gb.label,gb.x+gb.w/2,gb.y+gb.h*0.46,Math.min(15,gb.w*0.10),
+        liveB?'#efe6d2':'#5a544a','center');
+      txt(gb.sub,gb.x+gb.w/2,gb.y+gb.h*0.76,Math.min(10.5,gb.w*0.062),
+        liveB?'#8f9b87':'#4a453e','center','Arial,sans-serif');
     }
+    txt(tokens>0?'YOU HAVE '+tokens+' TOKEN'+(tokens===1?'':'S'):'NO TOKENS LEFT',
+      gw/2,bs2[0].y-14,Math.min(12,gw*0.021),tokens>0?'#e8c25a':'#8a6a20','center','Arial,sans-serif');
   }
   if(state==='WIN'){
     overlay('P.C.U.-9 IS SCRAP','FINAL SCORE '+score,continuePrompt(),'#e8c25a');
