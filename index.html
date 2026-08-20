@@ -809,13 +809,64 @@ var STAGE_FLOW=[
  {inlet:'breached door',exit:'boss',route:'boss',label:'ELIMINATE P.C.U.-9',loot:['P.C.U.-9 core']}
 ];
 
+/* ==================== SAVE ==================== */
+/* Everything the game remembers between sessions, in one record under one key.
+   Earlier builds kept a key per value; those are folded in the first time this
+   runs, so a player who already unlocked half the campaign keeps it. The old
+   keys are read and then left alone rather than deleted — an older tab may
+   still be open on the same machine, and they cost nothing.
+
+   Storage is never guaranteed: a private window or a file:// origin refuses it,
+   and a full disk throws on write. Every access here is wrapped, and a refusal
+   simply means the game forgets, which is what it did before any of this. */
+var SAVE_KEY='rat.save.v1', SAVE_VERSION=1;
+var Save=(function(){
+  var d={version:SAVE_VERSION,cleared:{},tokens:null,hiScore:0,charScale:null,
+         furthest:1,bro:0};
+  function shelf(){try{return window.localStorage;}catch(err){return null;}}
+  function get(k){var s=shelf();if(!s)return null;try{return s.getItem(k);}catch(err){return null;}}
+  function parse(raw){try{var o=JSON.parse(raw);return (o&&typeof o==='object')?o:null;}catch(err){return null;}}
+  function whole(v,lo){return (typeof v==='number'&&isFinite(v))?Math.max(lo,Math.floor(v)):null;}
+  /* Take only what is recognisably ours. A record hand-edited, truncated by a
+     dying tab or written by a future build should leave the game playable. */
+  function adopt(o){
+    if(!o)return;
+    if(o.cleared&&typeof o.cleared==='object')d.cleared=o.cleared;
+    var n;
+    if((n=whole(o.tokens,0))!==null)d.tokens=n;
+    if((n=whole(o.hiScore,0))!==null)d.hiScore=n;
+    if((n=whole(o.furthest,1))!==null)d.furthest=n;
+    if(typeof o.charScale==='number'&&isFinite(o.charScale))d.charScale=o.charScale;
+    if(o.bro===0||o.bro===1)d.bro=o.bro;
+  }
+  function flush(){
+    var s=shelf();if(!s)return;
+    try{s.setItem(SAVE_KEY,JSON.stringify(d));}catch(err){}
+  }
+  var API={
+    d:d,
+    set:function(k,v){if(d[k]===v)return;d[k]=v;flush();},
+    touch:flush
+  };
+  var found=parse(get(SAVE_KEY));
+  if(found&&found.version===SAVE_VERSION)adopt(found);
+  else {adopt({cleared:parse(get('rat.cleared')),charScale:parseFloat(get('rat.charScale'))});flush();}
+  return API;
+})();
+
 /* ==================== STATE ==================== */
-var state='TITLE', stage=1, score=0, lives=3, selIdx=0, hiScore=0,aimHelp=true;
+var state='TITLE', stage=1, score=0, lives=3, selIdx=Save.d.bro, hiScore=Save.d.hiScore,aimHelp=true;
 /* Tokens are the brothers' arcade money: brass subway slugs prised out of the
    turnstiles they live under. One buys one more life, and the game picks up
    where it dropped you rather than sending you back to the start — which is what
    a token has bought in an arcade since arcades existed. */
-var TOKEN_START=5, tokens=TOKEN_START;
+/* The wallet carries over between sessions, so hoarding them means something.
+   It is topped back up to TOKEN_FLOOR when a run starts, because a player who
+   spent their last slug last night should still be able to play tonight. */
+var TOKEN_START=5, TOKEN_FLOOR=3;
+var tokens=(Save.d.tokens===null)?TOKEN_START:Save.d.tokens;
+function setTokens(n){tokens=Math.max(0,n);Save.set('tokens',tokens);}
+function recordScore(){if(score>hiScore){hiScore=score;Save.set('hiScore',hiScore);}}
 var pendingStage=0, overTap=0;
 var modeIdx=0, MODES=['LOCAL','CREATE','JOIN','LEVELS'];
 var level=null, cam={x:0,y:0,shake:0,zoom:1}, tick=0, stateT=0,introTypeMark=-1;
@@ -855,8 +906,8 @@ var SCALE_MIN=0.5,SCALE_MAX=2,SCALE_STEP=0.05,charScale=1.75;
    bump — they are icons, not bodies. Level pacing (gap widths, jump physics)
    is deliberately NOT scaled, so the traversal still plays exactly as tuned. */
 var BUILD_SCALE=1.75, ITEM_SCALE=1.25, ITEM_D=Math.round(26*ITEM_SCALE);
-try{var storedScale=parseFloat(localStorage.getItem('rat.charScale'));
-  if(storedScale>=SCALE_MIN&&storedScale<=SCALE_MAX)charScale=storedScale;}catch(err){}
+var storedScale=Save.d.charScale;
+if(storedScale>=SCALE_MIN&&storedScale<=SCALE_MAX)charScale=storedScale;
 
 function scaleBox(o,bw,bh,centred){
   var nw=bw*charScale,nh=bh*charScale;
@@ -869,7 +920,7 @@ function applyCharScale(){
 }
 function setCharScale(v){
   charScale=clamp(Math.round(v*100)/100,SCALE_MIN,SCALE_MAX);
-  try{localStorage.setItem('rat.charScale',charScale);}catch(err){}
+  Save.set('charScale',charScale);
   applyCharScale();
   if(sizeVal)sizeVal.textContent=charScale.toFixed(2)+'×';
 }
@@ -1363,6 +1414,8 @@ function buildLevel(n){
 }
 function startStage(n){
   stage=n; level=buildLevel(n);
+  // How far the brothers have ever got, so the job list opens where they left off.
+  if(n>Save.d.furthest)Save.set('furthest',n);
   bullets=[];ebullets=[];enemies=[];items=[];parts=[];nades=[];swings=[];
   decals=[];flashes=[];lights=[];marks=[];
   var i;for(i=0;i<level.items.length;i++)items.push(level.items[i]);
@@ -1597,19 +1650,11 @@ function hurtPlayer(d,srcX){
    which is exactly what a token buys. */
 /* What the player has actually finished, kept between sessions so the level
    menu can offer it again. */
-function clearedStages(){
-  try{
-    var raw=localStorage.getItem('rat.cleared');
-    if(!raw)return {};
-    var o=JSON.parse(raw);
-    return (o&&typeof o==='object')?o:{};
-  }catch(err){return {};}
-}
+function clearedStages(){return Save.d.cleared;}
 function markStageCleared(n){
-  var c=clearedStages();
+  var c=Save.d.cleared;
   if(c[n])return;
-  c[n]=1;
-  try{localStorage.setItem('rat.cleared',JSON.stringify(c));}catch(err){}
+  c[n]=1;Save.touch();
 }
 function stageUnlocked(n){return n===1||!!clearedStages()[n];}
 function respawnAtCheckpoint(){
@@ -2784,7 +2829,7 @@ function updateProjectiles(){
         burst(it.x+13,it.y+13,'#ffd94a',12,3);}
       else if(it.kind==='nade'){P.nades=Math.min(9,P.nades+3);SFX.pick();score+=50;}
       else if(it.kind==='token'){
-        tokens++;score+=250;SFX.pick();
+        setTokens(tokens+1);score+=250;SFX.pick();
         tone(880,.09,'triangle',.05,1320);tone(1180,.12,'triangle',.04,1560);
         burst(it.x+it.w/2,it.y+it.h/2,'#ffd76a',12,3);
         addLight(it.x+it.w/2,it.y+it.h/2,90,'#ffd76a',16);
@@ -5231,14 +5276,25 @@ function step(){
     if(pressed('right')&&modeIdx<MODES.length-1){modeIdx++;SFX.selectMove();}
     if(pressed('fire')||pressed('start')||tapped||selectDeployTap){
       tapped=false;selectDeployTap=false;SFX.selectConfirm();
-      if(MODES[modeIdx]==='LOCAL'){Net.reset();selIdx=0;state='SELECT';}
+      /* Alone, you start on whichever brother you played last. In a room the
+         brothers go by role — host is Rocco, guest is Vinnie — so the
+         preference does not get a say. */
+      if(MODES[modeIdx]==='LOCAL'){Net.reset();selIdx=Save.d.bro;state='SELECT';}
       else if(MODES[modeIdx]==='CREATE'){Net.host();selIdx=0;state='SELECT';}
       else if(MODES[modeIdx]==='JOIN'){
         var typed=null;
         try{typed=window.prompt('Enter your friend\'s game code');}catch(err){}
         if(typed){Net.join(typed);selIdx=1;state='SELECT';}
       }
-      else {Net.reset();levelIdx=0;levelScroll=0;levelDrag=null;state='LEVELS';stateT=0;}
+      else {
+        /* Open on the last job the brothers took rather than at the top: after
+           eight stages, the one you want is never the first one. */
+        Net.reset();levelIdx=0;levelScroll=0;levelDrag=null;
+        for(var lj=STAGES.length;lj>=1;lj--)
+          if(lj<=Save.d.furthest&&stageUnlocked(lj)){levelIdx=lj-1;break;}
+        levelScrollTo(levelIdx);
+        state='LEVELS';stateT=0;
+      }
     }
     return;
   }
@@ -5249,7 +5305,9 @@ function step(){
     if(pressed('left')&&selIdx!==0){selIdx=0;SFX.selectMove();Net.say({t:'sel',bro:selIdx});}
     if(pressed('right')&&selIdx!==1){selIdx=1;SFX.selectMove();Net.say({t:'sel',bro:selIdx});}
     if(pressed('fire')||pressed('start')||tapped||selectDeployTap){
-      tapped=false;selectDeployTap=false;SFX.selectConfirm();makePlayer(selIdx);lives=3;score=0;tokens=TOKEN_START;
+      tapped=false;selectDeployTap=false;SFX.selectConfirm();makePlayer(selIdx);lives=3;score=0;
+      if(!Net.on())Save.set('bro',selIdx);
+      setTokens(Math.max(tokens,TOKEN_FLOOR));
       campaignSeed=(Date.now()^(Math.random()*0x7fffffff))>>>0;
       campaign=CAMPAIGNS[campaignSeed%CAMPAIGNS.length];
       startStage(pendingStage||1);pendingStage=0;
@@ -5269,7 +5327,7 @@ function step(){
     stateT++;P.vx=0;P.vy=0;P.y+=P.exitDown?2.1:-2.1;P.anim+=.18;updateCamera();Music.update();
     if(stateT>58){
       state='CLEAR';stateT=0;
-      tokens+=2;markStageCleared(stage);
+      setTokens(tokens+2);markStageCleared(stage);
     }
     return;
   }
@@ -5277,7 +5335,7 @@ function step(){
   if(state==='DEAD'){
     stateT++;updateProjectiles();
     if(stateT>90){
-      if(lives<=0){state='GAMEOVER';stateT=0;if(score>hiScore)hiScore=score;}
+      if(lives<=0){state='GAMEOVER';stateT=0;recordScore();}
       else respawnAtCheckpoint();
     }
     return;
@@ -5294,7 +5352,7 @@ function step(){
            from the checkpoint rather than starting over. */
         overTap=0;
         if(tokens>0){
-          tokens--;lives=1;
+          setTokens(tokens-1);lives=1;
           SFX.selectConfirm();tone(880,.1,'triangle',.05,1320);
           respawnAtCheckpoint();
           return;
@@ -5303,13 +5361,13 @@ function step(){
       if(pressed('pause')||overTap===2){
         // Walking away is a choice too, and should not need a token to make.
         overTap=0;
-        if(score>hiScore)hiScore=score;Music.menu();state='MODE';stateT=0;tapped=false;
+        recordScore();Music.menu();state='MODE';stateT=0;tapped=false;
         return;
       }
     }
     overTap=0;
     if(stateT>60&&anyStart&&(state==='WIN'||tokens<=0)){
-      if(score>hiScore)hiScore=score;Music.menu();state='TITLE';stateT=0;
+      recordScore();Music.menu();state='TITLE';stateT=0;
     }
     return;
   }

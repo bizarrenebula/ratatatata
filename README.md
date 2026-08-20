@@ -14,12 +14,16 @@ Then open <http://localhost:8000>.
 
 ## Tokens
 
-The brothers' money is brass turnstile slugs. You start a run with five, a
-mini-boss drops one when it goes down, and finishing a job pays two. On the game
-over screen a token buys a life and puts you back **where you fell**, not at the
-start of the stage — which is what a token has bought in an arcade since arcades
+The brothers' money is brass turnstile slugs. You start with five, a mini-boss
+drops one when it goes down, and finishing a job pays two. On the game over
+screen a token buys a life and puts you back **where you fell**, not at the start
+of the stage — which is what a token has bought in an arcade since arcades
 existed. Quitting to the menu is the other door there, and it never costs
 anything.
+
+The wallet is yours to keep: it carries over between sessions, so slugs are worth
+hoarding. If you spend down to nothing, starting a fresh run tops you back up to
+three — a bad night should not lock you out of the next one.
 
 ## Select a job
 
@@ -31,8 +35,21 @@ its one-line slogan. Three or four are on screen; drag, scroll or use the arrow
 keys for the rest.
 
 The ones you have finished can be run again; the rest carry a padlock. Pick one,
-press Continue, choose your brother, and the job starts on your confirmation.
-What you have cleared is remembered between sessions.
+press Continue, choose your brother, and the job starts on your confirmation. The
+list opens on the last job you took rather than at the top.
+
+## What the game remembers
+
+Progress lives in one record in the browser's `localStorage`, under
+`rat.save.v1`: the jobs you have cleared, your token wallet, your best score, the
+furthest stage you reached and which brother you played last. It is written the
+moment each of those changes, so closing the tab mid-run loses only the run.
+
+Storage is per-browser and per-origin — a different browser, a different machine
+or a private window is a different player, with a fresh save. Where the browser
+refuses storage outright, the game plays exactly as before and simply forgets
+when you leave. Builds before this kept a key per value; those are folded into
+the record the first time this one runs, so nothing already unlocked is lost.
 
 ## Two players
 
