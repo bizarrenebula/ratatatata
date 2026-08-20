@@ -18,12 +18,18 @@ The brothers' money is brass turnstile slugs. You start a run with five, a
 mini-boss drops one when it goes down, and finishing a job pays two. On the game
 over screen a token buys a life and puts you back **where you fell**, not at the
 start of the stage — which is what a token has bought in an arcade since arcades
-existed.
+existed. Quitting to the menu is the other door there, and it never costs
+anything.
 
 ## Select a job
 
-Every stage is listed with its own thumbnail — painted from that stage's real
-sky, silhouette and ground colours — its tagline and what you are there to do.
+A scrolled column of jobs. Each row carries a small square of the place itself —
+its own sky and ground colours with the thing that stage is made of drawn on top:
+pipes for the sewers, a lamp over a manhole downtown, stacked crates in the
+warehouse, a vent grille for the way into the tower — beside the level's name and
+its one-line slogan. Three or four are on screen; drag, scroll or use the arrow
+keys for the rest.
+
 The ones you have finished can be run again; the rest carry a padlock. Pick one,
 press Continue, choose your brother, and the job starts on your confirmation.
 What you have cleared is remembered between sessions.
