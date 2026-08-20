@@ -349,6 +349,12 @@ function padTouch(e){
 var tapped=false,selectDeployTap=false;
 function stageTouch(e){
   e.preventDefault();initAudio();if(!landscapeAsked)requestLandscape();
+  if(state==='LEVELS'&&e.touches&&e.touches.length){
+    var lr=gcv.getBoundingClientRect();
+    levelPointer((e.touches[0].clientX-lr.left)/lr.width*view.cssW,
+                 (e.touches[0].clientY-lr.top)/lr.height*view.cssH);
+    return;
+  }
   if(state==='MODE'&&e.touches&&e.touches.length){
     var mr=gcv.getBoundingClientRect(),mx=(e.touches[0].clientX-mr.left)/mr.width*view.cssW;
     var my=(e.touches[0].clientY-mr.top)/mr.height*view.cssH,mb=modeBoxes(),mi;
@@ -376,6 +382,11 @@ function stageTouch(e){
 gcv.addEventListener('touchstart',stageTouch,{passive:false});
 gcv.addEventListener('mousedown',function(e){
   initAudio();
+  if(state==='LEVELS'){
+    var lr=gcv.getBoundingClientRect();
+    levelPointer((e.clientX-lr.left)/lr.width*view.cssW,(e.clientY-lr.top)/lr.height*view.cssH);
+    return;
+  }
   if(state==='MODE'){
     var mr=gcv.getBoundingClientRect(),mx=(e.clientX-mr.left)/mr.width*view.cssW;
     var my=(e.clientY-mr.top)/mr.height*view.cssH,mb=modeBoxes(),mi;
@@ -774,7 +785,13 @@ var STAGE_FLOW=[
 
 /* ==================== STATE ==================== */
 var state='TITLE', stage=1, score=0, lives=3, selIdx=0, hiScore=0,aimHelp=true;
-var modeIdx=0, MODES=['LOCAL','CREATE','JOIN'];
+/* Tokens are the brothers' arcade money: brass subway slugs prised out of the
+   turnstiles they live under. One buys one more life, and the game picks up
+   where it dropped you rather than sending you back to the start — which is what
+   a token has bought in an arcade since arcades existed. */
+var TOKEN_START=5, tokens=TOKEN_START;
+var pendingStage=0;
+var modeIdx=0, MODES=['LOCAL','CREATE','JOIN','LEVELS'];
 var level=null, cam={x:0,y:0,shake:0,zoom:1}, tick=0, stateT=0,introTypeMark=-1;
 var campaignSeed=1,campaign=null;
 var CAMPAIGNS=[
@@ -1486,6 +1503,8 @@ function damageEnemy(e,d){
     gore(e.x+e.w/2,e.y+e.h/2,e.t==='cat'?18:11);
     burst(e.x+e.w/2,e.y+e.h/2,e.t==='cat'?'#e0954a':e.t==='bat'?'#7b57a8':'#a6a6b0',9,4);
     SFX.enemyDeath(e.t,!!e.miniBoss);
+    // What a mini-boss is really carrying is its token.
+    if(e.miniBoss)items.push({x:e.x+e.w/2-ITEM_D/2,y:e.y-6,w:ITEM_D,h:ITEM_D,kind:'token',bob:0});
     var dropW=e.t==='mouse'?'knife':e.t==='cat'?'bazooka':e.t==='weasel'?'pistol':e.t==='lizard'?'machinegun':null;
     if(dropW)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'weapon',wep:dropW,bob:0});
     else if(e.t==='bat')items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
@@ -1547,6 +1566,40 @@ function hurtPlayer(d,srcX){
   if(P.onGround)P.vy=-4.2;
   gore(P.x+P.w/2,P.y+P.h/2,6);
   if(P.hp<=0){P.hp=0;killPlayer();}
+}
+/* Back on your feet where you fell — the same landing a spare life gives you,
+   which is exactly what a token buys. */
+/* What the player has actually finished, kept between sessions so the level
+   menu can offer it again. */
+function clearedStages(){
+  try{
+    var raw=localStorage.getItem('rat.cleared');
+    if(!raw)return {};
+    var o=JSON.parse(raw);
+    return (o&&typeof o==='object')?o:{};
+  }catch(err){return {};}
+}
+function markStageCleared(n){
+  var c=clearedStages();
+  if(c[n])return;
+  c[n]=1;
+  try{localStorage.setItem('rat.cleared',JSON.stringify(c));}catch(err){}
+}
+function stageUnlocked(n){return n===1||!!clearedStages()[n];}
+function respawnAtCheckpoint(){
+  P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.airBoost=0;P.onStair=null;
+  P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
+  var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;
+  for(var ei=enemies.length-1;ei>=0;ei--){
+    var nearby=enemies[ei];
+    // Never erase enemies required to unlock the stage during respawn cleanup.
+    if(!nearby.miniBoss&&!nearby.objective&&Math.abs(nearby.x-sp.x)<300){
+      burst(nearby.x+12,nearby.y+12,'#7a7a7a',6,3);enemies.splice(ei,1);
+    }
+  }
+  if(WEAPONS[P.weapon].ammo!==Infinity&&P.ammo<=0)equipWeapon('scratch');
+  P.nades=Math.max(P.nades,3);ebullets=[];nades=[];
+  state='PLAY';stateT=0;
 }
 function killPlayer(){
   P.dead=true;P.nadeReady=false;P.nadeCharge=0;lives--;SFX.die();
@@ -2704,6 +2757,12 @@ function updateProjectiles(){
       else if(it.kind==='cheese'){P.hp=Math.min(P.maxHp,P.hp+38);SFX.cheese();score+=50;
         burst(it.x+13,it.y+13,'#ffd94a',12,3);}
       else if(it.kind==='nade'){P.nades=Math.min(9,P.nades+3);SFX.pick();score+=50;}
+      else if(it.kind==='token'){
+        tokens++;score+=250;SFX.pick();
+        tone(880,.09,'triangle',.05,1320);tone(1180,.12,'triangle',.04,1560);
+        burst(it.x+it.w/2,it.y+it.h/2,'#ffd76a',12,3);
+        addLight(it.x+it.w/2,it.y+it.h/2,90,'#ffd76a',16);
+      }
       else {
         var pickupIsStronger=WEAPONS[it.wep].power>WEAPONS[P.weapon].power;
         equipWeapon(it.wep,WEAPONS[it.wep].ammo,pickupIsStronger);SFX.pick();score+=100;
@@ -4027,6 +4086,18 @@ function paintItems(){
       g.fillStyle='#c98a12';
       ell(g,x+3,y+4,3,2.6);g.fill();ell(g,x-5,y+7,2.2,1.9);g.fill();ell(g,x+9,y+1,2,1.7);g.fill();
       g.fillStyle='rgba(255,255,255,.35)';g.fillRect(x-14,y+9,28,2);
+    } else if(it.kind==='token'){
+      /* A brass turnstile slug, square-punched, with a bite out of the rim —
+         the brothers' money, and the thing an arcade has always taken. */
+      g.fillStyle=lin(g,x-10,y-10,x+9,y+10,[[0,'#ffe9a2'],[0.5,'#e0aa3c'],[1,'#8a6018']]);
+      ell(g,x,y,10,10);g.fill();ink(g,'rgba(40,26,6,.85)',2);
+      g.fillStyle='rgba(120,80,16,.55)';ell(g,x,y,6.6,6.6);g.fill();
+      g.fillStyle='#3a2708';rr(g,x-2.4,y-2.4,4.8,4.8,1);g.fill();
+      g.fillStyle='#2a1c05';                                   // the bitten rim
+      g.beginPath();g.arc(x+8.4,y-5.2,3.1,0,6.283);g.fill();
+      g.fillStyle='rgba(255,255,255,.45)';ell(g,x-3.6,y-4,2.6,2);g.fill();
+      g.strokeStyle='rgba(255,246,214,'+(0.35+0.3*Math.sin(tick*0.12+it.bob))+')';
+      g.lineWidth=1.4;ell(g,x,y,12.5,12.5);g.stroke();
     } else if(it.kind==='nade'){
       g.fillStyle=lin(g,x-9,y-9,x+9,y+9,[[0,'#6b7d46'],[1,'#2c3520']]);
       ell(g,x,y+2,9,10);g.fill();ink(g,'rgba(6,8,4,.8)',2);
@@ -4350,6 +4421,14 @@ function paintHUD(){
     g.beginPath();g.arc(w-pad-8-i*15,ny,5,0,6.283);g.fill();
     g.fillStyle='#8a6a20';g.beginPath();g.arc(w-pad-11-i*15,ny-4,2,0,6.283);g.fill();
   }
+  /* Tokens sit under the lives, because that is what they are: the lives you
+     have not spent yet. */
+  var tx=w-pad-10,ty=ny+15;
+  g.fillStyle=lin(g,tx-7,ty-7,tx+6,ty+7,[[0,'#ffe9a2'],[1,'#9a6c1e']]);
+  g.beginPath();g.arc(tx,ty,6,0,6.283);g.fill();
+  g.strokeStyle='rgba(40,26,6,.8)';g.lineWidth=1.4;g.stroke();
+  g.fillStyle='#3a2708';g.fillRect(tx-1.6,ty-1.6,3.2,3.2);
+  txt('x'+tokens,tx-13,ty+4,12,tokens>0?'#e8c25a':'#8a6a20','right');
   if(level.objective&&!level.boss){
     var ob=level.objective,prog='';
     var ow=Math.min(w-120,420),ox=(w-ow)/2,oy=hh+7;
@@ -4426,6 +4505,122 @@ function titleHeroAction(offset){
     var jt=(p-270)/68;a.jump=Math.sin(jt*Math.PI)*42;a.walk+=jt*5;
   } else if(p>=354&&p<404)a.fire=(p%10)<5?6:0;
   return a;
+}
+
+/* ==================== LEVEL SELECT ====================
+   Every job the brothers have done is listed; the ones they have finished can be
+   taken again. A thumbnail is worth more than a name here, so each card paints
+   the stage's own sky, silhouette and ground from the same palette the stage
+   itself is built from — it is the level, in miniature, not a picture of one. */
+var levelIdx=0, levelScroll=0;
+function levelCards(){
+  var w=view.cssW,h=view.cssH,pad=Math.max(10,w*0.016);
+  var cols=w>820?4:2,rows=Math.ceil(STAGES.length/cols);
+  var cw=(w-pad*(cols+1))/cols, chh=Math.min((h*0.62-pad*(rows-1))/rows,h*0.30);
+  var out=[],i;
+  for(i=0;i<STAGES.length;i++)
+    out.push({x:pad+(i%cols)*(cw+pad),y:h*0.17+Math.floor(i/cols)*(chh+pad),w:cw,h:chh,n:i+1});
+  return out;
+}
+function levelButtons(){
+  var w=view.cssW,h=view.cssH,bw=Math.min(w*0.26,260),bh=Math.min(38,h*0.07);
+  return [
+    {id:'back',label:'BACK',x:w*0.5-bw-8,y:h-bh-12,w:bw,h:bh},
+    {id:'go',label:'CONTINUE',x:w*0.5+8,y:h-bh-12,w:bw,h:bh}
+  ];
+}
+/* The stage painted small, from its own colours. */
+function drawLevelThumb(r,n){
+  var th=STAGES[n-1];
+  g.save();
+  g.beginPath();rr(g,r.x,r.y,r.w,r.h,6);g.clip();
+  g.fillStyle=lin(g,r.x,r.y,r.x,r.y+r.h,[[0,th.sky[0]],[0.55,th.sky[1]],[1,th.sky[2]]]);
+  g.fillRect(r.x,r.y,r.w,r.h);
+  var gy=r.y+r.h*0.74,i;
+  g.fillStyle=th.sil;
+  for(i=0;i<5;i++){
+    var bx=r.x+r.w*(i*0.23-0.05),bw2=r.w*0.19,bh2=r.h*(0.20+((i*37)%5)*0.07);
+    g.fillRect(bx,gy-bh2,bw2,bh2);
+  }
+  g.fillStyle=th.sil2;
+  for(i=0;i<4;i++){
+    var cx2=r.x+r.w*(i*0.29-0.02),ch2=r.h*(0.14+((i*53)%4)*0.05);
+    g.fillRect(cx2,gy-ch2,r.w*0.16,ch2);
+  }
+  g.fillStyle=hexA(th.fog,0.22);g.fillRect(r.x,gy-r.h*0.30,r.w,r.h*0.30);
+  g.fillStyle=th.gnd;g.fillRect(r.x,gy,r.w,r.h-(gy-r.y));
+  g.fillStyle=th.gtop;g.fillRect(r.x,gy,r.w,Math.max(2,r.h*0.035));
+  g.fillStyle=th.lamp;
+  g.beginPath();g.arc(r.x+r.w*0.76,gy-r.h*0.26,r.h*0.035,0,6.283);g.fill();
+  g.fillStyle=rad(g,r.x+r.w*0.76,gy-r.h*0.26,1,r.h*0.22,[[0,hexA(th.lamp,0.35)],[1,'rgba(0,0,0,0)']]);
+  g.fillRect(r.x,r.y,r.w,r.h);
+  g.restore();
+}
+function drawLevels(){
+  var w=view.cssW,h=view.cssH,cards=levelCards(),i;
+  g.fillStyle=lin(g,0,0,0,h,[[0,'#0c1014'],[1,'#05080a']]);g.fillRect(0,0,w,h);
+  txt('SELECT A JOB',w*0.5,h*0.085,Math.min(30,w*0.05),'#e8c25a','center');
+  txt('THE ONES YOU HAVE FINISHED CAN BE RUN AGAIN',w*0.5,h*0.085+20,
+    Math.min(12,w*0.021),'#7d8a70','center','Arial,sans-serif');
+  for(i=0;i<cards.length;i++){
+    var c=cards[i],n=c.n,open=stageUnlocked(n),sel=(levelIdx===i),th=STAGES[n-1],fl=STAGE_FLOW[n-1];
+    var thumbH=c.h*0.52;
+    g.save();
+    g.globalAlpha=open?1:0.34;
+    drawLevelThumb({x:c.x,y:c.y,w:c.w,h:thumbH},n);
+    g.fillStyle=open?'rgba(10,13,15,.72)':'rgba(10,13,15,.85)';
+    g.fillRect(c.x,c.y+thumbH,c.w,c.h-thumbH);
+    txt(n+'. '+th.name,c.x+7,c.y+thumbH+15,Math.min(13,c.w*0.085),open?'#efe6d2':'#6b7268','left');
+    txt('"'+th.sub+'"',c.x+7,c.y+thumbH+29,Math.min(10.5,c.w*0.062),'#8f9b87','left','Arial,sans-serif');
+    txt(fl?fl.label:'',c.x+7,c.y+thumbH+43,Math.min(10,c.w*0.058),open?'#8fbf6a':'#5c6b4a','left','Arial,sans-serif');
+    g.restore();
+    if(!open){
+      // A padlock, so a locked job reads as locked and not as broken.
+      var lx=c.x+c.w-18,ly=c.y+thumbH-16;
+      g.fillStyle='rgba(230,222,200,.55)';rr(g,lx-6,ly,12,9,2);g.fill();
+      g.strokeStyle='rgba(230,222,200,.55)';g.lineWidth=2;
+      g.beginPath();g.arc(lx,ly,4,Math.PI,0);g.stroke();
+    }
+    g.strokeStyle=sel?(open?'#e8c25a':'#7a4a44'):'#2c3230';g.lineWidth=sel?3:1.5;
+    rr(g,c.x,c.y,c.w,c.h,6);g.stroke();
+  }
+  var bs=levelButtons(),sel2=cards[levelIdx],canGo=sel2&&stageUnlocked(sel2.n);
+  for(i=0;i<bs.length;i++){
+    var b=bs[i],live=(b.id!=='go')||canGo;
+    g.fillStyle=live?'rgba(201,162,74,.13)':'rgba(255,255,255,.02)';
+    rr(g,b.x,b.y,b.w,b.h,8);g.fill();
+    g.strokeStyle=live?'rgba(232,194,90,.75)':'#232826';g.lineWidth=2;
+    rr(g,b.x,b.y,b.w,b.h,8);g.stroke();
+    txt(b.label,b.x+b.w/2,b.y+b.h*0.64,Math.min(15,b.w*0.11),live?'#efe6d2':'#4a524e','center');
+  }
+  txt(matchMedia('(pointer:coarse)').matches?'TAP A JOB, THEN CONTINUE':'← → to pick  •  X to continue  •  ESC to go back',
+    w*0.5,h-Math.min(38,h*0.07)-22,Math.min(11.5,w*0.019),'#5c6b4a','center','Arial,sans-serif');
+}
+function levelPick(){
+  var cards=levelCards(),c=cards[levelIdx];
+  if(!c||!stageUnlocked(c.n))return;
+  /* Chosen here, confirmed on the character screen: the job is only started when
+     the player says which brother is taking it. */
+  pendingStage=c.n;SFX.selectConfirm();
+  Music.menu();state='SELECT';stateT=0;tapped=false;
+}
+function levelPointer(x,y){
+  var cards=levelCards(),bs=levelButtons(),i;
+  for(i=0;i<cards.length;i++){
+    var c=cards[i];
+    if(x>=c.x&&x<=c.x+c.w&&y>=c.y&&y<=c.y+c.h){
+      if(levelIdx!==i){levelIdx=i;SFX.selectMove();}
+      return;
+    }
+  }
+  for(i=0;i<bs.length;i++){
+    var b=bs[i];
+    if(x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h){
+      if(b.id==='back'){SFX.selectMove();state='MODE';stateT=0;}
+      else levelPick();
+      return;
+    }
+  }
 }
 function drawTitle(){
   var w=view.cssW,h=view.cssH,i;
@@ -4527,9 +4722,12 @@ function seatTag(label,x,y,hue,cw,right){
 }
 /* The lobby's front door: play alone, open a room, or walk into one. */
 function modeBoxes(){
-  var w=view.cssW,h=view.cssH,bw=Math.min(w*0.26,300),gap=Math.min(w*0.035,34);
-  var total=bw*3+gap*2,x0=(w-total)/2,bh=Math.min(h*0.30,190),y=h*0.44;
-  return [0,1,2].map(function(i){return {x:x0+i*(bw+gap),y:y,w:bw,h:bh};});
+  var w=view.cssW,h=view.cssH,n=MODES.length;
+  var bw=Math.min(w*0.21,250),gap=Math.min(w*0.028,28);
+  var total=bw*n+gap*(n-1),x0=(w-total)/2,bh=Math.min(h*0.30,190),y=h*0.44;
+  var out=[],i;
+  for(i=0;i<n;i++)out.push({x:x0+i*(bw+gap),y:y,w:bw,h:bh});
+  return out;
 }
 function drawMode(){
   var w=view.cssW,h=view.cssH,i,mobile=matchMedia('(pointer:coarse)').matches;
@@ -4537,10 +4735,11 @@ function drawMode(){
   txt('RAT BROS',w/2,h*0.17,Math.min(38,w*0.082),'#e8c25a','center');
   txt('ONE RAT, OR TWO?',w/2,h*0.17+26,Math.min(14,w*0.032),'#7d8a70','center');
   var boxes=modeBoxes();
-  var label=['PLAY LOCAL','CREATE GAME','JOIN GAME'];
-  var blurb=[['ONE PLAYER','ON THIS DEVICE'],['GET A LINK','SEND IT TO A FRIEND'],['HAVE A CODE?','TYPE IT IN']];
-  var hue=['#c9a24a',BROS[0].coat,BROS[1].coat];
-  for(i=0;i<3;i++){
+  var label=['PLAY LOCAL','CREATE GAME','JOIN GAME','SELECT LEVEL'];
+  var blurb=[['ONE PLAYER','ON THIS DEVICE'],['GET A LINK','SEND IT TO A FRIEND'],
+             ['HAVE A CODE?','TYPE IT IN'],['JOBS YOU HAVE','ALREADY FINISHED']];
+  var hue=['#c9a24a',BROS[0].coat,BROS[1].coat,'#8fbf6a'];
+  for(i=0;i<boxes.length;i++){
     var bx=boxes[i],on=(modeIdx===i);
     g.fillStyle=on?hexA(hue[i],0.16):'rgba(255,255,255,.03)';
     rr(g,bx.x,bx.y,bx.w,bx.h,10);g.fill();
@@ -4847,6 +5046,15 @@ function step(){
     }
     return;
   }
+  if(state==='LEVELS'){
+    var lc=levelCards();
+    if(pressed('left')&&levelIdx>0){levelIdx--;SFX.selectMove();}
+    if(pressed('right')&&levelIdx<lc.length-1){levelIdx++;SFX.selectMove();}
+    if(pressed('pause')){state='MODE';stateT=0;return;}
+    if(pressed('fire')||pressed('start'))levelPick();
+    tapped=false;
+    return;
+  }
   if(state==='MODE'){
     if(pressed('left')&&modeIdx>0){modeIdx--;SFX.selectMove();}
     if(pressed('right')&&modeIdx<MODES.length-1){modeIdx++;SFX.selectMove();}
@@ -4854,11 +5062,12 @@ function step(){
       tapped=false;selectDeployTap=false;SFX.selectConfirm();
       if(MODES[modeIdx]==='LOCAL'){Net.reset();selIdx=0;state='SELECT';}
       else if(MODES[modeIdx]==='CREATE'){Net.host();selIdx=0;state='SELECT';}
-      else {
+      else if(MODES[modeIdx]==='JOIN'){
         var typed=null;
         try{typed=window.prompt('Enter your friend\'s game code');}catch(err){}
         if(typed){Net.join(typed);selIdx=1;state='SELECT';}
       }
+      else {Net.reset();levelIdx=0;state='LEVELS';stateT=0;}
     }
     return;
   }
@@ -4869,9 +5078,10 @@ function step(){
     if(pressed('left')&&selIdx!==0){selIdx=0;SFX.selectMove();Net.say({t:'sel',bro:selIdx});}
     if(pressed('right')&&selIdx!==1){selIdx=1;SFX.selectMove();Net.say({t:'sel',bro:selIdx});}
     if(pressed('fire')||pressed('start')||tapped||selectDeployTap){
-      tapped=false;selectDeployTap=false;SFX.selectConfirm();makePlayer(selIdx);lives=3;score=0;
+      tapped=false;selectDeployTap=false;SFX.selectConfirm();makePlayer(selIdx);lives=3;score=0;tokens=TOKEN_START;
       campaignSeed=(Date.now()^(Math.random()*0x7fffffff))>>>0;
-      campaign=CAMPAIGNS[campaignSeed%CAMPAIGNS.length];startStage(1);
+      campaign=CAMPAIGNS[campaignSeed%CAMPAIGNS.length];
+      startStage(pendingStage||1);pendingStage=0;
     }
     return;
   }
@@ -4886,7 +5096,10 @@ function step(){
   tapped=false;
   if(state==='EXITING'){
     stateT++;P.vx=0;P.vy=0;P.y+=P.exitDown?2.1:-2.1;P.anim+=.18;updateCamera();Music.update();
-    if(stateT>58){state='CLEAR';stateT=0;}
+    if(stateT>58){
+      state='CLEAR';stateT=0;
+      tokens+=2;markStageCleared(stage);
+    }
     return;
   }
   if(state==='PAUSE'){if(pressed('pause')||pressed('start')){state='PLAY';setPauseModal(false);}return;}
@@ -4894,20 +5107,7 @@ function step(){
     stateT++;updateProjectiles();
     if(stateT>90){
       if(lives<=0){state='GAMEOVER';stateT=0;if(score>hiScore)hiScore=score;}
-      else{
-        P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.airBoost=0;P.onStair=null;P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
-        var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;
-        for(var ei=enemies.length-1;ei>=0;ei--){
-          var nearby=enemies[ei];
-          // Never erase enemies required to unlock the stage during respawn cleanup.
-          if(!nearby.miniBoss&&!nearby.objective&&Math.abs(nearby.x-sp.x)<300){
-            burst(nearby.x+12,nearby.y+12,'#7a7a7a',6,3);enemies.splice(ei,1);
-          }
-        }
-        if(WEAPONS[P.weapon].ammo!==Infinity&&P.ammo<=0)equipWeapon('scratch');
-        P.nades=Math.max(P.nades,3);ebullets=[];nades=[];
-        state='PLAY';
-      }
+      else respawnAtCheckpoint();
     }
     return;
   }
@@ -4917,6 +5117,14 @@ function step(){
     /* anyStart is the snapshot taken at the top of the frame. Reading `tapped`
        here instead would never see a touch: it is cleared further up step(),
        which is why these screens used to answer only to the keyboard. */
+    if(state==='GAMEOVER'&&tokens>0&&stateT>40&&(pressed('fire')||pressed('start'))){
+      /* Insert token, continue. One token, one life, and the stage carries on
+         from the checkpoint rather than starting over. */
+      tokens--;lives=1;
+      SFX.selectConfirm();tone(880,.1,'triangle',.05,1320);
+      respawnAtCheckpoint();
+      return;
+    }
     if(stateT>60&&anyStart){
       if(score>hiScore)hiScore=score;Music.menu();state='TITLE';stateT=0;
     }
@@ -4934,6 +5142,7 @@ function render(){
   g.clearRect(0,0,view.cssW,view.cssH);
   if(state==='TITLE'){drawTitle();paintVignette();return;}
   if(state==='MODE'){drawMode();paintVignette();return;}
+  if(state==='LEVELS'){drawLevels();paintVignette();return;}
   if(state==='SELECT'){drawSelect();paintVignette();return;}
   if(state==='INTRO'){drawIntro();paintVignette();return;}
 
@@ -5023,7 +5232,21 @@ function render(){
   if(state==='PAUSE')overlay('PAUSED','','PRESS START','#e8c25a');
   if(state==='DEAD')overlay('SQUEAK!','a brother down','','#e05a4a');
   if(state==='CLEAR')overlay('STAGE CLEAR','+'+(1000+stage*250)+' PTS','','#8fbf6a');
-  if(state==='GAMEOVER')overlay('GAME OVER','SCORE '+score,continuePrompt(),'#e05a4a');
+  if(state==='GAMEOVER'){
+    overlay('GAME OVER','SCORE '+score,
+      tokens>0?'':continuePrompt(),'#e05a4a');
+    if(tokens>0){
+      /* An arcade never asked you to start again while you still had money. */
+      var gw=view.cssW,gy2=view.cssH*0.60;
+      var pulse=0.6+0.4*Math.abs(Math.sin(tick*0.09));
+      txt('INSERT TOKEN TO CONTINUE',gw/2,gy2,Math.min(20,gw*0.034),
+        'rgba(255,214,106,'+pulse+')','center');
+      txt('YOU HAVE '+tokens+' — ONE BUYS ONE LIFE, RIGHT WHERE YOU FELL',
+        gw/2,gy2+24,Math.min(12,gw*0.021),'#a89a72','center','Arial,sans-serif');
+      txt(matchMedia('(pointer:coarse)').matches?'TAP TO SPEND ONE':'X OR ENTER TO SPEND ONE',
+        gw/2,gy2+44,Math.min(11,gw*0.019),'#7d8a70','center','Arial,sans-serif');
+    }
+  }
   if(state==='WIN'){
     overlay('P.C.U.-9 IS SCRAP','FINAL SCORE '+score,continuePrompt(),'#e8c25a');
     txt('the sewer belongs to the brothers again',view.cssW/2,view.cssH*0.44+92,

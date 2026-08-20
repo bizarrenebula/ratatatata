@@ -12,6 +12,22 @@ python3 -m http.server 8000
 
 Then open <http://localhost:8000>.
 
+## Tokens
+
+The brothers' money is brass turnstile slugs. You start a run with five, a
+mini-boss drops one when it goes down, and finishing a job pays two. On the game
+over screen a token buys a life and puts you back **where you fell**, not at the
+start of the stage — which is what a token has bought in an arcade since arcades
+existed.
+
+## Select a job
+
+Every stage is listed with its own thumbnail — painted from that stage's real
+sky, silhouette and ground colours — its tagline and what you are there to do.
+The ones you have finished can be run again; the rest carry a padlock. Pick one,
+press Continue, choose your brother, and the job starts on your confirmation.
+What you have cleared is remembered between sessions.
+
 ## Two players
 
 The title screen asks whether you are playing alone or with someone. **Create
