@@ -1,0 +1,67 @@
+{
+ "hand-pistol": {
+  "h": 200,
+  "kind": "hand",
+  "w": 337
+ },
+ "hand-rifle": {
+  "h": 209,
+  "kind": "hand",
+  "w": 558
+ },
+ "rocco-back": {
+  "h": 576,
+  "kind": "figure",
+  "w": 478
+ },
+ "rocco-front": {
+  "h": 585,
+  "kind": "figure",
+  "w": 655
+ },
+ "rocco-head-down": {
+  "h": 194,
+  "kind": "head",
+  "w": 185
+ },
+ "rocco-head-level": {
+  "h": 191,
+  "kind": "head",
+  "w": 271
+ },
+ "rocco-head-up": {
+  "h": 184,
+  "kind": "head",
+  "w": 234
+ },
+ "rocco-side": {
+  "h": 574,
+  "kind": "figure",
+  "w": 638
+ },
+ "vinnie-back": {
+  "h": 531,
+  "kind": "figure",
+  "w": 391
+ },
+ "vinnie-front": {
+  "h": 544,
+  "kind": "figure",
+  "w": 447
+ },
+ "vinnie-head-down": {
+  "h": 182,
+  "kind": "head",
+  "w": 169
+ },
+ "vinnie-head-up": {
+  "h": 154,
+  "kind": "head",
+  "w": 176
+ },
+ "vinnie-side": {
+  "h": 523,
+  "kind": "figure",
+  "w": 459
+ }
+}

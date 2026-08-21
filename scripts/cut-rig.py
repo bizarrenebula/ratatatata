@@ -53,12 +53,32 @@ def paper_bounds(rgb):
     return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
 
 
+def long_runs(ink, frac):
+    """Rows carrying one unbroken run of ink wider than `frac` of the width."""
+    w = ink.shape[1]
+    out = np.zeros_like(ink)
+    for y in range(ink.shape[0]):
+        row = ink[y]
+        if not row.any():
+            continue
+        edges = np.flatnonzero(np.diff(np.r_[0, row.astype(np.int8), 0]))
+        if (edges[1::2] - edges[0::2]).max() > w * frac:
+            out[y] = True
+    return out
+
+
 def blobs(rgb):
     lum = rgb.mean(axis=2)
     sat = rgb.max(axis=2).astype(np.int16) - rgb.min(axis=2).astype(np.int16)
     ink = (lum < 225) | (sat > 26)
     # Close the outline's gaps so a figure is one blob and not a scatter of them.
     ink = ndimage.binary_closing(ink, structure=np.ones((5, 5)))
+    # Take out the bars a screenshot brings with it before labelling: a figure
+    # whose shoe touches one is welded to it, and to whatever else it crosses.
+    # A bar is a row with a single unbroken run of ink across a quarter of the
+    # sheet or more; no drawing here comes near that — the widest is Rocco's
+    # front view at nine per cent — so this leaves the artwork alone.
+    ink[ndimage.binary_dilation(long_runs(ink, 0.25), structure=np.ones((7, 1)))] = False
     lab, n = ndimage.label(ink)
     out = []
     for i, sl in enumerate(ndimage.find_objects(lab)):
