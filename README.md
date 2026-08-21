@@ -69,6 +69,16 @@ are pockets, and each one holds something worth the climb: a weapon, a grenade,
 a brass slug for the wallet. Walk by and you lose nothing but the loot.
 
 
+## The start screen
+
+The title screen is the alley: Rocco with his arms crossed outside the Cheese
+Arcade, Vinnie mid-sentence beside him, the whole of Rat Alley behind them. The
+picture is framed rather than cropped — nothing takes the ears or the boots off
+at any window shape — on a bed of itself blown up and pushed back, so the frame
+fills without black bars. The marquee gets a band of its own along the top, made
+of the same brickwork stretched up and dimmed, because the brothers stand with no
+room above their ears and the logo is not going to sit on their heads.
+
 ## Tokens
 
 The brothers' money is brass turnstile slugs. You start with five, a mini-boss

@@ -78,6 +78,7 @@ var mobilePause=document.getElementById('mobilePause'),pauseModal=document.getEl
 var gcv=document.getElementById('game'), g=gcv.getContext('2d');
 var pcv=document.getElementById('pad'),  pg=pcv.getContext('2d');
 var titleLogo=new Image();titleLogo.src='assets/images/ui/ratatatata-title-cutout.png';
+var alleyArt=new Image();alleyArt.src='assets/images/ui/alley-start.jpg';
 
 var view={w:520,h:900,scale:1,cssW:360,cssH:640};
 var pad ={cssW:360,cssH:160};
@@ -5416,30 +5417,64 @@ function levelPointer(x,y,phase){
     }
   }
 }
+/* Draws an image to fill a rectangle the way CSS `cover` would: scaled to
+   overflow, cropped on the long axis, anchored where the interesting part is. */
+function drawCover(img,dx,dy,dw,dh,ax,ay){
+  var iw=img.naturalWidth,ih=img.naturalHeight;
+  var s=Math.max(dw/iw,dh/ih),sw=dw/s,sh=dh/s;
+  g.drawImage(img,(iw-sw)*ax,(ih-sh)*ay,sw,sh,dx,dy,dw,dh);
+}
+/* The whole picture, nothing cropped, on a bed of itself blown up and pushed
+   back. Cropping to fill would take either the ears or the boots off at almost
+   every window shape; this fills the frame without cutting anybody. */
+function drawFramed(img,dx,dy,dw,dh){
+  g.save();g.beginPath();g.rect(dx,dy,dw,dh);g.clip();
+  drawCover(img,dx,dy,dw,dh,0.5,0.5);
+  g.fillStyle='rgba(5,7,12,.74)';g.fillRect(dx,dy,dw,dh);
+  var s=Math.min(dw/img.naturalWidth,dh/img.naturalHeight);
+  var iw=img.naturalWidth*s,ih=img.naturalHeight*s;
+  g.drawImage(img,dx+(dw-iw)/2,dy+(dh-ih)/2,iw,ih);
+  g.restore();
+}
 function drawTitle(){
   var w=view.cssW,h=view.cssH,i;
-  g.fillStyle=lin(g,0,0,0,h,[[0,'#0a1216'],[0.55,'#1b3032'],[1,'#05090a']]);
-  g.fillRect(0,0,w,h);
-  g.fillStyle=rad(g,w*0.5,h*0.34,10,h*0.5,[[0,'rgba(255,200,120,.20)'],[1,'rgba(0,0,0,0)']]);
-  g.fillRect(0,0,w,h);
-  // sewer arch
-  g.fillStyle='#060a0b';
-  g.beginPath();g.arc(w*0.5,h*0.62,w*0.42,Math.PI,0);g.lineTo(w*0.92,h);g.lineTo(w*0.08,h);g.closePath();g.fill();
-  g.strokeStyle='#2b4238';g.lineWidth=7;
-  g.beginPath();g.arc(w*0.5,h*0.62,w*0.42,Math.PI,0);g.stroke();
-  for(i=0;i<26;i++){
-    g.fillStyle='rgba(255,200,120,'+(0.03+((i*13)%7)/160)+')';
-    g.fillRect((i*89+tick*0.5)%w,(i*67)%h,2,2);
+  /* The alley is the title screen. The brothers stand in the middle of it with
+     no room above their ears, so the marquee gets a band of its own at the top
+     rather than being laid over them — and the band is the same brickwork
+     stretched up and dimmed, so it reads as more alley rather than a bar. */
+  var band=Math.min(h*0.34,192),lit=alleyArt.complete&&alleyArt.naturalWidth;
+  if(lit){
+    drawFramed(alleyArt,0,band,w,h-band);
+    var ih=alleyArt.naturalHeight;
+    g.drawImage(alleyArt,0,0,alleyArt.naturalWidth,ih*0.24,0,0,w,band);
+    g.fillStyle=lin(g,0,0,0,band,[[0,'rgba(6,9,14,.95)'],[0.7,'rgba(6,9,14,.88)'],[1,'rgba(6,9,14,.28)']]);
+    g.fillRect(0,0,w,band);
+    // A little of the alley's own neon spilling up into the marquee.
+    g.fillStyle=rad(g,w*0.5,band*0.62,10,band*0.9,[[0,'rgba(255,176,90,.16)'],[1,'rgba(0,0,0,0)']]);
+    g.fillRect(0,0,w,band);
+  } else {
+    // Until it loads, the sewer mouth the game opened with for months.
+    g.fillStyle=lin(g,0,0,0,h,[[0,'#0a1216'],[0.55,'#1b3032'],[1,'#05090a']]);
+    g.fillRect(0,0,w,h);
+    g.fillStyle=rad(g,w*0.5,h*0.34,10,h*0.5,[[0,'rgba(255,200,120,.20)'],[1,'rgba(0,0,0,0)']]);
+    g.fillRect(0,0,w,h);
+    g.fillStyle='#060a0b';
+    g.beginPath();g.arc(w*0.5,h*0.62,w*0.42,Math.PI,0);g.lineTo(w*0.92,h);g.lineTo(w*0.08,h);g.closePath();g.fill();
+    g.strokeStyle='#2b4238';g.lineWidth=7;
+    g.beginPath();g.arc(w*0.5,h*0.62,w*0.42,Math.PI,0);g.stroke();
+    for(i=0;i<26;i++){
+      g.fillStyle='rgba(255,200,120,'+(0.03+((i*13)%7)/160)+')';
+      g.fillRect((i*89+tick*0.5)%w,(i*67)%h,2,2);
+    }
   }
-  var logoY=h*0.255,rx=Math.min(w*0.465,430),ry=Math.min(h*0.16,102);
+  /* Kept clear of the size control the page floats over the top-right corner,
+     and clear of the top edge on a short screen. */
+  var logoY=band*0.50,rx=Math.min(w*0.42,392,(w-270)/2),ry=Math.min(band*0.40,92);
   if(titleLogo.complete&&titleLogo.naturalWidth){
-    // Transparent cutout: only the lettering and yellow comic balloon remain.
-    var logoX=w/2-rx,logoTop=logoY-ry,logoW=rx*2,logoH=ry*2;
     g.save();g.shadowColor='rgba(0,0,0,.85)';g.shadowBlur=14;g.shadowOffsetY=8;
-    g.drawImage(titleLogo,logoX,logoTop,logoW,logoH);
+    g.drawImage(titleLogo,w/2-rx,logoY-ry,rx*2,ry*2);
     g.restore();
   } else {
-    // Fast code-rendered fallback while the generated asset is loading.
     g.save();g.translate(5,7);comicBurst(w/2,logoY,rx,ry);g.fillStyle='rgba(0,0,0,.82)';g.fill();g.restore();
     comicBurst(w/2,logoY,rx,ry);g.fillStyle='#f2df9b';g.fill();
     g.strokeStyle='#160b0a';g.lineWidth=Math.max(5,w*0.009);g.lineJoin='round';g.stroke();
@@ -5447,32 +5482,37 @@ function drawTitle(){
     g.save();g.translate(w/2,logoY+ts*0.18);g.rotate(-0.035);
     txt('RATATATATA!',3,4,ts,'#160b0a','center');txt('RATATATATA!',0,0,ts,'#d63825','center');g.restore();
   }
-  comicCaption('RAT BROS: RODENT RECKONING',w/2,logoY+ry+31,Math.min(20,w*0.034),false);
-  comicCaption('A RUTHLESS EXTERMINATION COMPANY TOOK THEIR FATHER.',w/2,logoY+ry+54,
+  comicCaption('RAT BROS: RODENT RECKONING',w/2,Math.min(band-8,logoY+ry+26),Math.min(20,w*0.034),false);
+  /* The story goes at the bottom, over the cobbles, where nobody is standing. */
+  if(lit){
+    g.fillStyle=lin(g,0,h*0.70,0,h,[[0,'rgba(4,6,10,0)'],[1,'rgba(4,6,10,.88)']]);
+    g.fillRect(0,h*0.70,w,h*0.30);
+  } else {
+    var heroY=h*0.78,heroGap=Math.min(44,w*0.063),heroScale=Math.min(1.95,h/285);
+    var savedBro=P.bro,savedWeapon=P.weapon,savedFire=P.fireT,ha=titleHeroAction(0),hb=titleHeroAction(205);
+    var swapSpan=180,swapAt=130,swapLocal=tick%swapSpan,swapBlock=Math.floor(tick/swapSpan);
+    var sideNow=swapBlock%2?-1:1,swapMix=swapLocal<swapAt?0:clamp((swapLocal-swapAt)/(swapSpan-swapAt),0,1);
+    swapMix=swapMix*swapMix*(3-2*swapMix);
+    var sideA=lerp(-sideNow,sideNow,swapMix),sideB=-sideA;
+    var faceA=sideA<0?-1:1,faceB=-faceA,swapLift=Math.sin(swapMix*Math.PI)*10;
+    g.save();g.translate(w/2+sideA*heroGap+faceA*ha.slide,heroY-ha.jump-swapLift-20);
+    g.rotate(faceA*ha.roll);g.translate(0,20);g.scale(heroScale,heroScale);
+    P.bro=0;P.weapon='machinegun';P.fireT=ha.fire;
+    drawBrother(0,0,faceA,0,{x:faceA,y:0},ha.walk,ha.duck,ha.jump>0||swapLift>0,1,'machinegun',ha.fire);
+    g.restore();
+    g.save();g.translate(w/2+sideB*heroGap+faceB*hb.slide,heroY-hb.jump-swapLift-20);
+    g.rotate(faceB*hb.roll);g.translate(0,20);g.scale(heroScale,heroScale);
+    P.bro=1;P.weapon='pistol';P.fireT=hb.fire;
+    drawBrother(0,0,faceB,1,{x:faceB,y:0},hb.walk,hb.duck,hb.jump>0||swapLift>0,1,'pistol',hb.fire);
+    g.restore();
+    P.bro=savedBro;P.weapon=savedWeapon;P.fireT=savedFire;
+  }
+  comicCaption('A RUTHLESS EXTERMINATION COMPANY TOOK THEIR FATHER.',w/2,h*0.845,
     Math.min(13,w*0.019),true);
-  comicCaption('NOW THE RAT BROS ARE COMING FOR PAYBACK.',w/2,logoY+ry+72,
+  comicCaption('NOW THE RAT BROS ARE COMING FOR PAYBACK.',w/2,h*0.878,
     Math.min(13,w*0.019),true);
-  // The brothers hold the sewer mouth back-to-back, covering both approaches.
-  var heroY=h*0.78,heroGap=Math.min(44,w*0.063),heroScale=Math.min(1.95,h/285);
-  var savedBro=P.bro,savedWeapon=P.weapon,savedFire=P.fireT,ha=titleHeroAction(0),hb=titleHeroAction(205);
-  var swapSpan=180,swapAt=130,swapLocal=tick%swapSpan,swapBlock=Math.floor(tick/swapSpan);
-  var sideNow=swapBlock%2?-1:1,swapMix=swapLocal<swapAt?0:clamp((swapLocal-swapAt)/(swapSpan-swapAt),0,1);
-  swapMix=swapMix*swapMix*(3-2*swapMix);
-  var sideA=lerp(-sideNow,sideNow,swapMix),sideB=-sideA;
-  var faceA=sideA<0?-1:1,faceB=-faceA,swapLift=Math.sin(swapMix*Math.PI)*10;
-  g.save();g.translate(w/2+sideA*heroGap+faceA*ha.slide,heroY-ha.jump-swapLift-20);
-  g.rotate(faceA*ha.roll);g.translate(0,20);g.scale(heroScale,heroScale);
-  P.bro=0;P.weapon='machinegun';P.fireT=ha.fire;
-  drawBrother(0,0,faceA,0,{x:faceA,y:0},ha.walk,ha.duck,ha.jump>0||swapLift>0,1,'machinegun',ha.fire);
-  g.restore();
-  g.save();g.translate(w/2+sideB*heroGap+faceB*hb.slide,heroY-hb.jump-swapLift-20);
-  g.rotate(faceB*hb.roll);g.translate(0,20);g.scale(heroScale,heroScale);
-  P.bro=1;P.weapon='pistol';P.fireT=hb.fire;
-  drawBrother(0,0,faceB,1,{x:faceB,y:0},hb.walk,hb.duck,hb.jump>0||swapLift>0,1,'pistol',hb.fire);
-  g.restore();
-  P.bro=savedBro;P.weapon=savedWeapon;P.fireT=savedFire;
   if(Math.floor(tick/26)%2===0)
-    txt('PRESS ANY KEY TO CONTINUE',w/2,h*0.88,Math.min(22,w*0.052),'#efe6d2','center');
+    txt('PRESS ANY KEY TO CONTINUE',w/2,h*0.945,Math.min(22,w*0.052),'#efe6d2','center');
 }
 /* What the room needs to say while the two of you sort yourselves out: who you
    are, the code, and whether anyone else has turned up yet. */
