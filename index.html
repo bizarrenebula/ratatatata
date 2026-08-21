@@ -385,6 +385,7 @@ function stageTouch(e){
     var r=gcv.getBoundingClientRect(),x=(e.touches[0].clientX-r.left)/r.width*view.cssW;
     var y=(e.touches[0].clientY-r.top)/r.height*view.cssH;
     if(Net.on()&&lobbyBannerHit(x,y)){copyInvite();return;}
+    if(selectBackHit(x,y)){leaveSelect();return;}
     var cw=view.cssW*.42,ch=view.cssH*.52,cy=view.cssH*.22;
     if(y>=cy&&y<=cy+ch){
       if(x>=view.cssW*.05&&x<=view.cssW*.05+cw){if(selIdx!==0)SFX.selectMove();selIdx=0;}
@@ -435,6 +436,9 @@ gcv.addEventListener('mousedown',function(e){
   if(state==='SELECT'){
     var r=gcv.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*view.cssW,y=(e.clientY-r.top)/r.height*view.cssH;
     if(Net.on()&&lobbyBannerHit(x,y)){copyInvite();return;}
+    /* Ahead of everything else: off the cards and off the aim row, a click on
+       this screen deploys, so the back button has to be claimed first. */
+    if(selectBackHit(x,y)){leaveSelect();return;}
     var cw=view.cssW*.42,ch=view.cssH*.52,cy=view.cssH*.22;
     if(y>=cy&&y<=cy+ch){
       if(x>=view.cssW*.05&&x<=view.cssW*.05+cw){selIdx=0;SFX.selectMove();}
@@ -5584,6 +5588,25 @@ function drawMode(){
   if(!SIGNAL_BASE)
     txt('TWO-PLAYER NEEDS THE PAGE SERVED OVER HTTP',w/2,h*0.87,Math.min(11.5,w*0.024),'#a8544a','center','Arial,sans-serif');
 }
+/* A way out of the character select that does not need a keyboard. The screen
+   is reached from every one of the mode menu's doors — playing alone, opening a
+   room, joining one — and on a phone there was nothing on it that went back. It
+   sits bottom left, clear of the cards above it, the deploy button beside it and
+   the aim-help row below it. */
+function selectBackBox(){
+  var w=view.cssW,h=view.cssH;
+  var bw=Math.min(w*0.22,150),bh=Math.min(40,h*0.072);
+  return {x:Math.max(8,w*0.04),y:h*0.835,w:bw,h:bh};
+}
+function selectBackHit(x,y){
+  var b=selectBackBox();
+  return x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h;
+}
+/* Leaving the room is part of leaving the screen: a lobby the guest has walked
+   out of should not still be waiting for him when he picks a mode again. */
+function leaveSelect(){
+  Net.reset();modeIdx=0;state='MODE';tapped=false;selectDeployTap=false;SFX.selectMove();
+}
 function drawSelect(){
   var w=view.cssW,h=view.cssH,i,mobile=matchMedia('(pointer:coarse)').matches;
   g.fillStyle=lin(g,0,0,0,h,[[0,'#0c1014'],[1,'#05080a']]);g.fillRect(0,0,w,h);
@@ -5637,6 +5660,10 @@ function drawSelect(){
     txt('CLICK HERE TO START',w/2,by+bh*.66,Math.min(17,w*.038),'#efe6d2','center');
   } else if(Math.floor(tick/24)%2===0)
     txt('PRESS  B  TO DEPLOY',w/2,h*0.86,Math.min(22,w*0.052),'#efe6d2','center');
+  var bb=selectBackBox();
+  g.fillStyle='rgba(201,162,74,.13)';rr(g,bb.x,bb.y,bb.w,bb.h,8);g.fill();
+  g.strokeStyle='rgba(232,194,90,.72)';g.lineWidth=2;rr(g,bb.x+.5,bb.y+.5,bb.w-1,bb.h-1,8);g.stroke();
+  txt(mobile?'BACK':'BACK  (ESC)',bb.x+bb.w/2,bb.y+bb.h*0.65,Math.min(15,bb.w*0.13),'#efe6d2','center');
   txt('AIM HELP',w*.38,h*.95,Math.min(12,w*.026),'#a8a08e','right');
   var ar=7;g.fillStyle=aimHelp?'rgba(255,255,255,.08)':'#9be36a';ell(g,w*.44,h*.946,ar,ar);g.fill();g.strokeStyle='#9be36a';g.lineWidth=1.5;g.stroke();
   txt('OFF',w*.46,h*.95,Math.min(11,w*.024),aimHelp?'#777':'#dfe8dc','left');
@@ -5928,7 +5955,7 @@ function step(){
   }
   if(state==='SELECT'){
     // Back out of a room the way you back out of anything else here.
-    if(pressed('pause')){Net.reset();modeIdx=0;state='MODE';return;}
+    if(pressed('pause')){leaveSelect();return;}
     Net.tick();
     if(pressed('left')&&selIdx!==0){selIdx=0;SFX.selectMove();Net.say({t:'sel',bro:selIdx});}
     if(pressed('right')&&selIdx!==1){selIdx=1;SFX.selectMove();Net.say({t:'sel',bro:selIdx});}

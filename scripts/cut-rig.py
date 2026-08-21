@@ -13,8 +13,11 @@ that belong to the character — Vinnie's shoe soles, Rocco's shirt — instead 
 punching them out along with the background.
 
     python3 scripts/cut-rig.py <sheet.png> [outdir]
+    python3 scripts/cut-rig.py <drawing.png> [outdir] --single <name>
 
-Writes <outdir>/*.png plus rig-manifest.json. Requires pillow, numpy, scipy.
+The second form takes the biggest drawing on the page and saves it under the
+name given, for when one figure is redrawn on its own rather than the whole
+sheet again. Requires pillow, numpy, scipy.
 """
 import json
 import sys
@@ -53,18 +56,18 @@ def paper_bounds(rgb):
     return int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1
 
 
-def long_runs(ink, frac):
-    """Rows carrying one unbroken run of ink wider than `frac` of the width."""
-    w = ink.shape[1]
-    out = np.zeros_like(ink)
-    for y in range(ink.shape[0]):
-        row = ink[y]
-        if not row.any():
-            continue
-        edges = np.flatnonzero(np.diff(np.r_[0, row.astype(np.int8), 0]))
-        if (edges[1::2] - edges[0::2]).max() > w * frac:
-            out[y] = True
-    return out
+def rules(ink):
+    """The bars a screenshot brings with it, and nothing that was drawn.
+
+    A rule is long and it is thin. Thin is the half that matters: measuring it
+    against the width of the page only works when the page is a full sheet with
+    many small drawings on it, and reads a single figure's outstretched arms as
+    a bar. Ink more than twenty pixels tall is a drawing whatever its width, so
+    that is taken out first and the test is applied to what is left.
+    """
+    thick = ndimage.binary_opening(ink, structure=np.ones((21, 1)))
+    thin = ink & ~thick
+    return ndimage.binary_opening(thin, structure=np.ones((1, 120)))
 
 
 def blobs(rgb):
@@ -75,10 +78,7 @@ def blobs(rgb):
     ink = ndimage.binary_closing(ink, structure=np.ones((5, 5)))
     # Take out the bars a screenshot brings with it before labelling: a figure
     # whose shoe touches one is welded to it, and to whatever else it crosses.
-    # A bar is a row with a single unbroken run of ink across a quarter of the
-    # sheet or more; no drawing here comes near that — the widest is Rocco's
-    # front view at nine per cent — so this leaves the artwork alone.
-    ink[ndimage.binary_dilation(long_runs(ink, 0.25), structure=np.ones((7, 1)))] = False
+    ink &= ~ndimage.binary_dilation(rules(ink), structure=np.ones((7, 7)))
     lab, n = ndimage.label(ink)
     out = []
     for i, sl in enumerate(ndimage.find_objects(lab)):
@@ -110,8 +110,10 @@ def cut(rgb, lab, blob, pad=6):
 
 
 def main():
-    src = sys.argv[1] if len(sys.argv) > 1 else 'sheet.png'
-    outdir = sys.argv[2] if len(sys.argv) > 2 else 'assets/images/rig'
+    argv = [a for a in sys.argv[1:] if not a.startswith('--')]
+    single = sys.argv[sys.argv.index('--single') + 1] if '--single' in sys.argv else None
+    src = argv[0] if argv else 'sheet.png'
+    outdir = argv[1] if len(argv) > 1 else 'assets/images/rig'
     os.makedirs(outdir, exist_ok=True)
     im = Image.open(src).convert('RGB')
     x0, y0, x1, y1 = paper_bounds(np.asarray(im).astype(np.int16))
@@ -119,6 +121,18 @@ def main():
     rgb = np.asarray(im).astype(np.int16)
     H, W, _ = rgb.shape
     lab, found = blobs(rgb)
+
+    if single:
+        best = max(found, key=lambda b: b['area'])
+        sprite = cut(rgb, lab, best)
+        sprite.save(os.path.join(outdir, single + '.png'))
+        path = os.path.join(outdir, 'rig-manifest.json')
+        manifest = json.load(open(path)) if os.path.exists(path) else {}
+        manifest[single] = {'w': sprite.width, 'h': sprite.height,
+                            'kind': manifest.get(single, {}).get('kind', 'figure')}
+        json.dump(manifest, open(path, 'w'), indent=1, sort_keys=True)
+        print('%-18s %4dx%-4d  area %7d' % (single, sprite.width, sprite.height, best['area']))
+        return
 
     manifest, taken = {}, set()
     for name, fx, fy, kind in LAYOUT:

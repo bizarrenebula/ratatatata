@@ -118,6 +118,13 @@ refuses storage outright, the game plays exactly as before and simply forgets
 when you leave. Builds before this kept a key per value; those are folded into
 the record the first time this one runs, so nothing already unlocked is lost.
 
+## Character art
+
+`assets/images/rig/` holds the brothers cut out of the reference sheet: side,
+back and front views of each, the head profiles, and the two weapon hands.
+`scripts/cut-rig.py` produces them — point it at a sheet and it finds each
+drawing itself, or at a single redrawn figure with `--single <name>`.
+
 ## Two players
 
 The title screen asks whether you are playing alone or with someone. **Create
