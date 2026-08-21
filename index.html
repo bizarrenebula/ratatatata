@@ -4301,15 +4301,25 @@ var RIG_ANCHOR={
   'vinnie-back': {ax:0.48,ay:0.98,bh:0.97},
   'vinnie-front':{ax:0.46,ay:0.98,bh:0.96}
 };
+/* The side view comes apart at the hip so the legs can walk. Everything here is
+   in fractions of the whole figure — where the piece sits inside it, and where
+   the hip is — so the two halves go back together without the game knowing a
+   single pixel count. Produced by scripts/cut-legs.py. */
+var RIG_SPLIT={
+  'rocco-side': {ox:0.1442,oy:0.6045,px:0.425,py:0.605},
+  'vinnie-side':{ox:0.0196,oy:0.5602,px:0.605,py:0.560}
+};
 var rigArt={},rigCache={};
 (function(){
-  var i,k,n;
+  var i,k,n,extra=[];
   for(i=0;i<RIG_VIEWS.length;i++)
-    for(k in RIG_VIEWS[i])if(RIG_VIEWS[i].hasOwnProperty(k)){
-      n=RIG_VIEWS[i][k];
-      if(rigArt[n])continue;
-      rigArt[n]=new Image();rigArt[n].src=RIG_DIR+n+'.png';
-    }
+    for(k in RIG_VIEWS[i])if(RIG_VIEWS[i].hasOwnProperty(k))extra.push(RIG_VIEWS[i][k]);
+  for(k in RIG_SPLIT)if(RIG_SPLIT.hasOwnProperty(k))extra.push(k+'-torso',k+'-legs');
+  for(i=0;i<extra.length;i++){
+    n=extra[i];
+    if(rigArt[n])continue;
+    rigArt[n]=new Image();rigArt[n].src=RIG_DIR+n+'.png';
+  }
 })();
 function rigReady(n){var im=rigArt[n];return !!(im&&im.complete&&im.naturalWidth);}
 /* A brother is seventy pixels tall on screen and his picture is six hundred, so
@@ -4337,6 +4347,31 @@ function rigView(broIdx,opt){
   }
   return V.side;
 }
+/* Three positions is a walk: legs apart with the near foot forward, legs under
+   him, legs apart with the near foot back. The middle one is the drawn stride
+   squeezed shut about the hip and the last is it mirrored, so all three come out
+   of the one drawing. Which one is showing follows the stride phase, and holds
+   through a whole quarter of it — a leg that changed on every frame would be a
+   flicker, not a step. */
+function legPose(walk,moving,inAir){
+  if(inAir)return 2;
+  if(!moving)return 1;
+  var ph=Math.sin(walk);
+  return ph>0.42?2:(ph<-0.42?0:1);
+}
+function drawLegPart(name,pose,W,H,s,tlx,tly){
+  var sp=RIG_SPLIT[name],part=name+'-legs',im=rigArt[part];
+  if(!rigReady(part))return;
+  var c=rigScaled(part,im.naturalHeight*s);
+  var pivx=tlx+sp.px*W*s, pivy=tly+sp.py*H*s;
+  g.save();
+  g.translate(pivx,pivy);
+  if(pose===1)g.scale(0.56,1);        // shut: the stride closed up under him
+  else if(pose===0)g.scale(-1,1);     // mirrored: the other foot leads
+  g.translate(-pivx,-pivy);
+  g.drawImage(c,tlx+sp.ox*W*s,tly+sp.oy*H*s,c.width,c.height);
+  g.restore();
+}
 function drawBrotherArt(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,opt){
   var name=rigView(broIdx,opt);
   if(!rigReady(name))return false;
@@ -4345,15 +4380,26 @@ function drawBrotherArt(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul
      the brother the game is moving around, prone included. */
   var bodyH=P_STAND*m*(prone?0.66:1), boxH=bodyH/A.bh;
   var c=rigScaled(name,boxH),s=c.height/im.naturalHeight;
-  var sw=Math.sin(walk),bob=(inAir||prone)?0:Math.abs(Math.cos(walk))*1.7*m*0.4;
+  var W=im.naturalWidth,H=im.naturalHeight;
+  var moving=!!(opt&&opt.moving),sw=Math.sin(walk);
+  var split=RIG_SPLIT[name]&&!prone&&rigReady(name+'-torso')&&rigReady(name+'-legs');
+  /* The bob rides the stride when he is walking and is still when he is not,
+     so standing still is actually still rather than gently pulsing. */
+  var bob=(inAir||prone||!moving)?0:Math.abs(Math.cos(walk))*1.7*m*0.4;
   g.save();
   g.globalAlpha=alpha===undefined?1:alpha;
   g.translate(x,y-bob);
-  /* A stride's worth of lean, and a little more of it in the air, so a static
-     drawing still reads as a body in motion. */
-  if(!prone)g.rotate(face*(inAir?-0.10:sw*0.045));
+  /* A stride's worth of lean, and a little more of it in the air. */
+  if(!prone)g.rotate(face*(inAir?-0.10:(moving?sw*0.045:0)));
   g.scale(face,1);
-  g.drawImage(c,-A.ax*im.naturalWidth*s,-A.ay*im.naturalHeight*s,c.width,c.height);
+  var tlx=-A.ax*W*s,tly=-A.ay*H*s;
+  if(split){
+    drawLegPart(name,legPose(walk,moving,inAir),W,H,s,tlx,tly);
+    var t=rigScaled(name+'-torso',rigArt[name+'-torso'].naturalHeight*s);
+    g.drawImage(t,tlx,tly,t.width,t.height);
+  } else {
+    g.drawImage(c,tlx,tly,c.width,c.height);
+  }
   g.restore();
   return true;
 }
@@ -6226,7 +6272,7 @@ function render(){
          to face you. */
       var mv=P.vx*P.facing;
       drawBrother(P.x+P.w/2,P.y+P.h,P.facing,P.bro,aimVector(),P.anim,P.prone,!P.onGround,1,P.weapon,P.fireT,charScale,
-        {back:mv<-0.35,idle:P.stillT>30});
+        {back:mv<-0.35,idle:P.stillT>30,moving:Math.abs(P.vx)>0.4});
     }
   }
   paintProjectiles();

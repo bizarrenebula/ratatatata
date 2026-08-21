@@ -39,6 +39,24 @@
   "kind": "figure",
   "w": 638
  },
+ "rocco-side-legs": {
+  "h": 227,
+  "kind": "legs",
+  "ox": 0.14420062695924765,
+  "oy": 0.6045296167247387,
+  "pivotX": 0.425,
+  "pivotY": 0.605,
+  "w": 445
+ },
+ "rocco-side-torso": {
+  "h": 475,
+  "kind": "torso",
+  "ox": 0.0,
+  "oy": 0.0,
+  "pivotX": 0.425,
+  "pivotY": 0.605,
+  "w": 638
+ },
  "vinnie-back": {
   "h": 531,
   "kind": "figure",
@@ -62,6 +80,24 @@
  "vinnie-side": {
   "h": 523,
   "kind": "figure",
+  "w": 459
+ },
+ "vinnie-side-legs": {
+  "h": 230,
+  "kind": "legs",
+  "ox": 0.0196078431372549,
+  "oy": 0.5602294455066922,
+  "pivotX": 0.605,
+  "pivotY": 0.56,
+  "w": 418
+ },
+ "vinnie-side-torso": {
+  "h": 452,
+  "kind": "torso",
+  "ox": 0.0,
+  "oy": 0.0,
+  "pivotX": 0.605,
+  "pivotY": 0.56,
   "w": 459
  }
 }
