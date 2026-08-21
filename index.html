@@ -1900,13 +1900,23 @@ function explode(x,y,radius,dmg,fromPlayer){
   } else if(Math.hypot(P.x+P.w/2-x,P.y+P.h/2-y)<radius) hurtPlayer(dmg,x);
 }
 function damageEnemy(e,d){
+  /* A body stays in the list until the next frame sweeps it up, so a second
+     bullet or a blast landing in the same frame would otherwise run the whole
+     death payload again — score twice, and a mini-boss dropping a second token. */
+  if(e.dead)return;
   if(e.miniBoss){
-    e.miniFightStarted=true;
     /* Elite armour keeps a high-DPS weapon from erasing the fight — except while
-       it is reloading, when it is open and hitting it is the point. */
+       it is reloading, when it is open and hitting it is the point.
+
+       Armour is the whole of it. There used to be a floor here as well: a killing
+       blow inside the first thirty seconds of a fight left the mini-boss on 1hp
+       instead. The intent was a duel that could not be deleted, but 1hp out of two
+       thousand draws an empty bar, so what it actually produced was a boss that
+       stood there with no health left, refusing to die, for as long as half a
+       minute. A fight that ends too quickly is a number to tune, never a reason to
+       ignore the damage the player has already dealt. */
     d*=miniRecovering(e)?1.2:MINI_ARMOUR;
-    if(e.hp-d<=0&&(e.miniFightTicks||0)<1800)e.hp=1;
-    else e.hp-=d;
+    e.hp-=d;
   }else e.hp-=d;
   e.flash=6;SFX.ehit();
   if(e.miniBoss&&e.hp>0)updateMiniBossPhase(e,P.x+P.w/2,P.y+P.h/2);
@@ -2829,7 +2839,6 @@ function updateEnemies(){
         scaleBox(ne,ne.bw,ne.bh,s.t==='bat');
         ne.patrolRadius*=1.35;
         ne.baseY=ne.y;ne.miniPhase=1;ne.specialCd=75;ne.specialT=0;ne.maxHp=ne.hp;
-        ne.miniFightStarted=false;ne.miniFightTicks=0;
         if(s.t!=='bat')assignEnemyTerritory(ne);
         /* A mini-boss owns the ground it spawned on and nothing beyond it. The
            leash caps both the chase and the patrol, so backing out of the zone
@@ -2849,7 +2858,6 @@ function updateEnemies(){
   for(i=enemies.length-1;i>=0;i--){
     e=enemies[i];
     if(e.dead){enemies.splice(i,1);continue;}
-    if(e.miniBoss&&e.miniFightStarted&&!P.dead)e.miniFightTicks++;
     if(e.flash>0)e.flash--;
     if(e.touchCd>0)e.touchCd--;
     e.anim+=0.15;

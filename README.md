@@ -200,7 +200,10 @@ The current implementation intentionally remains in one HTML file so this initia
   rank-and-file enemy outright and deal double damage to mini-bosses and
   P.C.U.-9, marked by a skull-and-knife sting over the target
 - Mini-bosses hold a fixed zone around their spawn: they commit the moment they
-  see you inside it, and break off if you leave, so a fight can always be quit
+  see you inside it, and break off if you leave, so a fight can always be quit.
+  Elite armour halves what you deal — except while they reload, when it goes the
+  other way — so how long one lives is down to that and its health, and nothing
+  else: when the bar empties it dies, however fast you emptied it
 - A live size control (top right) scales the cast; `BUILD_SCALE` and `ITEM_SCALE`
   in `index.html` scale structures and pickups to match
 - Eleven visual stage themes, particles, lighting, camera shake, and synthesized sound effects
