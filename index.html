@@ -633,7 +633,18 @@ function initAudio(){
   if(!actx){try{actx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}
   if(actx&&actx.state==='suspended')actx.resume();
   if(actx)Music.init();
+  /* The arcade should be playing when you arrive, not from the moment you press
+     something. Browsers will not start audio before a gesture, so this is the
+     earliest it can honestly happen: the first time the context is allowed to
+     run, and only while the title is still up. */
+  if(actx&&actx.state==='running'&&state==='TITLE'&&Music.mode!=='menu')Music.menu();
 }
+/* Ask once at load in case the browser already trusts this origin — it usually
+   will not, and then the first key or tap does it. Either way nothing is lost. */
+window.addEventListener('load',function(){setTimeout(initAudio,60);});
+['pointerdown','keydown','touchstart'].forEach(function(n){
+  window.addEventListener(n,function(){if(state==='TITLE')initAudio();},{passive:true});
+});
 function tone(f,dur,type,vol,slide){
   if(!actx)return;
   var o=actx.createOscillator(),q=actx.createGain(),t=actx.currentTime;
@@ -955,7 +966,7 @@ function makePlayer(b){
      jumps:0,coyote:0,anim:0,dead:false,checkX:80,checkY:300,swapCd:0,fireT:0,lean:0,
      inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,rollPow:1,
      rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,airBoost:0,jumpLock:0,
-     interiorFade:0,exitFocus:0,entryLock:0,ladder:null,dropT:0,onStair:null,stairIn:false};
+     interiorFade:0,exitFocus:0,entryLock:0,ladder:null,dropT:0,onStair:null,stairIn:false,stillT:0};
 }
 
 /* ==================== LEVEL ==================== */
@@ -2560,6 +2571,10 @@ function updatePlayer(){
   var B=BROS[P.bro],dropNow=false,clearanceCrouch=false;
   if(P.cd>0)P.cd--;
   if(P.inv>0)P.inv--;
+  /* How long he has been standing still. Turning to face the camera the instant
+     the stick centres would flicker every time he changed direction or bumped a
+     crate, so the front view waits for him to have actually settled. */
+  P.stillT=(P.onGround&&Math.abs(P.vx)<0.25&&P.fireT<=0&&P.cd<=0&&!P.prone)?P.stillT+1:0;
   if(P.swapCd>0)P.swapCd--;
   if(P.fireT>0)P.fireT--;
   if(P.rollCd>0)P.rollCd--;
@@ -4260,7 +4275,93 @@ function ratHead(B,big,aimUp){
   g.moveTo(21,7);g.lineTo(34,11);
   g.stroke();
 }
-function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
+/* ==================== CHARACTER ART ====================
+   The brothers were drawn out of canvas paths for months. These are the same
+   two rats off the reference sheet instead: a side view that carries almost all
+   of the game, a back view for walking away from where you are pointing, and a
+   front view for standing still. Everything else about them — the collision box,
+   the jump, the roll — is untouched; this is what gets painted, nothing more.
+
+   If the sprites have not loaded, or cannot (a file:// origin with no server),
+   the path drawing underneath is still there and still correct. */
+var RIG_DIR='assets/images/rig/';
+var RIG_VIEWS=[
+  {side:'rocco-side', back:'rocco-back', front:'rocco-front'},
+  {side:'vinnie-side',back:'vinnie-back',front:'vinnie-front'}
+];
+/* Where each drawing meets the world. ax/ay is the point in the picture that
+   sits on the brother's feet, as a fraction of its box; bh is how much of that
+   box is body, from the soles to the top of the head, so the tail sweeping off
+   to one side does not shrink him. Authored by eye against the collision box. */
+var RIG_ANCHOR={
+  'rocco-side':  {ax:0.45,ay:1.00,bh:0.99},
+  'rocco-back':  {ax:0.50,ay:1.00,bh:0.99},
+  'rocco-front': {ax:0.50,ay:1.00,bh:0.99},
+  'vinnie-side': {ax:0.63,ay:0.99,bh:0.97},
+  'vinnie-back': {ax:0.48,ay:0.98,bh:0.97},
+  'vinnie-front':{ax:0.46,ay:0.98,bh:0.96}
+};
+var rigArt={},rigCache={};
+(function(){
+  var i,k,n;
+  for(i=0;i<RIG_VIEWS.length;i++)
+    for(k in RIG_VIEWS[i])if(RIG_VIEWS[i].hasOwnProperty(k)){
+      n=RIG_VIEWS[i][k];
+      if(rigArt[n])continue;
+      rigArt[n]=new Image();rigArt[n].src=RIG_DIR+n+'.png';
+    }
+})();
+function rigReady(n){var im=rigArt[n];return !!(im&&im.complete&&im.naturalWidth);}
+/* A brother is seventy pixels tall on screen and his picture is six hundred, so
+   every frame would otherwise resample the whole thing. Scaled once per size and
+   kept; the size knob moves in steps, so this stays a handful of entries. */
+function rigScaled(n,h){
+  var key=n+'@'+Math.round(h),c=rigCache[key];
+  if(c)return c;
+  var im=rigArt[n],s=Math.round(h)/im.naturalHeight;
+  c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(im.naturalWidth*s));
+  c.height=Math.max(1,Math.round(h));
+  c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+  rigCache[key]=c;
+  return c;
+}
+/* Which way he is turned. Facing is where he is pointing; the view says what you
+   see of him. Walking against your aim shows you his back, standing still with
+   nothing to shoot at turns him to face you, and everything else is the side. */
+function rigView(broIdx,opt){
+  var V=RIG_VIEWS[broIdx];
+  if(opt){
+    if(opt.back&&rigReady(V.back))return V.back;
+    if(opt.idle&&rigReady(V.front))return V.front;
+  }
+  return V.side;
+}
+function drawBrotherArt(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,opt){
+  var name=rigView(broIdx,opt);
+  if(!rigReady(name))return false;
+  var A=RIG_ANCHOR[name],im=rigArt[name],m=(mul===undefined?1:mul);
+  /* Height comes from the collision box, so the picture is exactly as tall as
+     the brother the game is moving around, prone included. */
+  var bodyH=P_STAND*m*(prone?0.66:1), boxH=bodyH/A.bh;
+  var c=rigScaled(name,boxH),s=c.height/im.naturalHeight;
+  var sw=Math.sin(walk),bob=(inAir||prone)?0:Math.abs(Math.cos(walk))*1.7*m*0.4;
+  g.save();
+  g.globalAlpha=alpha===undefined?1:alpha;
+  g.translate(x,y-bob);
+  /* A stride's worth of lean, and a little more of it in the air, so a static
+     drawing still reads as a body in motion. */
+  if(!prone)g.rotate(face*(inAir?-0.10:sw*0.045));
+  g.scale(face,1);
+  g.drawImage(c,-A.ax*im.naturalWidth*s,-A.ay*im.naturalHeight*s,c.width,c.height);
+  g.restore();
+  return true;
+}
+function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,opt){
+  if(drawBrotherArt(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,opt))return;
+  drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul);
+}
+function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
   var B=BROS[broIdx],big=B.big,i;
   g.save();
   g.globalAlpha=alpha===undefined?1:alpha;
@@ -4404,6 +4505,17 @@ function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
 // Front-facing portraits are used only on character select. Keeping this separate
 // preserves the readable side silhouettes used by gameplay and the title scene.
 function drawBrotherPortrait(x,y,broIdx,scale){
+  /* The card shows the same front view the game turns to when he stands still,
+     so choosing a rat and playing one look like the same rat. */
+  var front=RIG_VIEWS[broIdx].front;
+  if(rigReady(front)){
+    var A=RIG_ANCHOR[front],im=rigArt[front];
+    var boxH=(P_STAND*scale*2.35)/A.bh,c=rigScaled(front,boxH),sc=c.height/im.naturalHeight;
+    g.save();g.translate(x,y);
+    g.drawImage(c,-A.ax*im.naturalWidth*sc,-A.ay*im.naturalHeight*sc,c.width,c.height);
+    g.restore();
+    return;
+  }
   var B=BROS[broIdx],big=B.big,bodyW=big?48:38,headW=big?46:40;
   g.save();g.translate(x,y);g.scale(scale,scale);
   g.strokeStyle=B.tail;g.lineWidth=big?7:5;g.lineCap='round';
@@ -6109,7 +6221,12 @@ function render(){
         g.strokeStyle='rgba(255,205,90,'+(0.45+Math.sin(tick*.2)*.18)+')';g.lineWidth=3;
         g.beginPath();g.arc(P.x+P.w/2,P.y+P.h+2,13,0,6.283);g.stroke();
       }
-      drawBrother(P.x+P.w/2,P.y+P.h,P.facing,P.bro,aimVector(),P.anim,P.prone,!P.onGround,1,P.weapon,P.fireT,charScale);
+      /* Walking against the way he is pointing shows you his back; standing
+         still on the ground with nothing asked of the aim stick turns him round
+         to face you. */
+      var mv=P.vx*P.facing;
+      drawBrother(P.x+P.w/2,P.y+P.h,P.facing,P.bro,aimVector(),P.anim,P.prone,!P.onGround,1,P.weapon,P.fireT,charScale,
+        {back:mv<-0.35,idle:P.stillT>30});
     }
   }
   paintProjectiles();
@@ -6159,6 +6276,7 @@ function render(){
 var last=0,acc=0;
 function loop(t){
   requestAnimationFrame(loop);
+  if(window.__frozen)return;
   if(!last)last=t;
   var dt=Math.min(50,t-last);last=t;acc+=dt;
   var guard=0;
