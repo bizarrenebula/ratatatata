@@ -39,6 +39,27 @@ Outdoors the camera rides the last ground you actually stood on, so an ordinary
 jump moves nothing and street framing is exactly what it always was — it only
 lifts when you do.
 
+### The route is not a line
+
+None of it is scenery you may ignore. The ground lane is broken on purpose: a
+sump in the sewers you drop into and climb out of, a P.C.U. barricade across the
+street two and a half storeys tall, a freight container in the warehouse too high
+to jump. Getting through a stage means straight, then up or down, then straight
+again — and on the roofs, sometimes across a plank somebody laid between two
+buildings before you got there.
+
+The thing the mission wants is never on the walk either. It sits on a storey, a
+catwalk, a rooftop, a gantry or a sump floor, so following the job means leaving
+the lane rather than jogging past it.
+
+### Hints
+
+A hint arrives where the decision is — at the ladder, at the pipes, at the
+barricade — as a chevron and three or four words. It flashes there for about a
+second and a half, then flies up and parks beside the brother's name in the HUD,
+so it stays readable without standing in front of anything. One at a time, and
+gone the moment you have answered it.
+
 ## Tokens
 
 The brothers' money is brass turnstile slugs. You start with five, a mini-boss

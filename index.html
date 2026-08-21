@@ -975,16 +975,37 @@ function configureObjective(lv,rng,n){
   if(lv.boss){lv.objective={type:'boss',text:'ELIMINATE P.C.U.-9',taskDone:false,done:false,progress:0,total:1};return;}
   var biomeLoot=lv.flow&&lv.flow.loot,thing=biomeLoot?biomeLoot[Math.floor(rng()*biomeLoot.length)]:campaign.things[(n-1)%campaign.things.length];
   var o=lv.objective={type:'recover',text:objectiveText(n,'recover',thing),taskDone:false,done:false,progress:0,total:1,thing:thing};
-  if(lv.buildings.length){
-    var b=lv.buildings[Math.floor(rng()*lv.buildings.length)],sl=b.slabs.length?b.slabs[b.slabs.length-1]:null;
-    var mx=sl?sl.x+sl.w/2-13:b.x+b.w/2-13,my=sl?sl.y-28:b.gy-28;
-    o.target=b;b.objective=true;
-    lv.items.push({x:Math.round(mx),y:Math.round(my),w:ITEM_D,h:ITEM_D,kind:'mission',inB:b,bob:rng()*6.28,objective:true});
+  /* The thing worth recovering is never on the walk. Every storey, catwalk,
+     rooftop, gantry and sump floor in the stage is a candidate, and one of them
+     gets it — so following the mission means leaving the ground lane, which is
+     the whole point of having built one. */
+  var spots=[],i,p,b;
+  for(i=0;i<lv.buildings.length;i++){
+    b=lv.buildings[i];
+    for(var s=0;s<b.slabs.length;s++)
+      spots.push({x:b.slabs[s].x+b.slabs[s].w/2,y:b.slabs[s].y,b:b});
+  }
+  for(i=0;i<lv.plats.length;i++){
+    p=lv.plats[i];
+    if(p.x<420||p.x>lv.length-620)continue;
+    if(p.obstacle&&p.obstacle.deck&&p.w>=110&&!p.obstacle.dead)spots.push({x:p.x+p.w/2,y:p.y});
+    else if(p.sunken)spots.push({x:p.x+p.w/2,y:p.y});
+  }
+  if(spots.length){
+    var pick=spots[Math.floor(rng()*spots.length)];
+    if(pick.b){o.target=pick.b;pick.b.objective=true;}
+    lv.items.push({x:Math.round(pick.x-ITEM_D/2),y:Math.round(pick.y-28),w:ITEM_D,h:ITEM_D,
+                   kind:'mission',inB:pick.b||undefined,bob:rng()*6.28,objective:true});
+    /* A pointer at ground level under it, so the detour is discoverable rather
+       than something you find by accident on the way back. */
+    if(!pick.b){
+      var ug=groundYAt(lv,pick.x);
+      if(ug!==null&&Math.abs(ug-pick.y)>60)
+        addGuide(lv,pick.x,ug,pick.y<ug?'up':'down',pick.y<ug?'THE JOB IS UP THERE':'THE JOB IS DOWN THERE');
+    }
   } else {
-    var best=null;
-    for(var i=0;i<lv.plats.length;i++)if(lv.plats[i].oneway&&lv.plats[i].x>500&&lv.plats[i].x<lv.length-500)best=lv.plats[i];
-    var ix=best?best.x+best.w/2-13:Math.round(lv.length*.45),iy=best?best.y-28:(groundYAt(lv,Math.round(lv.length*.45))||470)-28;
-    lv.items.push({x:Math.round(ix),y:Math.round(iy),w:ITEM_D,h:ITEM_D,kind:'mission',bob:rng()*6.28,objective:true});
+    var ix=Math.round(lv.length*.45),iy=(groundYAt(lv,ix)||470)-28;
+    lv.items.push({x:ix,y:iy,w:ITEM_D,h:ITEM_D,kind:'mission',bob:rng()*6.28,objective:true});
   }
 }
 function configureMiniBoss(lv,n){
@@ -1253,12 +1274,16 @@ function buildPropClimb(lv,rng,set,px,gy){
   }
   /* Ground stacks step up in jumpable increments so the high lane stays
      reachable even though each tier can be destroyed. */
-  var cx=px,tierH=[56,110,164];
+  /* A tier is a step, and a step only works if the one below it got placed and
+     the floor under it exists. A lone 164-tall crate standing over a gap in the
+     ground is not a climb, it is a wall — and one the player cannot jump, since
+     a standing jump tops out at 136. */
+  var cx=px,tierH=[56,110,164],landed=0;
   for(k=0;k<climb.tiers.length;k++){
     var t=climb.tiers[k],tw=rngRange(rng,t.w),th=tierH[k];
-    if(!propSpaceFree(lv,cx,tw,26)){cx+=tw+14;continue;}
+    if(k>landed||groundYAt(lv,cx+tw/2)!==gy||!propSpaceFree(lv,cx,tw,26)){cx+=tw+14;continue;}
     addProp(lv,t.t,cx,gy-th,tw,th,t.t==='binbank'?65:60,{v:rng()});
-    cx+=tw+14;
+    landed=k+1;cx+=tw+14;
   }
 }
 /* ==================== TERRAIN ====================
@@ -1276,6 +1301,33 @@ function buildPropClimb(lv,rng,set,px,gy){
    no amount of level design is worth that. */
 var SUMP_DROP=104, CATWALK_UP=168, ROOF_UP=290, FIRE_STEP=72;
 
+/* A hint is a chevron and three or four words, left at the place where the
+   decision is actually made rather than posted on the HUD. It shows when the
+   brother is near it and stops the moment he has done the thing it asks for, so
+   the level teaches itself once and then gets out of the way. */
+function addGuide(lv,x,y,dir,text){
+  lv.guides.push({x:Math.round(x),y:Math.round(y),dir:dir,text:text});
+}
+function guideSpent(gd){
+  var feet=P.y+P.h,cx=P.x+P.w/2;
+  if(gd.dir==='up')return feet<=gd.y-46;
+  if(gd.dir==='down')return feet>=gd.y+46;
+  if(gd.dir==='right')return cx>gd.x+40;
+  return cx<gd.x-40;
+}
+/* The one hint worth showing is the nearest unanswered one. Two arrows on
+   screen at once is a menu, not a hint. */
+function activeGuide(){
+  if(!level||!level.guides||P.inB||state!=='PLAY')return null;
+  var best=null,bestD=1e9,cx=P.x+P.w/2,feet=P.y+P.h,i,gd,dx,dy;
+  for(i=0;i<level.guides.length;i++){
+    gd=level.guides[i];
+    dx=Math.abs(cx-gd.x);dy=Math.abs(feet-gd.y);
+    if(dx>270||dy>210||guideSpent(gd))continue;
+    if(dx+dy*0.6<bestD){bestD=dx+dy*0.6;best=gd;}
+  }
+  return best;
+}
 function addLadder(lv,x,bottomY,topY,topX){
   lv.ladders.push({x:Math.round(x),w:26,bottomY:Math.round(bottomY),
                    topY:Math.round(topY),topX:Math.round(topX)});
@@ -1302,6 +1354,24 @@ function deckItem(lv,rng,plat,x,kind){
   lv.items.push({x:Math.round(clamp(x,plat.x+8,plat.x+plat.w-ITEM_D-8)),
                  y:Math.round(plat.y-ITEM_D-6),w:ITEM_D,h:ITEM_D,kind:kind,bob:rng()*6.28,
                  wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)]});
+}
+/* propSpaceFree asks only about x, which is the right question for scenery that
+   stands on the floor and the wrong one for a street with rooftops 290px over
+   it: every position under the roof run would read as occupied. This asks the
+   same question about the ground lane alone. */
+function groundSpaceFree(lv,x,w,gy){
+  var i,o;
+  for(i=0;i<lv.buildings.length;i++){
+    var b=lv.buildings[i];
+    if(x+w>b.x-140&&x<b.x+b.w+140)return false;
+  }
+  for(i=0;i<lv.obstacles.length;i++){
+    o=lv.obstacles[i];
+    if(o.y+o.h<gy-40)continue;                    // hanging above the street, not in the way
+    if(x+w>o.x-60&&x<o.x+o.w+60)return false;
+  }
+  if(lv.exit&&x+w>lv.exit.x-220)return false;
+  return true;
 }
 /* Terrain only hangs over ground the player can actually stand on, so a span is
    usable only when one unbroken segment carries the whole of it. */
@@ -1335,6 +1405,8 @@ function digSumps(lv,rng,routeStart){
     addDeck(lv,'pipe',pitX+4,s.y+Math.round(drop*0.34),78,20);
     addDeck(lv,'pipe',pitX+70,s.y+Math.round(drop*0.68),78,20);
     addLadder(lv,rightX-42,floorY,s.y,rightX+18);
+    addGuide(lv,pitX-30,s.y,'down','DOWN THE PIPES');
+    addGuide(lv,rightX-30,floorY,'up','CLIMB THE LADDER');
     lv.items.push({x:Math.round(pitX+pitW*0.5),y:floorY-30,w:ITEM_D,h:ITEM_D,
                    kind:rng()<0.5?'cheese':'nade',bob:rng()*6.28});
     made++;
@@ -1355,6 +1427,8 @@ function addCatwalks(lv,rng,routeStart){
        than a dead end you have to throw yourself off. */
     addDeck(lv,'pipe',px+w-10,cy+56,80,22);
     addDeck(lv,'pipe',px+w+46,cy+112,80,22);
+    addGuide(lv,px+18,gy,'up','LADDER TO THE CATWALK');
+    addGuide(lv,px+w+20,cy,'down','PIPES BACK DOWN');
     deckItem(lv,rng,deck,px+w*0.5,rng()<0.5?'weapon':'nade');
     deckSpawn(lv,deck,px+w*0.32,'weasel');
     if(rng()<0.6)deckSpawn(lv,deck,px+w*0.74,lv.n>=4?'lizard':'mouse');
@@ -1384,7 +1458,8 @@ function addRoofRun(lv,rng,routeStart){
      therefore starts just past the top landing: 74 up and a stride across. The
      rest are gated on clear space; this one is placed on the strength of the
      fire escape that was just checked into position below it. */
-  var roofY=gy-ROOF_UP, rx=lx+150, made=0, d=null;
+  addGuide(lv,x+40,gy,'up','UP THE FIRE ESCAPE');
+  var roofY=gy-ROOF_UP, rx=lx+150, made=0, d=null, prev=null;
   while(rx<routeStart-620&&made<4){
     var rw=Math.round(300+rng()*160), ry=made?roofY+Math.round((rng()-0.5)*64):roofY;
     if(made&&!propSpaceFree(lv,rx-30,rw+60,30)){
@@ -1395,7 +1470,17 @@ function addRoofRun(lv,rng,routeStart){
       if(rx-(d.x+d.w)>170)break;
       continue;
     }
+    /* Two roofs a short jump apart are two roofs someone has already laid a
+       plank between. Half the gaps get one, so crossing the block is sometimes
+       a jump and sometimes a walk along a board over the drop. The plank sits at
+       the lower of the two roof lines, so you step down onto it and up off it. */
+    if(prev&&rng()<0.5){
+      var pl=Math.max(prev.y,ry);
+      addDeck(lv,'plank',prev.x+prev.w-12,pl,rx-(prev.x+prev.w)+24,11);
+      addGuide(lv,prev.x+prev.w+6,pl,'right','ACROSS THE PLANK');
+    }
     d=addDeck(lv,'rooftop',rx,ry,rw,22,{solid:true});
+    prev=d;
     // Roof furniture doubles as cover; the tank is tall enough to stand on.
     if(rng()<0.7)addDeck(lv,'watertank',Math.round(rx+rw*0.82),ry-84,64,84,{solid:true});
     deckSpawn(lv,d,rx+rw*0.28,lv.n>=7?'lizard':'weasel');
@@ -1411,11 +1496,25 @@ function addRoofRun(lv,rng,routeStart){
      steps clear of the roof's edge rather than back under it, for the same
      headroom reason the first roof had to start clear of the fire escape. */
   var ex=d.x+d.w+10, ey=d.y;
+  addGuide(lv,d.x+d.w-40,d.y,'down','DOWN TO THE STREET');
   for(k=0;k<4;k++){
     ey+=FIRE_STEP;
     if(ey>gy-46)break;
     addDeck(lv,'firestep',ex,ey,134,15);
     ex+=46;
+  }
+  /* And the reason to have gone up at all. A P.C.U. barricade seals the street
+     between the fire escape and the way down, so the pavement stops being an
+     option: the route through the block is up, across and down again. It is
+     placed last, once both ends of the climb are known, and only where it can
+     stand clear of doorways and scenery. */
+  var b1=x+220, b2=ex-160, bx;
+  for(bx=Math.round(b1);bx<b2;bx+=90){
+    var bgy=flatRun(lv,bx,80);
+    if(bgy===null||!groundSpaceFree(lv,bx-40,140,bgy))continue;
+    addDeck(lv,'barricade',bx,bgy-252,58,252,{solid:true,v:rng()});
+    addGuide(lv,bx-80,bgy,'up','STREET SEALED — GO OVER');
+    break;
   }
 }
 
@@ -1432,6 +1531,8 @@ function addCrateClimb(lv,rng,routeStart){
     var top=addDeck(lv,'container',cx,gy-conH,conW,conH,{solid:true,v:rng()});
     var conX=cx;cx+=conW;
     for(k=2;k>=0;k--){addDeck(lv,'crate',cx,gy-steps[k][1],steps[k][0],steps[k][1],{solid:true,v:rng()});cx+=steps[k][0];}
+    addGuide(lv,px-40,gy,'up','OVER THE CRATES');
+    addGuide(lv,conX+conW*0.5,gy-conH,'up','GANTRY ABOVE');
     deckSpawn(lv,top,conX+conW*0.5,lv.n>=6?'lizard':'weasel');
     // The gantry over the container is the reason to be up here at all.
     var gan=addDeck(lv,'catwalk',conX-70,gy-conH-104,conW+140,14);
@@ -1448,7 +1549,7 @@ function addTerrain(lv,rng,routeStart){
 }
 function buildLevel(n){
   var rng=mulberry32(9001+n*577+campaignSeed), isBoss=(n===11);
-  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],setpieces:[],foreground:[],boss:isBoss,
+  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],guides:[],setpieces:[],foreground:[],boss:isBoss,
           length:isBoss?Math.max(1180,view.w*2.2):(4200+n*470),exit:null,routeMode:null,flow:STAGE_FLOW[n-1],miniBossDefeated:isBoss};
   var x=0,gy=470,px;
   if(isBoss){
@@ -1638,6 +1739,7 @@ function startStage(n){
   P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.ladder=null;P.dropT=0;P.onStair=null;
   P.jumpHold=0;P.airBoost=0;P.jumpLock=0;
   cam.x=0;cam.shake=0;cam.zoom=1;camAnchorY=P.y+P.h;
+  guideCur=null;guideT=0;guideFade=0;
   if(level.boss)spawnBoss();
   makeMotes();
   Music.game(n);
@@ -3701,6 +3803,40 @@ function paintObstacles(){
       g.fillStyle='rgba(0,0,0,.55)';g.fillRect(o.x,o.y+o.h,o.w,10);            // the building it caps
       g.fillStyle=lin(g,o.x,o.y+o.h,o.x,o.y+o.h+120,[[0,'rgba(20,20,26,.92)'],[1,'rgba(8,8,11,0)']]);
       g.fillRect(o.x+6,o.y+o.h,o.w-12,120);
+    } else if(o.type==='plank'){
+      /* Somebody got across here before you did. Two boards and a rope, laid
+         between roofs, sagging just enough to read as a plank and not a girder. */
+      var sag=Math.min(7,o.w*0.02);
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#9a7647'],[.5,'#6d5231'],[1,'#33260f']]);
+      g.beginPath();
+      g.moveTo(o.x,o.y);g.quadraticCurveTo(o.x+o.w/2,o.y+sag,o.x+o.w,o.y);
+      g.lineTo(o.x+o.w,o.y+o.h);g.quadraticCurveTo(o.x+o.w/2,o.y+o.h+sag,o.x,o.y+o.h);
+      g.closePath();g.fill();ink(g,'rgba(12,8,4,.85)',2);
+      g.strokeStyle='rgba(40,28,14,.45)';g.lineWidth=1.5;
+      g.beginPath();g.moveTo(o.x+4,o.y+o.h*0.5);g.quadraticCurveTo(o.x+o.w/2,o.y+o.h*0.5+sag,o.x+o.w-4,o.y+o.h*0.5);g.stroke();
+      g.fillStyle='rgba(232,206,158,.16)';
+      g.fillRect(o.x+3,o.y+1,o.w-6,2);
+      g.strokeStyle='rgba(30,22,12,.55)';g.lineWidth=3;                          // the nailed ends
+      g.beginPath();g.moveTo(o.x+7,o.y-3);g.lineTo(o.x+7,o.y+o.h+3);
+      g.moveTo(o.x+o.w-7,o.y-3);g.lineTo(o.x+o.w-7,o.y+o.h+3);g.stroke();
+    } else if(o.type==='barricade'){
+      /* Two storeys of P.C.U. hoarding across the pavement. It is not scenery
+         and it is not cover: it is the reason the roofs exist. */
+      g.fillStyle=lin(g,o.x,o.y,o.x+o.w,o.y,[[0,'#3a3f45'],[.4,'#565d65'],[1,'#20242a']]);
+      g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(5,7,9,.9)',2.5);
+      g.strokeStyle='rgba(14,17,20,.5)';g.lineWidth=2;
+      for(var bcr=o.y+16;bcr<o.y+o.h-10;bcr+=26){g.beginPath();g.moveTo(o.x+2,bcr);g.lineTo(o.x+o.w-2,bcr);g.stroke();}
+      g.fillStyle='#c99a31';                                                     // hazard chevrons, full height
+      for(var bch=0;bch<9;bch++){
+        g.save();g.translate(o.x+4,o.y+22+bch*24);g.rotate(-.5);
+        g.fillRect(0,0,o.w+8,7);g.restore();
+      }
+      // The sign sits where a rat reads it: at head height, not up in the sky.
+      var bsy=o.y+o.h*0.62;
+      g.fillStyle='#b3342b';rr(g,o.x-30,bsy,o.w+60,26,3);g.fill();ink(g,'rgba(8,6,6,.7)',1.5);
+      g.fillStyle='#f2dfad';g.font='bold 13px Impact,sans-serif';g.textAlign='center';
+      g.fillText('NO ENTRY',o.x+o.w/2,bsy+18);g.textAlign='left';
+      g.fillStyle='#191d21';g.fillRect(o.x-9,o.y+o.h-13,o.w+18,13);              // footing
     } else if(o.type==='watertank'){
       g.fillStyle=lin(g,o.x,o.y,o.x+o.w,o.y,[[0,'#4a3628'],[.42,'#7a5a3e'],[1,'#2c2018']]);
       rr(g,o.x,o.y+8,o.w,o.h-8,4);g.fill();ink(g,'rgba(10,7,5,.85)',2);
@@ -4714,6 +4850,64 @@ function comicCaption(s,x,y,size,quiet){
   g.fillStyle=quiet?'#e8ece8':'#ffffff';g.fillText(s,x,y);
   g.textAlign='left';g.restore();
 }
+/* ==================== DIRECTION HINTS ====================
+   A hint arrives where the decision is: it flashes at the ladder, the pipes or
+   the barricade for a beat and a half, then flies up and parks beside the
+   brother's name in the HUD, where it stays readable without standing in front
+   of anything worth seeing. One at a time, and gone the moment it is answered. */
+var GUIDE_FLASH=95, GUIDE_FLY=26;
+var guideCur=null, guideT=0, guideFade=0;
+function updateGuides(){
+  var gd=activeGuide();
+  if(gd!==guideCur){guideCur=gd;guideT=0;}
+  if(guideCur){guideT++;guideFade=Math.min(1,guideFade+0.12);}
+  else guideFade=Math.max(0,guideFade-0.10);
+}
+function guideChevron(x,y,size,dir,col,alpha){
+  g.save();g.globalAlpha=alpha;g.translate(x,y);
+  g.rotate(dir==='up'?0:dir==='down'?Math.PI:dir==='right'?Math.PI/2:-Math.PI/2);
+  g.fillStyle='rgba(8,9,10,.55)';
+  g.beginPath();g.moveTo(0,-size-2);g.lineTo(size+2,size*0.7);g.lineTo(-size-2,size*0.7);g.closePath();g.fill();
+  g.fillStyle=col;
+  g.beginPath();g.moveTo(0,-size);g.lineTo(size*0.86,size*0.55);g.lineTo(-size*0.86,size*0.55);g.closePath();g.fill();
+  g.restore();
+}
+function paintGuide(){
+  if(!guideCur||guideFade<=0.02)return;
+  var hh=Math.min(60,view.cssH*0.115),w=view.cssW;
+  var sc=view.scale*cam.zoom;
+  // Where the hint lives now, and where it is heading.
+  var wx=(guideCur.x-cam.x)*sc, wy=(guideCur.y-cam.y)*sc-58*sc;
+  var size=Math.max(11,Math.min(16,hh*0.24));
+  var label=guideCur.text, fs=Math.max(10,hh*0.20);
+  g.font='bold '+fs+'px Impact,"Arial Narrow Bold",sans-serif';
+  var tw=g.measureText(label).width, chipW=tw+size*2.6+16;
+  /* Parked immediately right of the name, health and weapon columns — the one
+     gap in the HUD band that is nobody else's. Further right is the score, and
+     further right again is the size control, which is a DOM element sitting on
+     top of the canvas and would swallow the text whole. */
+  var pr=hh*0.36, nameX=10+pr*2+8, barW=Math.min(w*0.36,150);
+  g.font=Math.max(9,hh*0.26)+'px Impact,"Arial Narrow Bold",sans-serif';
+  var wepW=g.measureText(WEAPONS[P.weapon].name).width;
+  g.font='bold '+fs+'px Impact,"Arial Narrow Bold",sans-serif';
+  var dockX=nameX+barW+10+wepW+22, dockY=hh*0.50;
+  if(dockX+chipW>w-140)dockX=Math.max(nameX,w-140-chipW);
+  var fly=clamp((guideT-GUIDE_FLASH)/GUIDE_FLY,0,1), ease=fly*fly*(3-2*fly);
+  var cx=lerp(wx,dockX+chipW/2,ease), cy=lerp(wy,dockY,ease);
+  var scale=lerp(1.18,1,ease), a=guideFade*(fly<1?1:0.92);
+  var bob=fly<1?Math.sin(tick*0.16)*3*(1-ease):0;
+  g.save();
+  g.translate(cx,cy+bob);g.scale(scale,scale);
+  g.fillStyle='rgba(10,10,12,'+(0.30+0.38*ease)*a+')';
+  rr(g,-chipW/2,-size-6,chipW,size*2+12,size*0.6);g.fill();
+  g.strokeStyle='rgba(201,162,74,'+(0.16+0.30*ease)*a+')';g.lineWidth=1;g.stroke();
+  guideChevron(-chipW/2+size+6,0,size*0.72,guideCur.dir,'#9be36a',a);
+  g.globalAlpha=a;
+  g.font='bold '+fs+'px Impact,"Arial Narrow Bold",sans-serif';
+  g.fillStyle='#e8dcc0';g.textAlign='left';
+  g.fillText(label,-chipW/2+size*2+10,fs*0.36);
+  g.textAlign='left';g.restore();
+}
 var _vigG=null,_vigK='';
 function paintVignette(){
   var w=view.cssW,h=view.cssH,k=Math.round(w)+'x'+Math.round(h);
@@ -5660,7 +5854,7 @@ function step(){
     return;
   }
   if(pressed('pause')){state='PAUSE';if(matchMedia('(pointer:coarse)').matches)setPauseModal(true);return;}
-  updatePlayer();updateEnemies();updateBoss();updateProjectiles();updateCamera();Music.update();
+  updatePlayer();updateEnemies();updateBoss();updateProjectiles();updateCamera();updateGuides();Music.update();
   if(!level.boss&&playerReachedExit()){
     P.exitDown=level.exit.kind==='toilet'||level.exit.kind==='containerdrop';
     state='EXITING';stateT=0;score+=1000+stage*250;SFX.clear();
@@ -5758,6 +5952,7 @@ function render(){
   S();
   paintVignette();
   paintHUD();
+  paintGuide();
   if(state==='PAUSE')overlay('PAUSED','','PRESS START','#e8c25a');
   if(state==='DEAD')overlay('SQUEAK!','a brother down','','#e05a4a');
   if(state==='CLEAR')overlay('STAGE CLEAR','+'+(1000+stage*250)+' PTS','','#8fbf6a');
