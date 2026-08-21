@@ -82,11 +82,14 @@ var titleLogo=new Image();titleLogo.src='assets/images/ui/ratatatata-title-cutou
 var view={w:520,h:900,scale:1,cssW:360,cssH:640};
 var pad ={cssW:360,cssH:160};
 var DPR=1, VIEW_BOTTOM=612, camY0=-300;
-/* Ground runs between y=370 and y=505, and all of it is framed the same way.
-   CAM_STREET sits just above the highest of those, so the vertical camera stays
-   asleep for the whole of the street lane and only wakes for terrain built above
-   it. camAnchorY is the last ground height the brother stood on. */
-var CAM_STREET=352, camAnchorY=470;
+/* The vertical camera measures the brother against the street directly beneath
+   him, not against a fixed line. Ground that rises and falls therefore moves
+   nothing — the reference rises and falls with it — while anything he lands on
+   above the street lifts the shot by exactly how high it is. The dead zone is
+   smaller than one crate, so hopping a barrel is ignored and a stack of them is
+   not. camAnchorY is the last surface he actually stood on; camGroundY is the
+   street under his feet. */
+var CAM_DEADZONE=34, camAnchorY=470, camGroundY=470;
 
 function resize(){
   DPR=Math.min(window.devicePixelRatio||1,2.5);
@@ -975,37 +978,36 @@ function configureObjective(lv,rng,n){
   if(lv.boss){lv.objective={type:'boss',text:'ELIMINATE P.C.U.-9',taskDone:false,done:false,progress:0,total:1};return;}
   var biomeLoot=lv.flow&&lv.flow.loot,thing=biomeLoot?biomeLoot[Math.floor(rng()*biomeLoot.length)]:campaign.things[(n-1)%campaign.things.length];
   var o=lv.objective={type:'recover',text:objectiveText(n,'recover',thing),taskDone:false,done:false,progress:0,total:1,thing:thing};
-  /* The thing worth recovering is never on the walk. Every storey, catwalk,
-     rooftop, gantry and sump floor in the stage is a candidate, and one of them
-     gets it — so following the mission means leaving the ground lane, which is
-     the whole point of having built one. */
-  var spots=[],i,p,b;
-  for(i=0;i<lv.buildings.length;i++){
-    b=lv.buildings[i];
-    for(var s=0;s<b.slabs.length;s++)
-      spots.push({x:b.slabs[s].x+b.slabs[s].w/2,y:b.slabs[s].y,b:b});
-  }
-  for(i=0;i<lv.plats.length;i++){
-    p=lv.plats[i];
-    if(p.x<420||p.x>lv.length-620)continue;
-    if(p.obstacle&&p.obstacle.deck&&p.w>=110&&!p.obstacle.dead)spots.push({x:p.x+p.w/2,y:p.y});
-    else if(p.sunken)spots.push({x:p.x+p.w/2,y:p.y});
-  }
-  if(spots.length){
-    var pick=spots[Math.floor(rng()*spots.length)];
-    if(pick.b){o.target=pick.b;pick.b.objective=true;}
+  /* The job sits on the way through, never down a branch. A stage has one path
+     from its start to its exit; if the thing you came for is off that path then
+     the detour is not a detour, it is the route with an extra step, and the
+     player has no decision left to make. So the objective takes a route spot —
+     the sump you have to walk, the roofs you have to cross, the container you
+     have to climb — which is off the ground lane without being off the path. */
+  var pick=lv.routeSpots.length?lv.routeSpots[Math.floor(rng()*lv.routeSpots.length)]:null;
+  if(pick){
     lv.items.push({x:Math.round(pick.x-ITEM_D/2),y:Math.round(pick.y-28),w:ITEM_D,h:ITEM_D,
-                   kind:'mission',inB:pick.b||undefined,bob:rng()*6.28,objective:true});
-    /* A pointer at ground level under it, so the detour is discoverable rather
-       than something you find by accident on the way back. */
-    if(!pick.b){
-      var ug=groundYAt(lv,pick.x);
-      if(ug!==null&&Math.abs(ug-pick.y)>60)
-        addGuide(lv,pick.x,ug,pick.y<ug?'up':'down',pick.y<ug?'THE JOB IS UP THERE':'THE JOB IS DOWN THERE');
-    }
+                   kind:'mission',bob:rng()*6.28,objective:true});
+    var ug=groundYAt(lv,pick.x);
+    if(ug!==null&&Math.abs(ug-pick.y)>60)
+      addGuide(lv,pick.x,ug,pick.y<ug?'up':'down',pick.y<ug?'THE JOB IS UP THERE':'THE JOB IS DOWN THERE');
   } else {
     var ix=Math.round(lv.length*.45),iy=(groundYAt(lv,ix)||470)-28;
     lv.items.push({x:ix,y:iy,w:ITEM_D,h:ITEM_D,kind:'mission',bob:rng()*6.28,objective:true});
+  }
+}
+/* Everything you may walk past. A pocket is worth the climb or it is not worth
+   building: a weapon, a slug for the wallet, a grenade — never the objective,
+   and never something the stage cannot be finished without. */
+function stockPockets(lv,rng){
+  for(var i=0;i<lv.pockets.length;i++){
+    var k=lv.pockets[i],r=rng();
+    if(k.inB)continue;
+    var kind=r<0.30?'token':r<0.62?'weapon':r<0.85?'nade':'cheese';
+    if(k.plat)deckItem(lv,rng,k.plat,k.x,kind);
+    else lv.items.push({x:Math.round(k.x-ITEM_D/2),y:Math.round(k.y-ITEM_D-6),w:ITEM_D,h:ITEM_D,
+                        kind:kind,bob:rng()*6.28,
+                        wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)]});
   }
 }
 function configureMiniBoss(lv,n){
@@ -1407,6 +1409,8 @@ function digSumps(lv,rng,routeStart){
     addLadder(lv,rightX-42,floorY,s.y,rightX+18);
     addGuide(lv,pitX-30,s.y,'down','DOWN THE PIPES');
     addGuide(lv,rightX-30,floorY,'up','CLIMB THE LADDER');
+    // The channel is not optional: the lip stops and this is what is under it.
+    lv.routeSpots.push({x:pitX+pitW*0.5,y:floorY});
     lv.items.push({x:Math.round(pitX+pitW*0.5),y:floorY-30,w:ITEM_D,h:ITEM_D,
                    kind:rng()<0.5?'cheese':'nade',bob:rng()*6.28});
     made++;
@@ -1429,7 +1433,7 @@ function addCatwalks(lv,rng,routeStart){
     addDeck(lv,'pipe',px+w+46,cy+112,80,22);
     addGuide(lv,px+18,gy,'up','LADDER TO THE CATWALK');
     addGuide(lv,px+w+20,cy,'down','PIPES BACK DOWN');
-    deckItem(lv,rng,deck,px+w*0.5,rng()<0.5?'weapon':'nade');
+    lv.pockets.push({x:px+w*0.5,y:cy,plat:deck});
     deckSpawn(lv,deck,px+w*0.32,'weasel');
     if(rng()<0.6)deckSpawn(lv,deck,px+w*0.74,lv.n>=4?'lizard':'mouse');
     made++;px+=w+320;
@@ -1459,7 +1463,7 @@ function addRoofRun(lv,rng,routeStart){
      rest are gated on clear space; this one is placed on the strength of the
      fire escape that was just checked into position below it. */
   addGuide(lv,x+40,gy,'up','UP THE FIRE ESCAPE');
-  var roofY=gy-ROOF_UP, rx=lx+150, made=0, d=null, prev=null;
+  var roofY=gy-ROOF_UP, rx=lx+150, made=0, d=null, prev=null, roofs=[];
   while(rx<routeStart-620&&made<4){
     var rw=Math.round(300+rng()*160), ry=made?roofY+Math.round((rng()-0.5)*64):roofY;
     if(made&&!propSpaceFree(lv,rx-30,rw+60,30)){
@@ -1485,7 +1489,7 @@ function addRoofRun(lv,rng,routeStart){
     if(rng()<0.7)addDeck(lv,'watertank',Math.round(rx+rw*0.82),ry-84,64,84,{solid:true});
     deckSpawn(lv,d,rx+rw*0.28,lv.n>=7?'lizard':'weasel');
     if(rng()<0.72)deckSpawn(lv,d,rx+rw*0.56,lv.n>=5&&rng()<0.4?'cat':'mouse');
-    if(rng()<0.55)deckItem(lv,rng,d,rx+rw*0.5,rng()<0.5?'weapon':'cheese');
+    roofs.push({x:rx+rw*0.5,y:ry,plat:d});
     lv.spawns.push({x:Math.round(rx+rw*0.5),y:Math.round(ry-150),t:'bat',used:false});
     rx+=rw+Math.round(94+rng()*40);
     made++;
@@ -1508,14 +1512,18 @@ function addRoofRun(lv,rng,routeStart){
      option: the route through the block is up, across and down again. It is
      placed last, once both ends of the climb are known, and only where it can
      stand clear of doorways and scenery. */
-  var b1=x+220, b2=ex-160, bx;
+  var b1=x+220, b2=ex-160, bx, sealed=false;
   for(bx=Math.round(b1);bx<b2;bx+=90){
     var bgy=flatRun(lv,bx,80);
     if(bgy===null||!groundSpaceFree(lv,bx-40,140,bgy))continue;
     addDeck(lv,'barricade',bx,bgy-252,58,252,{solid:true,v:rng()});
     addGuide(lv,bx-80,bgy,'up','STREET SEALED — GO OVER');
-    break;
+    sealed=true;break;
   }
+  /* With the street sealed the roofs are the way through and the job may sit on
+     them; without a barricade they are a view and a stash, and nothing that has
+     to be reached should be up there. */
+  for(k=0;k<roofs.length;k++)(sealed?lv.routeSpots:lv.pockets).push(roofs[k]);
 }
 
 /* --- the warehouse: small crate, bigger crate, biggest crate, container --- */
@@ -1536,7 +1544,8 @@ function addCrateClimb(lv,rng,routeStart){
     deckSpawn(lv,top,conX+conW*0.5,lv.n>=6?'lizard':'weasel');
     // The gantry over the container is the reason to be up here at all.
     var gan=addDeck(lv,'catwalk',conX-70,gy-conH-104,conW+140,14);
-    deckItem(lv,rng,gan,conX+conW*0.5,rng()<0.55?'weapon':'nade');
+    lv.routeSpots.push({x:conX+conW*0.5,y:gy-conH});
+    lv.pockets.push({x:conX+conW*0.5,y:gy-conH-104,plat:gan});
     if(rng()<0.65)deckSpawn(lv,gan,conX+conW*0.22,'mouse');
     made++;px+=1100;
   }
@@ -1549,7 +1558,13 @@ function addTerrain(lv,rng,routeStart){
 }
 function buildLevel(n){
   var rng=mulberry32(9001+n*577+campaignSeed), isBoss=(n===11);
-  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],guides:[],setpieces:[],foreground:[],boss:isBoss,
+  /* routeSpots are surfaces on the one way through — the sump you have to walk,
+     the roofs you have to cross, the container you have to climb. pockets are
+     everything you may ignore: a catwalk with no wall under it, a gantry, the
+     upper floors of a block. The job goes on the route; the loot goes in the
+     pockets. That way the level has a single path and the reasons to leave it
+     are all optional. */
+  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],guides:[],routeSpots:[],pockets:[],setpieces:[],foreground:[],boss:isBoss,
           length:isBoss?Math.max(1180,view.w*2.2):(4200+n*470),exit:null,routeMode:null,flow:STAGE_FLOW[n-1],miniBossDefeated:isBoss};
   var x=0,gy=470,px;
   if(isBoss){
@@ -1628,10 +1643,13 @@ function buildLevel(n){
       var bld=addBuilding(lv,rng,bx,seg2.y,kind);
       // reward for going in: something on an upper floor
       for(var si=0;si<bld.slabs.length;si++){
+        // A block is the pocket you may walk straight past. Its floors stock
+        // themselves below, so stockPockets leaves anything with an inB alone.
+        lv.pockets.push({x:bld.slabs[si].x+bld.slabs[si].w/2,y:bld.slabs[si].y,inB:bld});
         if(rng()<0.62){
           var sl=bld.slabs[si], rl=rng();
           lv.items.push({x:Math.round(sl.x+sl.w/2-ITEM_D/2),y:sl.y-28,w:ITEM_D,h:ITEM_D,inB:bld,bob:rng()*6.28,
-            kind:rl<0.42?'cheese':(rl<0.72?'nade':'weapon'),
+            kind:rl<0.20?'token':rl<0.50?'cheese':rl<0.75?'nade':'weapon',
             wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)]});
         }
         var enemySlab=bld.slabs[si],insideType=(n>=4&&rng()<0.55)?'weasel':'mouse';
@@ -1706,6 +1724,7 @@ function buildLevel(n){
   }
   if(!campaign)campaign=CAMPAIGNS[0];
   configureObjective(lv,rng,n);
+  stockPockets(lv,rng);
   configureMiniBoss(lv,n);
   sanitizeEnemySpawns(lv);
   // background silhouettes (3 parallax bands) + street lamps
@@ -1738,7 +1757,7 @@ function startStage(n){
   P.inB=null;P.doorT=0;P.atDoor=null;P.nadeReady=false;P.nadeCharge=0;
   P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.ladder=null;P.dropT=0;P.onStair=null;
   P.jumpHold=0;P.airBoost=0;P.jumpLock=0;
-  cam.x=0;cam.shake=0;cam.zoom=1;camAnchorY=P.y+P.h;
+  cam.x=0;cam.shake=0;cam.zoom=1;camAnchorY=P.y+P.h;camGroundY=groundYAt(level,P.x+P.w/2)||470;
   guideCur=null;guideT=0;guideFade=0;
   if(level.boss)spawnBoss();
   makeMotes();
@@ -1977,6 +1996,7 @@ function respawnAtCheckpoint(){
   P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.airBoost=0;P.onStair=null;
   P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
   var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;camAnchorY=P.y+P.h;
+  camGroundY=groundYAt(level,P.x+P.w/2)||camGroundY;
   for(var ei=enemies.length-1;ei>=0;ei--){
     var nearby=enemies[ei];
     // Never erase enemies required to unlock the stage during respawn cleanup.
@@ -5713,15 +5733,19 @@ function updateCamera(){
   } else {
     t=P.x+P.w/2-visibleW*0.44+P.facing*22;
     /* Outdoors the shot used to be nailed to the street, which is the reason
-       every stage had to stay flat. It now rides the last ground the brother
-       actually stood on — so an ordinary jump moves nothing and the framing at
-       street level is exactly what it always was, while a climb onto a catwalk
-       or a rooftop carries the camera up with him. A fall drags the anchor back
-       down before he can drop out of the frame. */
+       every stage had to stay flat. It now follows what he is standing on: land
+       on a crate and it lifts a little, on a catwalk a lot, on a roof all the
+       way, and it stays there while he does. Height is measured against the
+       street directly beneath him, so ground that merely undulates moves
+       nothing. A jump on its own moves nothing either — the anchor only takes a
+       new height on landing — but a fall drags it down before he can drop out
+       of the frame. */
     var feet=P.y+P.h, floor=VIEW_BOTTOM-visibleH;
     if(P.onGround||P.ladder)camAnchorY=feet;
     else camAnchorY=Math.max(camAnchorY,feet-visibleH*0.12);
-    var lift=Math.max(0,CAM_STREET-camAnchorY);
+    var gnd=groundYAt(level,P.x+P.w/2);
+    if(gnd!==null)camGroundY=gnd;
+    var lift=Math.max(0,camGroundY-camAnchorY-CAM_DEADZONE);
     ty=clamp(floor-lift,Math.min(level.top===undefined?floor:level.top,floor),floor);
   }
   cam.x+=(t-cam.x)*(P.inB?0.085:0.13);

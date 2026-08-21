@@ -35,22 +35,28 @@ Above the container hangs a gantry with the reason to be up there at all.
 Everything load-bearing in all three is indestructible. A route that could be
 shot away is a route that could strand you at the bottom of a pit.
 
-Outdoors the camera rides the last ground you actually stood on, so an ordinary
-jump moves nothing and street framing is exactly what it always was — it only
-lifts when you do.
+Outdoors the camera follows what you are standing on. Land on a crate and it
+lifts a little, on a catwalk a lot, on a rooftop all the way — and it stays there
+while you do. Height is measured against the street directly beneath you, so
+ground that merely rises and falls moves nothing, and a jump on its own moves
+nothing either: the shot takes a new height when you land, not while you are in
+the air. A fall pulls it back down before you can drop out of frame.
 
-### The route is not a line
+### One path, and reasons to leave it
 
-None of it is scenery you may ignore. The ground lane is broken on purpose: a
-sump in the sewers you drop into and climb out of, a P.C.U. barricade across the
-street two and a half storeys tall, a freight container in the warehouse too high
-to jump. Getting through a stage means straight, then up or down, then straight
-again — and on the roofs, sometimes across a plank somebody laid between two
-buildings before you got there.
+There is one way from the start of a stage to its exit, and it is not a straight
+line. The ground lane is broken on purpose: a sump in the sewers you drop into
+and climb out of, a P.C.U. barricade across the street two and a half storeys
+tall, a freight container in the warehouse too high to jump. Getting through
+means straight, then up or down, then straight again — and on the roofs,
+sometimes across a plank somebody laid between two buildings before you got
+there. The thing the mission wants sits on that path, off the ground lane but
+never down a branch.
 
-The thing the mission wants is never on the walk either. It sits on a storey, a
-catwalk, a rooftop, a gantry or a sump floor, so following the job means leaving
-the lane rather than jogging past it.
+Everything else is optional. A catwalk with no wall under it, a gantry over the
+container, the upper floors of a block you could just as easily walk past — those
+are pockets, and each one holds something worth the climb: a weapon, a grenade,
+a brass slug for the wallet. Walk by and you lose nothing but the loot.
 
 ### Hints
 
