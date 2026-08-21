@@ -4275,15 +4275,18 @@ function ratHead(B,big,aimUp){
   g.moveTo(21,7);g.lineTo(34,11);
   g.stroke();
 }
-/* ==================== CHARACTER ART ====================
-   The brothers were drawn out of canvas paths for months. These are the same
-   two rats off the reference sheet instead: a side view that carries almost all
-   of the game, a back view for walking away from where you are pointing, and a
-   front view for standing still. Everything else about them — the collision box,
-   the jump, the roll — is untouched; this is what gets painted, nothing more.
+/* ==================== CHARACTER ART (parked) ====================
+   The brothers off the reference sheet: a side view that carries almost all of
+   the game, a back view for walking away from where you are pointing, and a
+   front view for standing still, with the side view coming apart at the hip so
+   the legs can walk.
 
-   If the sprites have not loaded, or cannot (a file:// origin with no server),
-   the path drawing underneath is still there and still correct. */
+   Switched off. The path drawing below is what the game paints. This stays
+   whole — assets, cutting scripts (scripts/cut-rig.py, scripts/cut-legs.py) and
+   all — for the rework it still needs: an arm that follows the right stick and a
+   head that follows the arm, which wants the head and near arm cut off the torso
+   the way the legs already are. Flip USE_RIG_ART to true to see it again. */
+var USE_RIG_ART=false;
 var RIG_DIR='assets/images/rig/';
 var RIG_VIEWS=[
   {side:'rocco-side', back:'rocco-back', front:'rocco-front'},
@@ -4312,6 +4315,7 @@ var RIG_SPLIT={
 var rigArt={},rigCache={};
 (function(){
   var i,k,n,extra=[];
+  if(!USE_RIG_ART)return;    // parked: do not spend two megabytes on art nobody paints
   for(i=0;i<RIG_VIEWS.length;i++)
     for(k in RIG_VIEWS[i])if(RIG_VIEWS[i].hasOwnProperty(k))extra.push(RIG_VIEWS[i][k]);
   for(k in RIG_SPLIT)if(RIG_SPLIT.hasOwnProperty(k))extra.push(k+'-torso',k+'-legs');
@@ -4404,7 +4408,7 @@ function drawBrotherArt(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul
   return true;
 }
 function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,opt){
-  if(drawBrotherArt(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,opt))return;
+  if(USE_RIG_ART&&drawBrotherArt(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,opt))return;
   drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul);
 }
 function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
@@ -4554,7 +4558,7 @@ function drawBrotherPortrait(x,y,broIdx,scale){
   /* The card shows the same front view the game turns to when he stands still,
      so choosing a rat and playing one look like the same rat. */
   var front=RIG_VIEWS[broIdx].front;
-  if(rigReady(front)){
+  if(USE_RIG_ART&&rigReady(front)){
     var A=RIG_ANCHOR[front],im=rigArt[front];
     var boxH=(P_STAND*scale*2.35)/A.bh,c=rigScaled(front,boxH),sc=c.height/im.naturalHeight;
     g.save();g.translate(x,y);
