@@ -989,8 +989,6 @@ function configureObjective(lv,rng,n){
     lv.items.push({x:Math.round(pick.x-ITEM_D/2),y:Math.round(pick.y-28),w:ITEM_D,h:ITEM_D,
                    kind:'mission',bob:rng()*6.28,objective:true});
     var ug=groundYAt(lv,pick.x);
-    if(ug!==null&&Math.abs(ug-pick.y)>60)
-      addGuide(lv,pick.x,ug,pick.y<ug?'up':'down',pick.y<ug?'THE JOB IS UP THERE':'THE JOB IS DOWN THERE');
   } else {
     var ix=Math.round(lv.length*.45),iy=(groundYAt(lv,ix)||470)-28;
     lv.items.push({x:ix,y:iy,w:ITEM_D,h:ITEM_D,kind:'mission',bob:rng()*6.28,objective:true});
@@ -1301,35 +1299,7 @@ function buildPropClimb(lv,rng,set,px,gy){
    from it, and that everything load-bearing is indestructible. A route that can
    be shot away is a route that can strand the player at the bottom of a pit, and
    no amount of level design is worth that. */
-var SUMP_DROP=104, CATWALK_UP=168, ROOF_UP=290, FIRE_STEP=72;
 
-/* A hint is a chevron and three or four words, left at the place where the
-   decision is actually made rather than posted on the HUD. It shows when the
-   brother is near it and stops the moment he has done the thing it asks for, so
-   the level teaches itself once and then gets out of the way. */
-function addGuide(lv,x,y,dir,text){
-  lv.guides.push({x:Math.round(x),y:Math.round(y),dir:dir,text:text});
-}
-function guideSpent(gd){
-  var feet=P.y+P.h,cx=P.x+P.w/2;
-  if(gd.dir==='up')return feet<=gd.y-46;
-  if(gd.dir==='down')return feet>=gd.y+46;
-  if(gd.dir==='right')return cx>gd.x+40;
-  return cx<gd.x-40;
-}
-/* The one hint worth showing is the nearest unanswered one. Two arrows on
-   screen at once is a menu, not a hint. */
-function activeGuide(){
-  if(!level||!level.guides||P.inB||state!=='PLAY')return null;
-  var best=null,bestD=1e9,cx=P.x+P.w/2,feet=P.y+P.h,i,gd,dx,dy;
-  for(i=0;i<level.guides.length;i++){
-    gd=level.guides[i];
-    dx=Math.abs(cx-gd.x);dy=Math.abs(feet-gd.y);
-    if(dx>270||dy>210||guideSpent(gd))continue;
-    if(dx+dy*0.6<bestD){bestD=dx+dy*0.6;best=gd;}
-  }
-  return best;
-}
 function addLadder(lv,x,bottomY,topY,topX){
   lv.ladders.push({x:Math.round(x),w:26,bottomY:Math.round(bottomY),
                    topY:Math.round(topY),topX:Math.round(topX)});
@@ -1341,6 +1311,10 @@ function addDeck(lv,type,x,y,w,h,opt){
   opt=opt||{};
   var o=addProp(lv,type,x,y,w,h,0,{oneway:!opt.solid,v:opt.v===undefined?0.42:opt.v});
   o.deck=true;
+  // Which movement built it. Two pieces can use the same dressing — a fire
+  // escape landing serves both the roof climb and a scaffold lane — so the tag
+  // is the only way to tell one flight from another after the fact.
+  if(opt.tag)o.tag=opt.tag;
   return o.platform;
 }
 /* Enemies posted to a deck belong to it. Ordinary outdoor spawns are dropped to
@@ -1385,107 +1359,160 @@ function flatRun(lv,x,w){
 }
 
 /* --- sewers: a level down into the sump, a level up onto the catwalk --- */
-function digSumps(lv,rng,routeStart){
-  /* A sump splits the segment it is cut into, and the catwalk pass afterwards
-     needs an unbroken run to hang itself over. On a short stage there is only
-     room for one of the two, so dig one pit and leave the rest of the tunnel
-     whole. */
-  var made=0,i,segs=lv.plats.slice(),most=routeStart>4200?2:1;
-  for(i=1;i<segs.length&&made<most;i++){
-    var s=segs[i];
-    if(!s.ground||s.w<640)continue;
-    if(s.x<640||s.x+s.w>routeStart-420)continue;
-    var lipL=Math.round(190+rng()*130), pitW=Math.round(280+rng()*140);
-    if(lipL+pitW+200>s.w)continue;
-    var floorY=Math.min(556,s.y+SUMP_DROP), drop=floorY-s.y;
-    var pitX=s.x+lipL, rightX=pitX+pitW;
-    lv.plats.push({x:pitX,y:floorY,w:pitW,h:620-floorY,ground:true,sunken:true});
-    lv.plats.push({x:rightX,y:s.y,w:s.x+s.w-rightX,h:620-s.y,ground:true});
-    s.w=lipL;
-    /* Down the near side on pipework, up the far side on a ladder: a channel you
-       drop into on purpose and can always climb out of, at either end. */
-    addDeck(lv,'pipe',pitX+4,s.y+Math.round(drop*0.34),78,20);
-    addDeck(lv,'pipe',pitX+70,s.y+Math.round(drop*0.68),78,20);
-    addLadder(lv,rightX-42,floorY,s.y,rightX+18);
-    addGuide(lv,pitX-30,s.y,'down','DOWN THE PIPES');
-    addGuide(lv,rightX-30,floorY,'up','CLIMB THE LADDER');
-    // The channel is not optional: the lip stops and this is what is under it.
-    lv.routeSpots.push({x:pitX+pitW*0.5,y:floorY});
-    lv.items.push({x:Math.round(pitX+pitW*0.5),y:floorY-30,w:ITEM_D,h:ITEM_D,
-                   kind:rng()<0.5?'cheese':'nade',bob:rng()*6.28});
-    made++;
-  }
+/* ==================== SET PIECES ====================
+   A stage used to build the same movement in the same place every time: the
+   sewers dug a channel, the street raised a fire escape a fifth of the way in,
+   the warehouse stacked crates — always the first position that fitted, always
+   the only movement that biome knew. Two stages of the same biome therefore
+   played as the same stage twice.
+
+   Each biome now owns three movements. A stage shuffles them, draws one per band
+   of its length, rolls fresh dimensions for each and puts it at a random place
+   inside its band. Whatever comes up, at least one piece has to be a gate —
+   something the ground lane cannot get past — so the route still leaves the
+   floor however the dice fell. */
+var PIT_DROP=104, CATWALK_UP=168, ROOF_UP=290, FIRE_STEP=72;
+
+function shuffleRng(a,rng){
+  for(var i=a.length-1;i>0;i--){var j=Math.floor(rng()*(i+1)),t=a[i];a[i]=a[j];a[j]=t;}
+  return a;
 }
-function addCatwalks(lv,rng,routeStart){
-  var made=0,px;
-  /* Walked in short strides rather than long guesses. A stage is only as
-     vertical as the number of places the generator actually tried: striding a
-     thousand pixels at a time gave a level two chances and usually took
-     neither, which is how stages ended up flat. */
-  for(px=760;px<routeStart-620&&made<3;px+=170){
-    var w=Math.round(330+rng()*190), gy=flatRun(lv,px,w+170);
-    if(gy===null||!propSpaceFree(lv,px-60,w+240,50))continue;
-    var cy=gy-CATWALK_UP, deck=addDeck(lv,'catwalk',px,cy,w,14);
-    addLadder(lv,px+12,gy,cy,px+24);
-    /* Pipework steps back down off the far end, so a catwalk is a loop rather
-       than a dead end you have to throw yourself off. */
-    addDeck(lv,'pipe',px+w-10,cy+56,80,22);
-    addDeck(lv,'pipe',px+w+46,cy+112,80,22);
-    addGuide(lv,px+18,gy,'up','LADDER TO THE CATWALK');
-    addGuide(lv,px+w+20,cy,'down','PIPES BACK DOWN');
-    lv.pockets.push({x:px+w*0.5,y:cy,plat:deck});
-    deckSpawn(lv,deck,px+w*0.32,'weasel');
-    if(rng()<0.6)deckSpawn(lv,deck,px+w*0.74,lv.n>=4?'lizard':'mouse');
-    made++;px+=w+320;
+
+/* Two or three treads bridging a floor and a surface above it, each within a
+   jump of the last, with the final hop no bigger than the rest. Crates stand on
+   the floor as solid boxes; pipes, planks and fire-escape landings are thin
+   decks you land on from above and can pass up through. */
+function stepsBetween(lv,rng,type,x,lowY,highY,w,dir){
+  var rise=lowY-highY;
+  if(rise<40)return;
+  var n=Math.max(2,Math.min(3,Math.round(rise/62))),k,cx=x;
+  for(k=1;k<=n;k++){
+    var top=lowY-Math.round(rise*k/(n+1));
+    if(type==='crate')addDeck(lv,'crate',cx,top,w,lowY-top,{solid:true,v:rng()});
+    else addDeck(lv,type,cx,top,w,type==='plank'?12:20);
+    cx+=(w-12)*dir;
+    if(dir<0&&cx<0)return;
   }
 }
 
-/* --- the street: the fight moves off the pavement and onto the roofs --- */
-function addRoofRun(lv,rng,routeStart){
-  // Where the fire escape can stand decides the whole run, so look for a footing
-  // rather than guessing at one: walk out from a third of the way in.
-  var x=-1,px;
-  for(px=Math.round(routeStart*0.18);px<routeStart*0.70;px+=120){
-    if(flatRun(lv,px,300)!==null&&propSpaceFree(lv,px-40,340,40)){x=px;break;}
+/* How much room there is above a surface before something solid stops you. A
+   wall put up under a rooftop needs to leave a body's worth or its own top is a
+   nine-pixel slot nobody can stand in — and the wall is placed on ground-lane
+   clearance, which deliberately ignores whatever is hanging overhead. */
+/* Whether a wall of this height can stand here. Two ways it cannot: it spears
+   something solid on the way up, or its own top comes out so close under
+   something that nobody could stand on it. Both were reported as "nothing
+   overhead" by an earlier reading, which is how a barricade ended up run
+   straight through a rooftop. Returns the room above its top, or a large
+   negative if it collides with anything at all. */
+function wallRoom(lv,x,w,topY,botY){
+  var best=1e9,i,o;
+  for(i=0;i<lv.obstacles.length;i++){
+    o=lv.obstacles[i];
+    if(o.dead||!o.platform)continue;
+    if(o.x+o.w<=x||o.x>=x+w)continue;
+    /* Nothing may be run through, one-way or not: a wall standing through a
+       plank leaves a stretch of walkway nobody can stand on. */
+    if(o.y<botY&&o.y+o.h>topY)return -1e9;
+    /* Headroom, though, counts only what would actually stop you. You jump up
+       through a plank; you do not bang your head on it. */
+    if(!o.platform.oneway&&o.y+o.h<=topY&&topY-(o.y+o.h)<best)best=topY-(o.y+o.h);
   }
-  if(x<0)return;
-  var gy=groundYAt(lv,x), k, ly=gy, lx=x;
-  // The fire escape: three landings zig-zagging up the side of the block. Every
-  // rise sits well inside a standing jump, so getting up is a climb, not a trick.
+  return best;
+}
+/* The tallest wall from this list that fits, or 0 if none of them do. */
+function wallHeight(lv,x,w,gy,tall){
+  for(var i=0;i<tall.length;i++)
+    if(wallRoom(lv,x,w,gy-tall[i],gy)>=86)return tall[i];
+  return 0;
+}
+/* A gate: something the ground lane cannot get past, with a flight up one side
+   and down the other. The wall and the treads are biome dressing — a bulkhead
+   over pipes, a hoarding over fire-escape landings, a freight container over
+   crates — but the geometry is the same everywhere, and it is the geometry that
+   matters: the wall stands taller than a standing jump so the steps are the only
+   way, and no step is more than a jump above the last. */
+function addGate(lv,rng,x,spec,tight,loose){
+  var wh=Math.round(spec.h[0]+rng()*(spec.h[1]-spec.h[0]));
+  var ww=tight?190:Math.round(200+rng()*120);
+  var n=tight?2:(2+(rng()<0.5?1:0)),k,rise=[],tw=[],run=0;
+  for(k=1;k<=n;k++){rise.push(Math.round(wh*k/(n+1)));tw.push(tight?66:Math.round(74+rng()*40));run+=tw[k-1];}
+  var need=ww+run*2+40, gy=flatRun(lv,x,need);
+  if(gy===null)return false;
+  /* The loose check asks only about the ground lane — anything hanging overhead
+     is not in the way of a wall standing on the floor. It is what the last-resort
+     pass uses when the ordinary clearance has found nowhere at all. */
+  if(loose?!groundSpaceFree(lv,x-30,need+60,gy):!propSpaceFree(lv,x-40,need+80,40))return false;
+  if(loose&&wallRoom(lv,x,need,gy-wh,gy)<86)return false;
+  var cx=x;
+  for(k=0;k<n;k++){addDeck(lv,spec.tread,cx,gy-rise[k],tw[k],rise[k],{solid:true,v:rng()});cx+=tw[k];}
+  var wallX=cx,top=addDeck(lv,spec.wall,wallX,gy-wh,ww,wh,{solid:true,v:rng()});
+  cx+=ww;
+  for(k=n-1;k>=0;k--){addDeck(lv,spec.tread,cx,gy-rise[k],tw[k],rise[k],{solid:true,v:rng()});cx+=tw[k];}
+  lv.routeSpots.push({x:wallX+ww/2,y:gy-wh});
+  deckSpawn(lv,top,wallX+ww*0.5,lv.n>=6?'lizard':'weasel');
+  /* Something hanging over it that you may climb to and need not. */
+  if(spec.over&&rng()<0.75){
+    var gan=addDeck(lv,spec.over,wallX-60,gy-wh-108,ww+120,14);
+    lv.pockets.push({x:wallX+ww/2,y:gy-wh-108,plat:gan});
+    if(rng()<0.6)deckSpawn(lv,gan,wallX+20,'mouse');
+  }
+  return true;
+}
+
+/* A high lane: a deck up out of the way with a way up at one end and a way back
+   down at the other, so it is a loop rather than a dead end. Optional — a pocket
+   worth the climb, never part of the route. */
+function addLane(lv,rng,x,spec,tight){
+  var h=Math.round(spec.h[0]+rng()*(spec.h[1]-spec.h[0]));
+  var w=tight?270:Math.round(300+rng()*240), gy=flatRun(lv,x,w+260);
+  if(gy===null||!propSpaceFree(lv,x-70,w+330,50))return false;
+  var y=gy-h, deck=addDeck(lv,spec.deck,x,y,w,spec.deck==='plank'?12:14);
+  if(spec.up==='ladder')addLadder(lv,x+12,gy,y,x+24);
+  else stepsBetween(lv,rng,spec.up,x+8,gy,y,84,1);
+  stepsBetween(lv,rng,spec.down,x+w-10,gy,y,84,1);
+  lv.pockets.push({x:x+w*0.5,y:y,plat:deck});
+  deckSpawn(lv,deck,x+w*0.32,lv.n>=5?'lizard':'weasel');
+  if(rng()<0.6)deckSpawn(lv,deck,x+w*0.74,lv.n>=4?'weasel':'mouse');
+  return true;
+}
+
+/* The street's big movement, and the only piece with a shape of its own: a fire
+   escape up the side of a block, a run of roofs with planks over some of the
+   gaps, and a flight down the far side. */
+/* Returns 0 for nothing built, 1 for a run of roofs that could not be sealed —
+   still worth having as a pocket, and never rebuilt from scratch on the next
+   attempt — and 2 for a sealed run, which is a gate. */
+function addRoofRun(lv,rng,x){
+  var gy=flatRun(lv,x,300);
+  if(gy===null||!propSpaceFree(lv,x-40,340,40))return 0;
+  var k,ly=gy,lx=x,side=rng()<0.5?1:-1;
   for(k=0;k<3;k++){
-    ly-=FIRE_STEP;lx+=(k%2?-84:84);
-    addDeck(lv,'firestep',lx,ly,134,15);
+    ly-=FIRE_STEP;lx+=(k%2?-84:84)*side;
+    addDeck(lv,'firestep',lx,ly,134,15,{tag:'climb'});
   }
-  /* A roof is solid — you do not fall through one — which means it must never
-     be built over the landing that reaches it, or the last step of the climb has
-     a ceiling 50px above it and the way up is walled off. The first roof
-     therefore starts just past the top landing: 74 up and a stride across. The
-     rest are gated on clear space; this one is placed on the strength of the
-     fire escape that was just checked into position below it. */
-  addGuide(lv,x+40,gy,'up','UP THE FIRE ESCAPE');
-  var roofY=gy-ROOF_UP, rx=lx+150, made=0, d=null, prev=null, roofs=[];
-  while(rx<routeStart-620&&made<4){
-    var rw=Math.round(300+rng()*160), ry=made?roofY+Math.round((rng()-0.5)*64):roofY;
+  /* A roof is solid — you do not fall through one — so it must never be built
+     over the landing that reaches it, or the last step of the climb has fifty
+     pixels of headroom and the way up is walled off. The first roof therefore
+     starts a stride past the top landing. */
+  var roofY=gy-Math.round(ROOF_UP*(0.86+rng()*0.28)), rx=lx+150, made=0, d=null, prev=null, roofs=[];
+  var want=2+Math.floor(rng()*3);
+  while(rx<lv.length-1400&&made<want){
+    var rw=Math.round(280+rng()*190), ry=made?roofY+Math.round((rng()-0.5)*64):roofY;
     if(made&&!propSpaceFree(lv,rx-30,rw+60,30)){
-      /* A roof you cannot jump to is not part of the run. If whatever is in the
-         way is wider than a jump, the roofs end here and the way down starts
-         from the last one that was actually reachable. */
       rx+=110;
       if(rx-(d.x+d.w)>170)break;
       continue;
     }
-    /* Two roofs a short jump apart are two roofs someone has already laid a
-       plank between. Half the gaps get one, so crossing the block is sometimes
-       a jump and sometimes a walk along a board over the drop. The plank sits at
-       the lower of the two roof lines, so you step down onto it and up off it. */
+    /* Two roofs a short jump apart are two roofs somebody has already laid a
+       plank between. The plank sits at the lower of the two roof lines, so you
+       step down onto it and up off it. */
     if(prev&&rng()<0.5){
       var pl=Math.max(prev.y,ry);
       addDeck(lv,'plank',prev.x+prev.w-12,pl,rx-(prev.x+prev.w)+24,11);
-      addGuide(lv,prev.x+prev.w+6,pl,'right','ACROSS THE PLANK');
     }
     d=addDeck(lv,'rooftop',rx,ry,rw,22,{solid:true});
     prev=d;
-    // Roof furniture doubles as cover; the tank is tall enough to stand on.
     if(rng()<0.7)addDeck(lv,'watertank',Math.round(rx+rw*0.82),ry-84,64,84,{solid:true});
     deckSpawn(lv,d,rx+rw*0.28,lv.n>=7?'lizard':'weasel');
     if(rng()<0.72)deckSpawn(lv,d,rx+rw*0.56,lv.n>=5&&rng()<0.4?'cat':'mouse');
@@ -1494,67 +1521,139 @@ function addRoofRun(lv,rng,routeStart){
     rx+=rw+Math.round(94+rng()*40);
     made++;
   }
-  if(!d)return;
-  /* And down the far side. Nothing stops you jumping off a roof, but the way
-     down should read as a way down — the exit is at street level. The flight
-     steps clear of the roof's edge rather than back under it, for the same
-     headroom reason the first roof had to start clear of the fire escape. */
+  if(!d)return 0;
+  /* And down the far side, stepping clear of the roof's edge rather than back
+     under it, for the same headroom reason. */
   var ex=d.x+d.w+10, ey=d.y;
-  addGuide(lv,d.x+d.w-40,d.y,'down','DOWN TO THE STREET');
   for(k=0;k<4;k++){
     ey+=FIRE_STEP;
     if(ey>gy-46)break;
-    addDeck(lv,'firestep',ex,ey,134,15);
+    addDeck(lv,'firestep',ex,ey,134,15,{tag:'descent'});
     ex+=46;
   }
-  /* And the reason to have gone up at all. A P.C.U. barricade seals the street
-     between the fire escape and the way down, so the pavement stops being an
-     option: the route through the block is up, across and down again. It is
-     placed last, once both ends of the climb are known, and only where it can
-     stand clear of doorways and scenery. */
-  var b1=x+220, b2=ex-160, bx, sealed=false;
+  /* And the reason to have gone up at all: a P.C.U. hoarding sealing the street
+     between the two flights, so the pavement stops being an option. Placed last,
+     once both ends of the climb are known. */
+  var b1=x+220,b2=ex-160,bx,sealed=false;
   for(bx=Math.round(b1);bx<b2;bx+=90){
     var bgy=flatRun(lv,bx,80);
     if(bgy===null||!groundSpaceFree(lv,bx-40,140,bgy))continue;
-    addDeck(lv,'barricade',bx,bgy-252,58,252,{solid:true,v:rng()});
-    addGuide(lv,bx-80,bgy,'up','STREET SEALED — GO OVER');
+    /* Cut down until it clears whatever it is standing under, but never below
+       150 — a standing jump peaks at 136, and a wall that can be hopped is not a
+       gate at all. */
+    var bh=wallHeight(lv,bx,58,bgy,[252,224,196,168,150]);
+    if(!bh)continue;
+    addDeck(lv,'barricade',bx,bgy-bh,58,bh,{solid:true,v:rng()});
     sealed=true;break;
   }
-  /* With the street sealed the roofs are the way through and the job may sit on
-     them; without a barricade they are a view and a stash, and nothing that has
-     to be reached should be up there. */
+  /* Sealed, the roofs are the way through and the job may sit on them. Open,
+     they are a view and a stash, and nothing that has to be reached goes up. */
   for(k=0;k<roofs.length;k++)(sealed?lv.routeSpots:lv.pockets).push(roofs[k]);
+  return sealed?2:1;
 }
 
-/* --- the warehouse: small crate, bigger crate, biggest crate, container --- */
-function addCrateClimb(lv,rng,routeStart){
-  var made=0,px;
-  for(px=700;px<routeStart-820&&made<2;px+=180){
-    var gy=flatRun(lv,px,760);
-    if(gy===null||!propSpaceFree(lv,px-40,820,40))continue;
-    var steps=[[76,50],[94,98],[112,146]], conW=272, conH=196, cx=px, k;
-    for(k=0;k<3;k++){addDeck(lv,'crate',cx,gy-steps[k][1],steps[k][0],steps[k][1],{solid:true,v:rng()});cx+=steps[k][0];}
-    /* A standing jump peaks at 136, so the container cannot be cleared from the
-       floor and the stack is the only way over it — which is the point. */
-    var top=addDeck(lv,'container',cx,gy-conH,conW,conH,{solid:true,v:rng()});
-    var conX=cx;cx+=conW;
-    for(k=2;k>=0;k--){addDeck(lv,'crate',cx,gy-steps[k][1],steps[k][0],steps[k][1],{solid:true,v:rng()});cx+=steps[k][0];}
-    addGuide(lv,px-40,gy,'up','OVER THE CRATES');
-    addGuide(lv,conX+conW*0.5,gy-conH,'up','GANTRY ABOVE');
-    deckSpawn(lv,top,conX+conW*0.5,lv.n>=6?'lizard':'weasel');
-    // The gantry over the container is the reason to be up here at all.
-    var gan=addDeck(lv,'catwalk',conX-70,gy-conH-104,conW+140,14);
-    lv.routeSpots.push({x:conX+conW*0.5,y:gy-conH});
-    lv.pockets.push({x:conX+conW*0.5,y:gy-conH-104,plat:gan});
-    if(rng()<0.65)deckSpawn(lv,gan,conX+conW*0.22,'mouse');
-    made++;px+=1100;
+var PIECES={
+  sewer:[
+    {kind:'lane',gate:false,deck:'catwalk', up:'ladder',down:'pipe',h:[150,205]},
+    {kind:'gate',gate:true, wall:'bulkhead',tread:'pipe',h:[176,215],over:'catwalk'},
+    {kind:'lane',gate:false,deck:'pipe',    up:'pipe',  down:'pipe',h:[118,164]},
+    {kind:'gate',gate:true, wall:'pipeup',  tread:'pipe',h:[182,222]}
+  ],
+  street:[
+    {kind:'roof',gate:true},
+    {kind:'lane',gate:false,deck:'plank',    up:'firestep',down:'firestep',h:[164,214]},
+    {kind:'gate',gate:true, wall:'barricade',tread:'firestep',h:[192,238]}
+  ],
+  warehouse:[
+    {kind:'gate',gate:true, wall:'container',tread:'crate',h:[186,228],over:'catwalk'},
+    {kind:'lane',gate:false,deck:'catwalk',  up:'crate',  down:'crate',h:[174,228]},
+    {kind:'lane',gate:false,deck:'plank',    up:'crate',  down:'crate',h:[128,172]},
+    {kind:'gate',gate:true, wall:'crate',    tread:'crate',h:[190,232]}
+  ]
+};
+
+function buildPiece(lv,rng,spec,b0,b1,loose){
+  /* Random stabs inside the band first — a march from the band's left edge is
+     what made every stage of a biome land its movement in the same place. If the
+     band is crowded, fall back to a sweep, and then to a narrower build, rather
+     than giving up and leaving the stage flat. */
+  for(var k=0;k<16;k++){
+    var tight=k>=10;
+    var x=k<8?Math.round(b0+rng()*Math.max(1,b1-b0-560))
+             :Math.round(b0+(k%8)*Math.max(130,(b1-b0)/8));
+    var ok=spec.kind==='gate'?(addGate(lv,rng,x,spec,tight||loose,loose)?2:0):
+           spec.kind==='lane'?(addLane(lv,rng,x,spec,tight)?1:0):addRoofRun(lv,rng,x);
+    if(ok)return ok;
   }
+  return 0;
 }
 function addTerrain(lv,rng,routeStart){
-  var kind=propSetFor(lv.theme);
-  if(kind==='sewer'){addCatwalks(lv,rng,routeStart);}
-  else if(kind==='street'){addRoofRun(lv,rng,routeStart);}
-  else {addCrateClimb(lv,rng,routeStart);}
+  var menu=shuffleRng(PIECES[propSetFor(lv.theme)].slice(),rng),i;
+  var lo=560,hi=routeStart-560,span=hi-lo;
+  if(span<900)return;
+  var gated=false;
+  for(i=0;i<lv.plats.length;i++)if(lv.plats[i].sunken)gated=true;
+  /* The gate goes down first with the pick of the whole level, because the one
+     thing that must be true of every stage is that the ground lane stops
+     somewhere. A stage already cut by a pit is already stopped, and gets to
+     spend all its bands on lanes instead. */
+  var forced=!gated;
+  if(forced)
+    for(i=0;i<menu.length;i++){
+      if(!menu[i].gate)continue;
+      var r=buildPiece(lv,rng,menu[i],lo,hi);
+      if(r){menu.splice(i,1);i--;}
+      if(r===2){gated=true;break;}
+    }
+  /* The gate is extra rather than the whole budget, so even a short stage gets a
+     lane of its own on top of it and no two runs through are the same handful of
+     pieces. */
+  var want=clamp(Math.floor(span/1600),1,3);
+  var bandW=span/want;
+  for(i=0;i<want&&i<menu.length;i++)
+    buildPiece(lv,rng,menu[i],lo+i*bandW,lo+(i+1)*bandW);
+  /* Last resort. A stage with no terrain at all is a flat walk from end to end,
+     which is the one outcome none of this is allowed to produce, so a final
+     attempt drops the scenery clearance and asks only for floor that is not
+     somebody's doorway. */
+  if(gated)return;
+  for(i=0;i<PIECES[propSetFor(lv.theme)].length;i++){
+    var g2=PIECES[propSetFor(lv.theme)][i];
+    if(g2.gate&&buildPiece(lv,rng,g2,lo,hi,true)===2)return;
+  }
+}
+
+/* A pit is the one movement that has to be cut into the ground itself, so it
+   runs before the route and the buildings are measured against it. Not every
+   stage gets one, and the one that does gets it somewhere random along its
+   length rather than in the first segment wide enough to take it. */
+function digPits(lv,rng,routeStart){
+  if(rng()<0.32)return;
+  var tread=propSetFor(lv.theme)==='sewer'?'pipe':propSetFor(lv.theme)==='street'?'plank':'crate';
+  var most=1+((routeStart>4600&&rng()<0.4)?1:0),made=0,segs=[],i;
+  for(i=1;i<lv.plats.length;i++){
+    var g=lv.plats[i];
+    if(g.ground&&g.w>=640&&g.x>=560&&g.x+g.w<=routeStart-420)segs.push(g);
+  }
+  shuffleRng(segs,rng);
+  for(i=0;i<segs.length&&made<most;i++){
+    var s=segs[i];
+    var lipL=Math.round(190+rng()*160),pitW=Math.round(270+rng()*170);
+    if(lipL+pitW+200>s.w)continue;
+    var floorY=Math.min(556,s.y+Math.round(PIT_DROP*(0.82+rng()*0.36))),drop=floorY-s.y;
+    var pitX=s.x+lipL,rightX=pitX+pitW;
+    lv.plats.push({x:pitX,y:floorY,w:pitW,h:620-floorY,ground:true,sunken:true});
+    lv.plats.push({x:rightX,y:s.y,w:s.x+s.w-rightX,h:620-s.y,ground:true});
+    s.w=lipL;
+    /* Down the near side on treads, up the far side on a ladder: a channel you
+       drop into on purpose and can always climb out of, at either end. */
+    stepsBetween(lv,rng,tread,pitX+6,floorY,s.y,78,1);
+    addLadder(lv,rightX-42,floorY,s.y,rightX+18);
+    lv.routeSpots.push({x:pitX+pitW*0.5,y:floorY});
+    lv.items.push({x:Math.round(pitX+pitW*0.5),y:floorY-30,w:ITEM_D,h:ITEM_D,
+                   kind:rng()<0.5?'cheese':'nade',bob:rng()*6.28});
+    made++;
+  }
 }
 function buildLevel(n){
   var rng=mulberry32(9001+n*577+campaignSeed), isBoss=(n===11);
@@ -1564,7 +1663,7 @@ function buildLevel(n){
      upper floors of a block. The job goes on the route; the loot goes in the
      pockets. That way the level has a single path and the reasons to leave it
      are all optional. */
-  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],guides:[],routeSpots:[],pockets:[],setpieces:[],foreground:[],boss:isBoss,
+  var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],routeSpots:[],pockets:[],setpieces:[],foreground:[],boss:isBoss,
           length:isBoss?Math.max(1180,view.w*2.2):(4200+n*470),exit:null,routeMode:null,flow:STAGE_FLOW[n-1],miniBossDefeated:isBoss};
   var x=0,gy=470,px;
   if(isBoss){
@@ -1577,12 +1676,16 @@ function buildLevel(n){
       /* Ground runs are widened to match the scaled buildings — a 735-wide
          block needs a segment that can seat it with margins. Gap widths and
          step heights below are left at 1x so jump distances stay reachable. */
-      var segw=Math.round(880+rng()*420);
+      /* Segment lengths and steps used to sit in a narrow band, so the floor of
+         every stage had the same rhythm and the set pieces could only ever fit in
+         the same sorts of place. Both are wider now, with the occasional long
+         straight and the occasional short one. */
+      var segw=Math.round(rng()<0.22?(1250+rng()*420):(620+rng()*620));
       if(x+segw>routeStart)segw=routeStart-x;
       lv.plats.push({x:x,y:gy,w:segw,h:620-gy,ground:true});
       x+=segw;
       if(x<routeStart-180){
-        var stepv=(rng()<0.4)?0:((rng()<0.5?-1:1)*35);
+        var stepv=(rng()<0.34)?0:((rng()<0.5?-1:1)*Math.round(26+rng()*38));
         var ngy=clamp(gy+stepv,370,505), up=ngy<gy;
         if(rng()<0.5)x+=Math.round(up?(56+rng()*30):(84+rng()*38));
         gy=ngy;
@@ -1591,10 +1694,10 @@ function buildLevel(n){
     /* Themed clutter stands in for the old bare platforms. It is generated
        after the exit and buildings exist so placement can steer clear of both;
        see the deferred pass below. */
-    /* The sewers get their lower lane cut into the ground itself, so it has to
-       happen while the ground is still nothing but ground — before the route,
-       the buildings and everything that measures itself against them. */
-    if(propSetFor(lv.theme)==='sewer')digSumps(lv,rng,routeStart);
+    /* A pit is cut into the ground itself, so it has to happen while the ground
+       is still nothing but ground — before the route, the buildings and
+       everything that measures itself against them. */
+    digPits(lv,rng,routeStart);
 
     // The campaign follows one connected route through the city; the final
     // traversal matches the physical entrance to the next stage.
@@ -1620,7 +1723,11 @@ function buildLevel(n){
       lv.exit={x:lv.length-112,y:downY,mode:'descent',kind:lv.flow.exit,label:lv.flow.label,open:true};
     }
     // --- one or two guaranteed, theme-aware enterable structures ---
-    var gi,candidates=[],targetBuildings=1+(rng()<0.58?1:0),kind=structureKind(lv.theme);
+    /* A block is 735 wide and wants a clear 130 either side, so two of them eat
+       most of a short stage and leave the set pieces nowhere to stand — which
+       came out as the occasional stage with no terrain at all. Only a long stage
+       can afford a second one. */
+    var gi,candidates=[],targetBuildings=1+((routeStart>4400&&rng()<0.58)?1:0),kind=structureKind(lv.theme);
     /* Widest a scaled building can come out, plus the margin it needs to sit
        clear of the segment edges. Placement tests work off this, not literals. */
     var maxBuildW=Math.ceil(420*BUILD_SCALE), buildRoom=maxBuildW+110;
@@ -1699,6 +1806,10 @@ function buildLevel(n){
       var ov=rng(),ot=ov<.22?'barrel':ov<.45?'trashcan':ov<.68?'dumpster':ov<.84?'lowbeam':'gate';
       var ow=ot==='dumpster'?92:ot==='lowbeam'?116:ot==='gate'?22:ot==='trashcan'?38:30;
       var oh=ot==='dumpster'?48:ot==='lowbeam'?26:ot==='gate'?105:ot==='trashcan'?34:44;
+      /* This pass only ever checked for buildings, so a dumpster could be dropped
+         inside a crate, a pipe or a set piece's tread — a top surface buried in a
+         solid body, which is a place nobody can stand. */
+      if(!propSpaceFree(lv,px,ow,40))continue;
       var oy=ot==='lowbeam'?ogy-59:ogy-oh;
       var ob={x:Math.round(px),y:oy,w:ow,h:oh,type:ot,hp:ot==='gate'?115:ot==='dumpster'?85:ot==='trashcan'?35:22,dead:false};
       ob.platform={x:ob.x,y:ob.y,w:ob.w,h:ob.h,obstacle:ob};lv.obstacles.push(ob);lv.plats.push(ob.platform);
@@ -1758,7 +1869,6 @@ function startStage(n){
   P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.ladder=null;P.dropT=0;P.onStair=null;
   P.jumpHold=0;P.airBoost=0;P.jumpLock=0;
   cam.x=0;cam.shake=0;cam.zoom=1;camAnchorY=P.y+P.h;camGroundY=groundYAt(level,P.x+P.w/2)||470;
-  guideCur=null;guideT=0;guideFade=0;
   if(level.boss)spawnBoss();
   makeMotes();
   Music.game(n);
@@ -1766,9 +1876,9 @@ function startStage(n){
 }
 var boss=null;
 function spawnBoss(){
-  /* Trimmed from 1600: with the raised player damage on top, P.C.U.-9 dies in
-     roughly half the time it used to take. */
-  boss={x:level.length*0.72,y:300,w:150,h:160,hp:980,maxHp:980,state:'enter',
+  /* The one fight the whole campaign is pointed at, so he outlasts any of the
+     mini-bosses guarding the way to him. */
+  boss={x:level.length*0.72,y:300,w:150,h:160,hp:1400,maxHp:1400,state:'enter',
         timer:120,vx:0,vy:0,flash:0,phase:1,onGround:false,facing:-1,shots:0,anim:0};
 }
 function makeMotes(){
@@ -2834,7 +2944,10 @@ function updateEnemies(){
         ne.miniBoss=s.miniBoss;ne.name=s.miniBoss.name;ne.title=s.miniBoss.title;
         /* Roughly 40% shorter than the old duel: still a fight worth its name,
            but no longer a war of attrition against the ammo count. */
-        ne.hp=Math.max(Math.round(ne.hp*9),1050+stage*70);ne.dmg=Math.round(ne.dmg*1.85);
+        /* Tougher than the rank and file by a wide margin, and tougher than they
+           were: the old numbers were set alongside a minimum-fight timer that no
+           longer exists, so the health has to carry the whole duel on its own. */
+        ne.hp=Math.max(Math.round(ne.hp*12),1500+stage*110);ne.dmg=Math.round(ne.dmg*1.85);
         ne.bw=Math.round(ne.bw*1.28);ne.bh=Math.round(ne.bh*1.28);
         scaleBox(ne,ne.bw,ne.bh,s.t==='bat');
         ne.patrolRadius*=1.35;
@@ -3847,6 +3960,29 @@ function paintObstacles(){
       g.strokeStyle='rgba(30,22,12,.55)';g.lineWidth=3;                          // the nailed ends
       g.beginPath();g.moveTo(o.x+7,o.y-3);g.lineTo(o.x+7,o.y+o.h+3);
       g.moveTo(o.x+o.w-7,o.y-3);g.lineTo(o.x+o.w-7,o.y+o.h+3);g.stroke();
+    } else if(o.type==='bulkhead'){
+      /* A pressure door across the tunnel: riveted plate, a valve wheel nobody
+         has turned in years, and the tide line the water left on it. */
+      g.fillStyle=lin(g,o.x,o.y,o.x+o.w,o.y,[[0,'#2b3a38'],[.42,'#4d635e'],[1,'#16211f']]);
+      g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(5,10,9,.9)',2.5);
+      g.fillStyle='#3e534e';                                                     // frame
+      g.fillRect(o.x-6,o.y,10,o.h);g.fillRect(o.x+o.w-4,o.y,10,o.h);
+      g.fillRect(o.x-6,o.y,o.w+16,12);
+      g.fillStyle='rgba(214,238,230,.13)';g.fillRect(o.x+4,o.y+14,o.w-8,3);
+      g.fillStyle='rgba(150,178,168,.42)';                                       // rivets
+      for(var bhy=o.y+26;bhy<o.y+o.h-14;bhy+=30){
+        ell(g,o.x+9,bhy,3,3);g.fill();ell(g,o.x+o.w-9,bhy,3,3);g.fill();
+      }
+      g.strokeStyle='rgba(12,20,18,.5)';g.lineWidth=3;
+      g.beginPath();g.moveTo(o.x+3,o.y+o.h*0.46);g.lineTo(o.x+o.w-3,o.y+o.h*0.46);g.stroke();
+      var vwx=o.x+o.w/2, vwy=o.y+o.h*0.30, vr=Math.min(30,o.w*0.16);            // valve wheel
+      g.strokeStyle='#8c6a3f';g.lineWidth=5;
+      g.beginPath();g.arc(vwx,vwy,vr,0,6.283);g.stroke();
+      g.strokeStyle='#b08a4c';g.lineWidth=3;
+      g.beginPath();
+      g.moveTo(vwx-vr,vwy);g.lineTo(vwx+vr,vwy);g.moveTo(vwx,vwy-vr);g.lineTo(vwx,vwy+vr);g.stroke();
+      g.fillStyle='rgba(96,132,110,.20)';                                        // tide line
+      g.fillRect(o.x,o.y+o.h*0.72,o.w,o.h*0.28);
     } else if(o.type==='barricade'){
       /* Two storeys of P.C.U. hoarding across the pavement. It is not scenery
          and it is not cover: it is the reason the roofs exist. */
@@ -4878,64 +5014,6 @@ function comicCaption(s,x,y,size,quiet){
   g.fillStyle=quiet?'#e8ece8':'#ffffff';g.fillText(s,x,y);
   g.textAlign='left';g.restore();
 }
-/* ==================== DIRECTION HINTS ====================
-   A hint arrives where the decision is: it flashes at the ladder, the pipes or
-   the barricade for a beat and a half, then flies up and parks beside the
-   brother's name in the HUD, where it stays readable without standing in front
-   of anything worth seeing. One at a time, and gone the moment it is answered. */
-var GUIDE_FLASH=95, GUIDE_FLY=26;
-var guideCur=null, guideT=0, guideFade=0;
-function updateGuides(){
-  var gd=activeGuide();
-  if(gd!==guideCur){guideCur=gd;guideT=0;}
-  if(guideCur){guideT++;guideFade=Math.min(1,guideFade+0.12);}
-  else guideFade=Math.max(0,guideFade-0.10);
-}
-function guideChevron(x,y,size,dir,col,alpha){
-  g.save();g.globalAlpha=alpha;g.translate(x,y);
-  g.rotate(dir==='up'?0:dir==='down'?Math.PI:dir==='right'?Math.PI/2:-Math.PI/2);
-  g.fillStyle='rgba(8,9,10,.55)';
-  g.beginPath();g.moveTo(0,-size-2);g.lineTo(size+2,size*0.7);g.lineTo(-size-2,size*0.7);g.closePath();g.fill();
-  g.fillStyle=col;
-  g.beginPath();g.moveTo(0,-size);g.lineTo(size*0.86,size*0.55);g.lineTo(-size*0.86,size*0.55);g.closePath();g.fill();
-  g.restore();
-}
-function paintGuide(){
-  if(!guideCur||guideFade<=0.02)return;
-  var hh=Math.min(60,view.cssH*0.115),w=view.cssW;
-  var sc=view.scale*cam.zoom;
-  // Where the hint lives now, and where it is heading.
-  var wx=(guideCur.x-cam.x)*sc, wy=(guideCur.y-cam.y)*sc-58*sc;
-  var size=Math.max(11,Math.min(16,hh*0.24));
-  var label=guideCur.text, fs=Math.max(10,hh*0.20);
-  g.font='bold '+fs+'px Impact,"Arial Narrow Bold",sans-serif';
-  var tw=g.measureText(label).width, chipW=tw+size*2.6+16;
-  /* Parked immediately right of the name, health and weapon columns — the one
-     gap in the HUD band that is nobody else's. Further right is the score, and
-     further right again is the size control, which is a DOM element sitting on
-     top of the canvas and would swallow the text whole. */
-  var pr=hh*0.36, nameX=10+pr*2+8, barW=Math.min(w*0.36,150);
-  g.font=Math.max(9,hh*0.26)+'px Impact,"Arial Narrow Bold",sans-serif';
-  var wepW=g.measureText(WEAPONS[P.weapon].name).width;
-  g.font='bold '+fs+'px Impact,"Arial Narrow Bold",sans-serif';
-  var dockX=nameX+barW+10+wepW+22, dockY=hh*0.50;
-  if(dockX+chipW>w-140)dockX=Math.max(nameX,w-140-chipW);
-  var fly=clamp((guideT-GUIDE_FLASH)/GUIDE_FLY,0,1), ease=fly*fly*(3-2*fly);
-  var cx=lerp(wx,dockX+chipW/2,ease), cy=lerp(wy,dockY,ease);
-  var scale=lerp(1.18,1,ease), a=guideFade*(fly<1?1:0.92);
-  var bob=fly<1?Math.sin(tick*0.16)*3*(1-ease):0;
-  g.save();
-  g.translate(cx,cy+bob);g.scale(scale,scale);
-  g.fillStyle='rgba(10,10,12,'+(0.30+0.38*ease)*a+')';
-  rr(g,-chipW/2,-size-6,chipW,size*2+12,size*0.6);g.fill();
-  g.strokeStyle='rgba(201,162,74,'+(0.16+0.30*ease)*a+')';g.lineWidth=1;g.stroke();
-  guideChevron(-chipW/2+size+6,0,size*0.72,guideCur.dir,'#9be36a',a);
-  g.globalAlpha=a;
-  g.font='bold '+fs+'px Impact,"Arial Narrow Bold",sans-serif';
-  g.fillStyle='#e8dcc0';g.textAlign='left';
-  g.fillText(label,-chipW/2+size*2+10,fs*0.36);
-  g.textAlign='left';g.restore();
-}
 var _vigG=null,_vigK='';
 function paintVignette(){
   var w=view.cssW,h=view.cssH,k=Math.round(w)+'x'+Math.round(h);
@@ -5886,7 +5964,7 @@ function step(){
     return;
   }
   if(pressed('pause')){state='PAUSE';if(matchMedia('(pointer:coarse)').matches)setPauseModal(true);return;}
-  updatePlayer();updateEnemies();updateBoss();updateProjectiles();updateCamera();updateGuides();Music.update();
+  updatePlayer();updateEnemies();updateBoss();updateProjectiles();updateCamera();Music.update();
   if(!level.boss&&playerReachedExit()){
     P.exitDown=level.exit.kind==='toilet'||level.exit.kind==='containerdrop';
     state='EXITING';stateT=0;score+=1000+stage*250;SFX.clear();
@@ -5984,7 +6062,6 @@ function render(){
   S();
   paintVignette();
   paintHUD();
-  paintGuide();
   if(state==='PAUSE')overlay('PAUSED','','PRESS START','#e8c25a');
   if(state==='DEAD')overlay('SQUEAK!','a brother down','','#e05a4a');
   if(state==='CLEAR')overlay('STAGE CLEAR','+'+(1000+stage*250)+' PTS','','#8fbf6a');

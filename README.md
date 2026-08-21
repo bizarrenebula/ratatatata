@@ -16,21 +16,31 @@ Then open <http://localhost:8000>.
 
 Every biome climbs in its own language, and the camera goes with you.
 
-**The sewers** are cut on two levels. Stretches of the main channel drop a storey
-into a sump: pipework steps you down the near side, a ladder brings you back up
-the far one, and there is usually something worth having at the bottom. Overhead,
-grated catwalks run above the tunnel with a ladder at one end and pipes stepping
-back down at the other, so the high lane is a loop rather than a dead end.
+Each biome owns three or four movements, and a stage draws two or three of them
+at random — shuffled, one per band of its length, each at a random position
+inside its band with its dimensions rolled fresh. Whatever comes up, at least one
+draw is a gate, so the ground lane always stops somewhere. Two stages of the same
+biome are not the same stage twice.
+
+**The sewers** are cut on two levels. A stretch of the main channel can drop a
+storey into a sump — pipework down the near side, a ladder back up the far one,
+something worth having at the bottom. A pressure bulkhead can seal the tunnel
+instead, with pipes climbing over it and a gantry above. And catwalks run
+overhead with a ladder at one end and pipes stepping back down at the other, so
+the high lane is a loop rather than a dead end.
 
 **The street** leaves the pavement. A fire escape zig-zags up the side of a block
 to a run of rooftops — water tanks for cover, guards already up there, bats
-working the gaps between buildings — and a second flight steps down the far side
-to street level, where the exit is.
+working the gaps, planks laid across some of them — and a second flight steps
+down the far side to street level. Sometimes the whole climb exists because a
+P.C.U. hoarding seals the road; sometimes the hoarding stands on its own with a
+short flight over it, and the roofs are only a view and a stash.
 
 **The warehouse** stacks its crates small, medium, large. The stack is a
-staircase, and it exists because a P.C.U. freight container stands in the way at
-nearly two hundred pixels: too tall to jump, so the only way past is up and over.
-Above the container hangs a gantry with the reason to be up there at all.
+staircase, and it exists because something stands in the way — a P.C.U. freight
+container, or a wall of crates — at close to two hundred pixels: too tall to
+jump, so the only way past is up and over. A gantry over it holds the reason to
+be up there at all.
 
 Everything load-bearing in all three is indestructible. A route that could be
 shot away is a route that could strand you at the bottom of a pit.
@@ -58,13 +68,6 @@ container, the upper floors of a block you could just as easily walk past — th
 are pockets, and each one holds something worth the climb: a weapon, a grenade,
 a brass slug for the wallet. Walk by and you lose nothing but the loot.
 
-### Hints
-
-A hint arrives where the decision is — at the ladder, at the pipes, at the
-barricade — as a chevron and three or four words. It flashes there for about a
-second and a half, then flies up and parks beside the brother's name in the HUD,
-so it stays readable without standing in front of anything. One at a time, and
-gone the moment you have answered it.
 
 ## Tokens
 
