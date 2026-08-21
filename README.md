@@ -71,13 +71,13 @@ a brass slug for the wallet. Walk by and you lose nothing but the loot.
 
 ## The start screen
 
-The title screen is the alley: Rocco with his arms crossed outside the Cheese
-Arcade, Vinnie mid-sentence beside him, the whole of Rat Alley behind them. The
-picture is framed rather than cropped — nothing takes the ears or the boots off
-at any window shape — on a bed of itself blown up and pushed back, so the frame
-fills without black bars. The marquee gets a band of its own along the top, made
-of the same brickwork stretched up and dimmed, because the brothers stand with no
-room above their ears and the logo is not going to sit on their heads.
+The title screen is the alley, full bleed: Rocco with his arms crossed outside
+the Cheese Arcade, Vinnie glaring beside him, Rat Alley running back to the
+skyline behind them. The brothers stand in the lower half with the night sky over
+them, and the marquee goes in that sky — no band, no bar, just the lettering over
+the stars with the sky darkened enough underneath to hold it. The picture is
+anchored on the brothers, so a wide window crops the walls and a tall one crops
+the cobbles, and neither ever crops them.
 
 ## Tokens
 

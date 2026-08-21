@@ -5438,19 +5438,15 @@ function drawFramed(img,dx,dy,dw,dh){
 }
 function drawTitle(){
   var w=view.cssW,h=view.cssH,i;
-  /* The alley is the title screen. The brothers stand in the middle of it with
-     no room above their ears, so the marquee gets a band of its own at the top
-     rather than being laid over them — and the band is the same brickwork
-     stretched up and dimmed, so it reads as more alley rather than a bar. */
-  var band=Math.min(h*0.34,192),lit=alleyArt.complete&&alleyArt.naturalWidth;
+  /* The alley is the title screen, full bleed. The brothers stand in the lower
+     half with the night sky over them, so the marquee sits in that sky and the
+     art needs no band of its own. The picture is anchored on the brothers, so a
+     wide window crops the walls and a tall one crops the cobbles — never them. */
+  var band=Math.min(h*0.46,300),lit=alleyArt.complete&&alleyArt.naturalWidth;
   if(lit){
-    drawFramed(alleyArt,0,band,w,h-band);
-    var ih=alleyArt.naturalHeight;
-    g.drawImage(alleyArt,0,0,alleyArt.naturalWidth,ih*0.24,0,0,w,band);
-    g.fillStyle=lin(g,0,0,0,band,[[0,'rgba(6,9,14,.95)'],[0.7,'rgba(6,9,14,.88)'],[1,'rgba(6,9,14,.28)']]);
-    g.fillRect(0,0,w,band);
-    // A little of the alley's own neon spilling up into the marquee.
-    g.fillStyle=rad(g,w*0.5,band*0.62,10,band*0.9,[[0,'rgba(255,176,90,.16)'],[1,'rgba(0,0,0,0)']]);
+    drawCover(alleyArt,0,0,w,h,0.5,0.42);
+    // The sky darkened just enough under the lettering to hold it.
+    g.fillStyle=lin(g,0,0,0,band,[[0,'rgba(6,9,20,.62)'],[0.62,'rgba(6,9,20,.34)'],[1,'rgba(6,9,20,0)']]);
     g.fillRect(0,0,w,band);
   } else {
     // Until it loads, the sewer mouth the game opened with for months.
@@ -5469,7 +5465,7 @@ function drawTitle(){
   }
   /* Kept clear of the size control the page floats over the top-right corner,
      and clear of the top edge on a short screen. */
-  var logoY=band*0.50,rx=Math.min(w*0.42,392,(w-270)/2),ry=Math.min(band*0.40,92);
+  var logoY=band*0.40,rx=Math.min(w*0.42,392,(w-270)/2),ry=Math.min(band*0.30,92);
   if(titleLogo.complete&&titleLogo.naturalWidth){
     g.save();g.shadowColor='rgba(0,0,0,.85)';g.shadowBlur=14;g.shadowOffsetY=8;
     g.drawImage(titleLogo,w/2-rx,logoY-ry,rx*2,ry*2);
@@ -5482,7 +5478,7 @@ function drawTitle(){
     g.save();g.translate(w/2,logoY+ts*0.18);g.rotate(-0.035);
     txt('RATATATATA!',3,4,ts,'#160b0a','center');txt('RATATATATA!',0,0,ts,'#d63825','center');g.restore();
   }
-  comicCaption('RAT BROS: RODENT RECKONING',w/2,Math.min(band-8,logoY+ry+26),Math.min(20,w*0.034),false);
+  comicCaption('RAT BROS: RODENT RECKONING',w/2,logoY+ry+26,Math.min(20,w*0.034),false);
   /* The story goes at the bottom, over the cobbles, where nobody is standing. */
   if(lit){
     g.fillStyle=lin(g,0,h*0.70,0,h,[[0,'rgba(4,6,10,0)'],[1,'rgba(4,6,10,.88)']]);
