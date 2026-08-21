@@ -12,6 +12,33 @@ python3 -m http.server 8000
 
 Then open <http://localhost:8000>.
 
+## The ground is not the level
+
+Every biome climbs in its own language, and the camera goes with you.
+
+**The sewers** are cut on two levels. Stretches of the main channel drop a storey
+into a sump: pipework steps you down the near side, a ladder brings you back up
+the far one, and there is usually something worth having at the bottom. Overhead,
+grated catwalks run above the tunnel with a ladder at one end and pipes stepping
+back down at the other, so the high lane is a loop rather than a dead end.
+
+**The street** leaves the pavement. A fire escape zig-zags up the side of a block
+to a run of rooftops — water tanks for cover, guards already up there, bats
+working the gaps between buildings — and a second flight steps down the far side
+to street level, where the exit is.
+
+**The warehouse** stacks its crates small, medium, large. The stack is a
+staircase, and it exists because a P.C.U. freight container stands in the way at
+nearly two hundred pixels: too tall to jump, so the only way past is up and over.
+Above the container hangs a gantry with the reason to be up there at all.
+
+Everything load-bearing in all three is indestructible. A route that could be
+shot away is a route that could strand you at the bottom of a pit.
+
+Outdoors the camera rides the last ground you actually stood on, so an ordinary
+jump moves nothing and street framing is exactly what it always was — it only
+lifts when you do.
+
 ## Tokens
 
 The brothers' money is brass turnstile slugs. You start with five, a mini-boss

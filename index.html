@@ -82,6 +82,11 @@ var titleLogo=new Image();titleLogo.src='assets/images/ui/ratatatata-title-cutou
 var view={w:520,h:900,scale:1,cssW:360,cssH:640};
 var pad ={cssW:360,cssH:160};
 var DPR=1, VIEW_BOTTOM=612, camY0=-300;
+/* Ground runs between y=370 and y=505, and all of it is framed the same way.
+   CAM_STREET sits just above the highest of those, so the vertical camera stays
+   asleep for the whole of the street lane and only wakes for terrain built above
+   it. camAnchorY is the last ground height the brother stood on. */
+var CAM_STREET=352, camAnchorY=470;
 
 function resize(){
   DPR=Math.min(window.devicePixelRatio||1,2.5);
@@ -996,7 +1001,10 @@ function enemySpawnSize(t){var z=t==='cat'?{w:40,h:52}:t==='bat'?{w:34,h:24}:t==
 function enemySpawnBlocked(lv,s,x,y){
   var z=enemySpawnSize(s.t),r={x:x,y:y,w:z.w,h:z.h},i,p;
   for(i=0;i<lv.obstacles.length;i++){
-    var o=lv.obstacles[i];if(!o.dead&&!o.decorative&&hit(r,{x:o.x-5,y:o.y-3,w:o.w+10,h:o.h+6}))return true;
+    var o=lv.obstacles[i];
+    // The surface you are standing on is not something you are standing in.
+    if(s.deck&&o===s.deck.obstacle)continue;
+    if(!o.dead&&!o.decorative&&hit(r,{x:o.x-5,y:o.y-3,w:o.w+10,h:o.h+6}))return true;
   }
   if(s.inB)for(i=0;i<lv.plats.length;i++){
     p=lv.plats[i];if(p.inside===s.inB&&p.step&&hit(r,{x:p.x-3,y:p.y-3,w:p.w+6,h:p.h+6}))return true;
@@ -1017,6 +1025,14 @@ function sanitizeEnemySpawns(lv){
   for(var i=0;i<lv.spawns.length;i++){
     var s=lv.spawns[i],z=enemySpawnSize(s.t),placed=false;
     if(s.perch){safe.push(s);continue;}
+    /* A deck spawn stands on its deck. Dropping it to ground level like an
+       ordinary outdoor spawn would empty every catwalk and rooftop in the game. */
+    if(s.deck){
+      s.x=Math.round(clamp(s.x,s.deck.x+4,s.deck.x+s.deck.w-z.w-4));
+      s.y=Math.round(s.deck.y-z.h);
+      if(!enemySpawnBlocked(lv,s,s.x,s.y))safe.push(s);
+      continue;
+    }
     for(var j=0;j<offsets.length;j++){
       var nx=s.x+offsets[j],ny=s.y;
       if(s.inB){
@@ -1245,6 +1261,191 @@ function buildPropClimb(lv,rng,set,px,gy){
     cx+=tw+14;
   }
 }
+/* ==================== TERRAIN ====================
+   Ground used to be one lane with scenery standing on it, which is why every
+   stage played the same way in a different colour. Each biome now climbs in its
+   own language. The sewers drop into sumps you climb out of and carry catwalks
+   overhead. The street leaves the pavement entirely: up a fire escape, across
+   the rooftops, and down the far side to the exit. The warehouse stacks crates
+   small, medium, large into a staircase over a container too tall to jump — the
+   sizes are the instruction.
+
+   What they share is a second lane worth going to and an honest way back down
+   from it, and that everything load-bearing is indestructible. A route that can
+   be shot away is a route that can strand the player at the bottom of a pit, and
+   no amount of level design is worth that. */
+var SUMP_DROP=104, CATWALK_UP=168, ROOF_UP=290, FIRE_STEP=72;
+
+function addLadder(lv,x,bottomY,topY,topX){
+  lv.ladders.push({x:Math.round(x),w:26,bottomY:Math.round(bottomY),
+                   topY:Math.round(topY),topX:Math.round(topX)});
+}
+/* A deck is terrain wearing a prop's clothes: it draws and collides like the
+   rest of the scenery, but nothing can destroy it, and unless it is asked to be
+   solid it is one-way — you drop off the front rather than being fenced in. */
+function addDeck(lv,type,x,y,w,h,opt){
+  opt=opt||{};
+  var o=addProp(lv,type,x,y,w,h,0,{oneway:!opt.solid,v:opt.v===undefined?0.42:opt.v});
+  o.deck=true;
+  return o.platform;
+}
+/* Enemies posted to a deck belong to it. Ordinary outdoor spawns are dropped to
+   ground level during the sanitising pass, which would empty every catwalk and
+   rooftop in the game; a deck spawn is pinned to its own surface instead. */
+function deckSpawn(lv,plat,x,t){
+  var z=enemySpawnSize(t);
+  if(plat.w<z.w+20)return;
+  lv.spawns.push({x:Math.round(clamp(x,plat.x+8,plat.x+plat.w-z.w-8)),
+                  y:Math.round(plat.y-z.h),t:t,used:false,deck:plat});
+}
+function deckItem(lv,rng,plat,x,kind){
+  lv.items.push({x:Math.round(clamp(x,plat.x+8,plat.x+plat.w-ITEM_D-8)),
+                 y:Math.round(plat.y-ITEM_D-6),w:ITEM_D,h:ITEM_D,kind:kind,bob:rng()*6.28,
+                 wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)]});
+}
+/* Terrain only hangs over ground the player can actually stand on, so a span is
+   usable only when one unbroken segment carries the whole of it. */
+function flatRun(lv,x,w){
+  var y=groundYAt(lv,x);
+  if(y===null)return null;
+  for(var t=x+60;t<=x+w;t+=60)if(groundYAt(lv,t)!==y)return null;
+  return groundYAt(lv,x+w)===y?y:null;
+}
+
+/* --- sewers: a level down into the sump, a level up onto the catwalk --- */
+function digSumps(lv,rng,routeStart){
+  /* A sump splits the segment it is cut into, and the catwalk pass afterwards
+     needs an unbroken run to hang itself over. On a short stage there is only
+     room for one of the two, so dig one pit and leave the rest of the tunnel
+     whole. */
+  var made=0,i,segs=lv.plats.slice(),most=routeStart>4200?2:1;
+  for(i=1;i<segs.length&&made<most;i++){
+    var s=segs[i];
+    if(!s.ground||s.w<640)continue;
+    if(s.x<640||s.x+s.w>routeStart-420)continue;
+    var lipL=Math.round(190+rng()*130), pitW=Math.round(280+rng()*140);
+    if(lipL+pitW+200>s.w)continue;
+    var floorY=Math.min(556,s.y+SUMP_DROP), drop=floorY-s.y;
+    var pitX=s.x+lipL, rightX=pitX+pitW;
+    lv.plats.push({x:pitX,y:floorY,w:pitW,h:620-floorY,ground:true,sunken:true});
+    lv.plats.push({x:rightX,y:s.y,w:s.x+s.w-rightX,h:620-s.y,ground:true});
+    s.w=lipL;
+    /* Down the near side on pipework, up the far side on a ladder: a channel you
+       drop into on purpose and can always climb out of, at either end. */
+    addDeck(lv,'pipe',pitX+4,s.y+Math.round(drop*0.34),78,20);
+    addDeck(lv,'pipe',pitX+70,s.y+Math.round(drop*0.68),78,20);
+    addLadder(lv,rightX-42,floorY,s.y,rightX+18);
+    lv.items.push({x:Math.round(pitX+pitW*0.5),y:floorY-30,w:ITEM_D,h:ITEM_D,
+                   kind:rng()<0.5?'cheese':'nade',bob:rng()*6.28});
+    made++;
+  }
+}
+function addCatwalks(lv,rng,routeStart){
+  var made=0,px;
+  /* Walked in short strides rather than long guesses. A stage is only as
+     vertical as the number of places the generator actually tried: striding a
+     thousand pixels at a time gave a level two chances and usually took
+     neither, which is how stages ended up flat. */
+  for(px=760;px<routeStart-620&&made<3;px+=170){
+    var w=Math.round(330+rng()*190), gy=flatRun(lv,px,w+170);
+    if(gy===null||!propSpaceFree(lv,px-60,w+240,50))continue;
+    var cy=gy-CATWALK_UP, deck=addDeck(lv,'catwalk',px,cy,w,14);
+    addLadder(lv,px+12,gy,cy,px+24);
+    /* Pipework steps back down off the far end, so a catwalk is a loop rather
+       than a dead end you have to throw yourself off. */
+    addDeck(lv,'pipe',px+w-10,cy+56,80,22);
+    addDeck(lv,'pipe',px+w+46,cy+112,80,22);
+    deckItem(lv,rng,deck,px+w*0.5,rng()<0.5?'weapon':'nade');
+    deckSpawn(lv,deck,px+w*0.32,'weasel');
+    if(rng()<0.6)deckSpawn(lv,deck,px+w*0.74,lv.n>=4?'lizard':'mouse');
+    made++;px+=w+320;
+  }
+}
+
+/* --- the street: the fight moves off the pavement and onto the roofs --- */
+function addRoofRun(lv,rng,routeStart){
+  // Where the fire escape can stand decides the whole run, so look for a footing
+  // rather than guessing at one: walk out from a third of the way in.
+  var x=-1,px;
+  for(px=Math.round(routeStart*0.18);px<routeStart*0.70;px+=120){
+    if(flatRun(lv,px,300)!==null&&propSpaceFree(lv,px-40,340,40)){x=px;break;}
+  }
+  if(x<0)return;
+  var gy=groundYAt(lv,x), k, ly=gy, lx=x;
+  // The fire escape: three landings zig-zagging up the side of the block. Every
+  // rise sits well inside a standing jump, so getting up is a climb, not a trick.
+  for(k=0;k<3;k++){
+    ly-=FIRE_STEP;lx+=(k%2?-84:84);
+    addDeck(lv,'firestep',lx,ly,134,15);
+  }
+  /* A roof is solid — you do not fall through one — which means it must never
+     be built over the landing that reaches it, or the last step of the climb has
+     a ceiling 50px above it and the way up is walled off. The first roof
+     therefore starts just past the top landing: 74 up and a stride across. The
+     rest are gated on clear space; this one is placed on the strength of the
+     fire escape that was just checked into position below it. */
+  var roofY=gy-ROOF_UP, rx=lx+150, made=0, d=null;
+  while(rx<routeStart-620&&made<4){
+    var rw=Math.round(300+rng()*160), ry=made?roofY+Math.round((rng()-0.5)*64):roofY;
+    if(made&&!propSpaceFree(lv,rx-30,rw+60,30)){
+      /* A roof you cannot jump to is not part of the run. If whatever is in the
+         way is wider than a jump, the roofs end here and the way down starts
+         from the last one that was actually reachable. */
+      rx+=110;
+      if(rx-(d.x+d.w)>170)break;
+      continue;
+    }
+    d=addDeck(lv,'rooftop',rx,ry,rw,22,{solid:true});
+    // Roof furniture doubles as cover; the tank is tall enough to stand on.
+    if(rng()<0.7)addDeck(lv,'watertank',Math.round(rx+rw*0.82),ry-84,64,84,{solid:true});
+    deckSpawn(lv,d,rx+rw*0.28,lv.n>=7?'lizard':'weasel');
+    if(rng()<0.72)deckSpawn(lv,d,rx+rw*0.56,lv.n>=5&&rng()<0.4?'cat':'mouse');
+    if(rng()<0.55)deckItem(lv,rng,d,rx+rw*0.5,rng()<0.5?'weapon':'cheese');
+    lv.spawns.push({x:Math.round(rx+rw*0.5),y:Math.round(ry-150),t:'bat',used:false});
+    rx+=rw+Math.round(94+rng()*40);
+    made++;
+  }
+  if(!d)return;
+  /* And down the far side. Nothing stops you jumping off a roof, but the way
+     down should read as a way down — the exit is at street level. The flight
+     steps clear of the roof's edge rather than back under it, for the same
+     headroom reason the first roof had to start clear of the fire escape. */
+  var ex=d.x+d.w+10, ey=d.y;
+  for(k=0;k<4;k++){
+    ey+=FIRE_STEP;
+    if(ey>gy-46)break;
+    addDeck(lv,'firestep',ex,ey,134,15);
+    ex+=46;
+  }
+}
+
+/* --- the warehouse: small crate, bigger crate, biggest crate, container --- */
+function addCrateClimb(lv,rng,routeStart){
+  var made=0,px;
+  for(px=700;px<routeStart-820&&made<2;px+=180){
+    var gy=flatRun(lv,px,760);
+    if(gy===null||!propSpaceFree(lv,px-40,820,40))continue;
+    var steps=[[76,50],[94,98],[112,146]], conW=272, conH=196, cx=px, k;
+    for(k=0;k<3;k++){addDeck(lv,'crate',cx,gy-steps[k][1],steps[k][0],steps[k][1],{solid:true,v:rng()});cx+=steps[k][0];}
+    /* A standing jump peaks at 136, so the container cannot be cleared from the
+       floor and the stack is the only way over it — which is the point. */
+    var top=addDeck(lv,'container',cx,gy-conH,conW,conH,{solid:true,v:rng()});
+    var conX=cx;cx+=conW;
+    for(k=2;k>=0;k--){addDeck(lv,'crate',cx,gy-steps[k][1],steps[k][0],steps[k][1],{solid:true,v:rng()});cx+=steps[k][0];}
+    deckSpawn(lv,top,conX+conW*0.5,lv.n>=6?'lizard':'weasel');
+    // The gantry over the container is the reason to be up here at all.
+    var gan=addDeck(lv,'catwalk',conX-70,gy-conH-104,conW+140,14);
+    deckItem(lv,rng,gan,conX+conW*0.5,rng()<0.55?'weapon':'nade');
+    if(rng()<0.65)deckSpawn(lv,gan,conX+conW*0.22,'mouse');
+    made++;px+=1100;
+  }
+}
+function addTerrain(lv,rng,routeStart){
+  var kind=propSetFor(lv.theme);
+  if(kind==='sewer'){addCatwalks(lv,rng,routeStart);}
+  else if(kind==='street'){addRoofRun(lv,rng,routeStart);}
+  else {addCrateClimb(lv,rng,routeStart);}
+}
 function buildLevel(n){
   var rng=mulberry32(9001+n*577+campaignSeed), isBoss=(n===11);
   var lv={n:n,theme:STAGES[n-1],plats:[],spawns:[],items:[],props:[],lamps:[],buildings:[],obstacles:[],ladders:[],setpieces:[],foreground:[],boss:isBoss,
@@ -1274,6 +1475,10 @@ function buildLevel(n){
     /* Themed clutter stands in for the old bare platforms. It is generated
        after the exit and buildings exist so placement can steer clear of both;
        see the deferred pass below. */
+    /* The sewers get their lower lane cut into the ground itself, so it has to
+       happen while the ground is still nothing but ground — before the route,
+       the buildings and everything that measures itself against them. */
+    if(propSetFor(lv.theme)==='sewer')digSumps(lv,rng,routeStart);
 
     // The campaign follows one connected route through the city; the final
     // traversal matches the physical entrance to the next stage.
@@ -1305,7 +1510,7 @@ function buildLevel(n){
     var maxBuildW=Math.ceil(420*BUILD_SCALE), buildRoom=maxBuildW+110;
     for(gi=0;gi<lv.plats.length;gi++){
       var seg=lv.plats[gi];
-      if(!seg.ground||seg.w<buildRoom||seg.x<360||seg.x>routeStart-200)continue;
+      if(!seg.ground||seg.sunken||seg.w<buildRoom||seg.x<360||seg.x>routeStart-200)continue;
       candidates.push(seg);
     }
     for(gi=0;gi<targetBuildings&&candidates.length;gi++){
@@ -1336,6 +1541,9 @@ function buildLevel(n){
       lv.spawns.push({x:Math.round(bld.x+bld.w-72),y:bld.gy-(groundType==='cat'?52:groundType==='weasel'?38:32),
         t:groundType,used:false,inB:bld});
     }
+    /* The upper lane goes in once the buildings are down, so it can be routed
+       around them, and before the enemies and loot, so both passes can see it. */
+    addTerrain(lv,rng,routeStart);
     var gapStep=Math.max(125,235-n*10);
     for(px=500;px<lv.length-220;px+=gapStep+rng()*160){
       var r=rng(),type='mouse';
@@ -1410,6 +1618,12 @@ function buildLevel(n){
   for(px=-120;px<lv.length+500;px+=360+rng()*420){
     lv.foreground.push({x:Math.round(px),y:rng(),s:.75+rng()*.7,type:lv.theme.prop,flip:rng()<.5});
   }
+  /* How far up the camera is allowed to travel. Measured off the level rather
+     than guessed at, so a stage with nothing above street level still frames
+     exactly the way it always did. */
+  var ceil=VIEW_BOTTOM;
+  for(px=0;px<lv.plats.length;px++)if(lv.plats[px].y<ceil)ceil=lv.plats[px].y;
+  lv.top=ceil-120;
   return lv;
 }
 function startStage(n){
@@ -1423,7 +1637,7 @@ function startStage(n){
   P.inB=null;P.doorT=0;P.atDoor=null;P.nadeReady=false;P.nadeCharge=0;
   P.interiorFade=0;P.exitFocus=0;P.entryLock=0;P.ladder=null;P.dropT=0;P.onStair=null;
   P.jumpHold=0;P.airBoost=0;P.jumpLock=0;
-  cam.x=0;cam.shake=0;cam.zoom=1;
+  cam.x=0;cam.shake=0;cam.zoom=1;camAnchorY=P.y+P.h;
   if(level.boss)spawnBoss();
   makeMotes();
   Music.game(n);
@@ -1660,7 +1874,7 @@ function stageUnlocked(n){return n===1||!!clearedStages()[n];}
 function respawnAtCheckpoint(){
   P.dead=false;P.hp=P.maxHp;P.inv=140;P.vx=0;P.vy=0;P.airBoost=0;P.onStair=null;
   P.h=P_STAND*charScale;P.inB=null;P.doorT=0;
-  var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;
+  var sp=safeRespawn(P.checkX);P.x=sp.x;P.y=sp.y;camAnchorY=P.y+P.h;
   for(var ei=enemies.length-1;ei>=0;ei--){
     var nearby=enemies[ei];
     // Never erase enemies required to unlock the stage during respawn cleanup.
@@ -3443,6 +3657,70 @@ function paintObstacles(){
       var hookX=o.x+o.w*(0.2+(o.v%1)*0.6);                                     // hanging hook
       g.strokeStyle='#8d949a';g.lineWidth=2;g.beginPath();g.moveTo(hookX,o.y+o.h);g.lineTo(hookX,o.y+o.h+26);g.stroke();
       g.fillStyle='#9aa2a8';rr(g,hookX-6,o.y+o.h+26,12,10,2);g.fill();ink(g,'rgba(8,8,10,.7)',1.5);
+    } else if(o.type==='catwalk'){
+      /* Steel grating on brackets, with a handrail behind it. The rail is drawn
+         above the walking surface but is not part of it — it reads as something
+         to run along rather than a wall to be stopped by. */
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#8b9490'],[.5,'#5b6663'],[1,'#242c2b']]);
+      g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(6,10,10,.85)',2);
+      g.strokeStyle='rgba(18,24,23,.55)';g.lineWidth=2;
+      for(var cwg=o.x+5;cwg<o.x+o.w-3;cwg+=11){g.beginPath();g.moveTo(cwg,o.y+1);g.lineTo(cwg,o.y+o.h-1);g.stroke();}
+      g.strokeStyle='rgba(150,168,162,.5)';g.lineWidth=3;
+      g.beginPath();g.moveTo(o.x+2,o.y-34);g.lineTo(o.x+o.w-2,o.y-34);g.stroke();
+      g.lineWidth=2;g.strokeStyle='rgba(120,138,132,.42)';
+      for(var cwp=o.x+8;cwp<o.x+o.w-6;cwp+=54){g.beginPath();g.moveTo(cwp,o.y);g.lineTo(cwp,o.y-34);g.stroke();}
+      g.strokeStyle='rgba(90,104,100,.55)';g.lineWidth=4;                       // brackets underneath
+      for(var cwb=o.x+22;cwb<o.x+o.w-14;cwb+=88){
+        g.beginPath();g.moveTo(cwb,o.y+o.h);g.lineTo(cwb+16,o.y+o.h+19);g.stroke();
+      }
+    } else if(o.type==='firestep'){
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#6d5a4e'],[1,'#241c18']]);
+      g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(10,7,6,.85)',2);
+      g.strokeStyle='rgba(24,18,15,.5)';g.lineWidth=2;
+      for(var fsg=o.x+4;fsg<o.x+o.w-3;fsg+=9){g.beginPath();g.moveTo(fsg,o.y+1);g.lineTo(fsg,o.y+o.h-1);g.stroke();}
+      g.strokeStyle='rgba(178,146,118,.55)';g.lineWidth=3;                      // rail and stanchions
+      g.beginPath();g.moveTo(o.x+3,o.y-30);g.lineTo(o.x+o.w-3,o.y-30);g.stroke();
+      g.lineWidth=2;
+      for(var fsp=o.x+9;fsp<o.x+o.w-6;fsp+=40){g.beginPath();g.moveTo(fsp,o.y);g.lineTo(fsp,o.y-30);g.stroke();}
+      g.strokeStyle='rgba(150,122,98,.4)';g.lineWidth=3;                        // the flight below
+      for(var fsr=0;fsr<4;fsr++){
+        g.beginPath();g.moveTo(o.x+8+fsr*13,o.y+o.h);g.lineTo(o.x+30+fsr*13,o.y+o.h+26);g.stroke();
+      }
+    } else if(o.type==='rooftop'){
+      /* Tar and gravel with a parapet along the front lip, so a roof reads as a
+         floor you are standing on top of rather than a ledge hanging in the air. */
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#4a4a4e'],[.3,'#33333a'],[1,'#131317']]);
+      g.fillRect(o.x,o.y,o.w,o.h);
+      g.fillStyle='rgba(216,214,206,.16)';g.fillRect(o.x,o.y,o.w,3);
+      var rgv=mulberry32(Math.round(o.x)*13+7);
+      g.fillStyle='rgba(0,0,0,.30)';
+      for(var rgi=0;rgi<o.w;rgi+=7)g.fillRect(o.x+rgi+rgv()*4,o.y+4+rgv()*8,2+rgv()*3,2);
+      g.fillStyle=lin(g,o.x,o.y-22,o.x,o.y+4,[[0,'#5b5b60'],[1,'#2a2a30']]);   // parapet
+      g.fillRect(o.x-4,o.y-22,10,26);g.fillRect(o.x+o.w-6,o.y-22,10,26);
+      ink(g,'rgba(6,6,8,.8)',2);
+      g.fillStyle='rgba(0,0,0,.55)';g.fillRect(o.x,o.y+o.h,o.w,10);            // the building it caps
+      g.fillStyle=lin(g,o.x,o.y+o.h,o.x,o.y+o.h+120,[[0,'rgba(20,20,26,.92)'],[1,'rgba(8,8,11,0)']]);
+      g.fillRect(o.x+6,o.y+o.h,o.w-12,120);
+    } else if(o.type==='watertank'){
+      g.fillStyle=lin(g,o.x,o.y,o.x+o.w,o.y,[[0,'#4a3628'],[.42,'#7a5a3e'],[1,'#2c2018']]);
+      rr(g,o.x,o.y+8,o.w,o.h-8,4);g.fill();ink(g,'rgba(10,7,5,.85)',2);
+      g.fillStyle='#8a6a46';rr(g,o.x-5,o.y,o.w+10,12,3);g.fill();ink(g,'rgba(10,7,5,.7)',1.5);
+      g.strokeStyle='rgba(28,20,14,.55)';g.lineWidth=3;
+      for(var wtb=0;wtb<3;wtb++){g.beginPath();g.moveTo(o.x+1,o.y+24+wtb*20);g.lineTo(o.x+o.w-1,o.y+24+wtb*20);g.stroke();}
+      g.fillStyle='rgba(240,225,190,.10)';g.fillRect(o.x+5,o.y+14,7,o.h-24);
+    } else if(o.type==='container'){
+      /* A corrugated box two storeys tall: the thing the crate stair exists for. */
+      g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#3f6f74'],[.45,'#2c545a'],[1,'#132428']]);
+      g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(5,10,11,.85)',2.5);
+      g.strokeStyle='rgba(10,20,22,.45)';g.lineWidth=4;
+      for(var cnr=o.x+12;cnr<o.x+o.w-8;cnr+=17){g.beginPath();g.moveTo(cnr,o.y+13);g.lineTo(cnr,o.y+o.h-13);g.stroke();}
+      g.fillStyle='#26454a';g.fillRect(o.x,o.y,o.w,11);g.fillRect(o.x,o.y+o.h-11,o.w,11);
+      g.fillStyle='rgba(220,240,238,.13)';g.fillRect(o.x+3,o.y+2,o.w-6,3);
+      g.fillStyle='#b3342b';rr(g,o.x+o.w*0.16,o.y+o.h*0.34,o.w*0.68,30,3);g.fill();ink(g,'rgba(8,6,6,.7)',1.5);
+      g.fillStyle='#f2dfad';g.font='bold 19px Impact,sans-serif';g.textAlign='center';
+      g.fillText('P.C.U. FREIGHT',o.x+o.w/2,o.y+o.h*0.34+22);g.textAlign='left';
+      g.fillStyle='#1b3438';                                                     // door furniture
+      g.fillRect(o.x+o.w-22,o.y+16,6,o.h-32);g.fillRect(o.x+o.w-40,o.y+16,6,o.h-32);
     } else if(o.type==='lowbeam'){
       g.fillStyle=lin(g,o.x,o.y,o.x,o.y+o.h,[[0,'#697176'],[1,'#292d31']]);g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(5,6,7,.82)',2);
       g.fillStyle='#c99a31';for(var lb=0;lb<o.w;lb+=24){g.save();g.translate(o.x+lb,o.y+o.h/2);g.rotate(-.55);g.fillRect(-2,-15,8,30);g.restore();}
@@ -5240,7 +5518,17 @@ function updateCamera(){
     else ty=clamp(P.y+P.h/2-visibleH*0.52,bTop,bBot-visibleH);
   } else {
     t=P.x+P.w/2-visibleW*0.44+P.facing*22;
-    ty=VIEW_BOTTOM-visibleH;
+    /* Outdoors the shot used to be nailed to the street, which is the reason
+       every stage had to stay flat. It now rides the last ground the brother
+       actually stood on — so an ordinary jump moves nothing and the framing at
+       street level is exactly what it always was, while a climb onto a catwalk
+       or a rooftop carries the camera up with him. A fall drags the anchor back
+       down before he can drop out of the frame. */
+    var feet=P.y+P.h, floor=VIEW_BOTTOM-visibleH;
+    if(P.onGround||P.ladder)camAnchorY=feet;
+    else camAnchorY=Math.max(camAnchorY,feet-visibleH*0.12);
+    var lift=Math.max(0,CAM_STREET-camAnchorY);
+    ty=clamp(floor-lift,Math.min(level.top===undefined?floor:level.top,floor),floor);
   }
   cam.x+=(t-cam.x)*(P.inB?0.085:0.13);
   cam.x=clamp(cam.x,0,Math.max(0,level.length-visibleW));
