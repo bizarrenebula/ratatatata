@@ -1165,6 +1165,14 @@ function bindSizeBtn(id,dir){
 bindSizeBtn('sizeDown',-1);bindSizeBtn('sizeUp',1);
 if(sizeVal)sizeVal.textContent=charScale.toFixed(2)+'×';
 
+/* Vinnie rides. Everything about that is drawing except this: a board does not
+   stop when you stop pushing it, so when he is stood on flat ground with no
+   input he keeps his speed for a good while instead of scrubbing it off in half
+   a second the way boots do. Not while he is crouched, rolling, on a ladder or
+   on a flight of stairs — the board is under his arm for all of those. */
+function skating(){
+  return !!(P&&P.bro===1&&P.onGround&&!P.prone&&P.rollT<=0&&!P.ladder&&!P.onStair);
+}
 function makePlayer(b){
   var B=BROS[b];
   P={bro:b,x:80,y:300,vx:0,vy:0,w:P_W*charScale,h:P_STAND*charScale,facing:1,onGround:false,prone:false,
@@ -2974,7 +2982,7 @@ function updatePlayer(){
     if(P.rollT<=0)P.rollCd=18;
   } else if(inp.left&&(!P.prone||clearanceCrouch)){P.vx-=acc;if(!twinStick())P.facing=-1;}
   else if(inp.right&&(!P.prone||clearanceCrouch)){P.vx+=acc;if(!twinStick())P.facing=1;}
-  else P.vx*=P.onGround?0.72:0.90;
+  else P.vx*=P.onGround?(skating()?0.945:0.72):0.90;
   /* Twin-stick strafing: on touch controls the move stick only ever walks the
      brother forwards or backwards — which way his body is turned belongs to the
      aim stick alone, so retreating never swings the gun off target. With the
@@ -4978,6 +4986,43 @@ function drawBrother(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,op
   if(USE_RIG_ART&&drawBrotherArt(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul,opt))return;
   drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul);
 }
+/* Vinnie's board. Drawn in the same local space as the body, with the deck top
+   at y=0 — which is where his soles are — and the wheels reaching down to the
+   ground below it. That is why the whole figure is lifted by BOARD_H before it
+   is drawn: he is standing on something, and something has a thickness.
+
+   The wheels turn with how far he has actually travelled rather than on a
+   timer, so the board rolls when he rolls and stops when he stops. In the air
+   the nose comes up, because a jump on a board is an ollie. */
+var BOARD_H=8;
+function drawBoard(spin,inAir){
+  var L=26,i,wx;
+  g.save();
+  if(inAir)g.rotate(-0.34);
+  for(i=0;i<2;i++){
+    wx=i?L*0.52:-L*0.52;
+    g.fillStyle='#2a2f36';rr(g,wx-2.4,2,4.8,3.4,1);g.fill();          // truck
+    g.fillStyle='#e8c25a';
+    ell(g,wx,6.2,3.0,3.0);g.fill();ink(g,'rgba(6,6,8,.7)',1.2);
+    g.save();g.translate(wx,6.2);g.rotate(spin);
+    g.strokeStyle='rgba(90,60,20,.75)';g.lineWidth=1;
+    g.beginPath();g.moveTo(-2.1,0);g.lineTo(2.1,0);g.moveTo(0,-2.1);g.lineTo(0,2.1);g.stroke();
+    g.restore();
+  }
+  g.fillStyle=lin(g,-L,-2,L,2,[[0,'#7a2f2a'],[0.5,'#b5443a'],[1,'#6f2a26']]);
+  g.beginPath();
+  g.moveTo(-L-3,-3.6);
+  g.quadraticCurveTo(-L+1,0.4,-L*0.72,0.9);
+  g.lineTo(L*0.72,0.9);
+  g.quadraticCurveTo(L-1,0.4,L+3,-3.6);
+  g.quadraticCurveTo(L-1,-1.6,L*0.72,-1.1);
+  g.lineTo(-L*0.72,-1.1);
+  g.quadraticCurveTo(-L+1,-1.6,-L-3,-3.6);
+  g.closePath();g.fill();ink(g,'rgba(6,6,8,.75)',1.6);
+  g.fillStyle='rgba(255,225,180,.20)';rr(g,-L*0.70,-1.0,L*1.40,1.1,0.5);g.fill();
+  g.fillStyle='rgba(0,0,0,.30)';rr(g,-L*0.34,-0.2,L*0.68,1.0,0.5);g.fill();
+  g.restore();
+}
 function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,mul){
   var B=BROS[broIdx],big=B.big,i;
   g.save();
@@ -4985,6 +5030,10 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
   /* Title and select screens keep their own layout scale, so mul is opt-in. */
   var k=0.55*(mul===undefined?1:mul);
   g.translate(x,y);g.scale(face*k,k);
+  /* Vinnie rides everywhere he is not crouched, rolling or climbing, and the
+     board has a thickness, so he stands that much higher than the ground. */
+  var skate=(broIdx===1&&!prone),lift=skate?BOARD_H:0;
+  if(skate)g.translate(0,-lift);
   var cr=prone?34:0;
   var sw=Math.sin(walk),bob=inAir?0:Math.abs(Math.cos(walk))*1.6;
   /* The two of them are built differently and the drawing has to say so before
@@ -5045,7 +5094,12 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
       workBoot(ax-8.5,far);
     } else {
       // slim denim, turned up once at the ankle, over red high-tops
-      hx=far?-3.5:3.5;kx=hx+sd*0.5;ky=hip+13;ax=hx+sd;ay=hip+24;
+      /* On the board his feet do not walk: they are planted across it, back
+         foot over the tail and front foot over the forward truck, knees bent to
+         take the road. A stride here would look like a man running along on top
+         of a moving skateboard. */
+      if(skate){hx=far?-11:10;sd=0;}else hx=far?-3.5:3.5;
+      kx=hx+sd*0.5;ky=hip+(skate?12:13);ax=hx+sd;ay=hip+(skate?22:24);
       g.lineCap='round';
       g.strokeStyle=far?B.pantsD:B.pants;g.lineWidth=8;
       g.beginPath();g.moveTo(hx,hip);g.lineTo(kx,ky);g.lineTo(ax,ay);g.stroke();
@@ -5057,6 +5111,8 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
       sneaker(ax-6,B,far);
     }
   }
+
+  if(skate)drawBoard(walk*1.9,inAir,0);
 
   // ================= torso =================
   if(big){
@@ -6746,10 +6802,20 @@ function drawTitle(){
   /* Kept clear of the size control the page floats over the top-right corner,
      and clear of the top edge on a short screen. */
   var logoY=band*0.40,rx=Math.min(w*0.42,392,(w-270)/2),ry=Math.min(band*0.30,92);
+  var logoBottom=logoY+ry;
   if(titleLogo.complete&&titleLogo.naturalWidth){
-    g.save();g.shadowColor='rgba(0,0,0,.85)';g.shadowBlur=14;g.shadowOffsetY=8;
-    g.drawImage(titleLogo,w/2-rx,logoY-ry,rx*2,ry*2);
+    /* Fitted to its own shape rather than poured into the box the drawn
+       wordmark used. That box is four times as wide as it is tall and the
+       painted logo is half that, so filling it would squash the artwork flat.
+       Height leads, width follows, and a narrow screen pulls both back. */
+    var la=titleLogo.naturalWidth/titleLogo.naturalHeight;
+    var lh=Math.min(band*0.86,h*0.38),lw=lh*la;
+    if(lw>w*0.86){lw=w*0.86;lh=lw/la;}
+    var lTop=logoY-lh*0.46;
+    g.save();g.shadowColor='rgba(0,0,0,.85)';g.shadowBlur=18;g.shadowOffsetY=9;
+    g.drawImage(titleLogo,w/2-lw/2,lTop,lw,lh);
     g.restore();
+    logoBottom=lTop+lh;
   } else {
     g.save();g.translate(5,7);comicBurst(w/2,logoY,rx,ry);g.fillStyle='rgba(0,0,0,.82)';g.fill();g.restore();
     comicBurst(w/2,logoY,rx,ry);g.fillStyle='#f2df9b';g.fill();
@@ -6758,7 +6824,7 @@ function drawTitle(){
     g.save();g.translate(w/2,logoY+ts*0.18);g.rotate(-0.035);
     txt('RATZ & CATZ',3,4,ts,'#160b0a','center');txt('RATZ & CATZ',0,0,ts,'#d63825','center');g.restore();
   }
-  comicCaption('THE CATMAN RUNS THESE STREETS',w/2,logoY+ry+26,Math.min(20,w*0.034),false);
+  comicCaption('THE CATMAN RUNS THESE STREETS',w/2,logoBottom+20,Math.min(20,w*0.034),false);
   /* The story goes at the bottom, over the cobbles, where nobody is standing. */
   if(lit){
     g.fillStyle=lin(g,0,h*0.70,0,h,[[0,'rgba(4,6,10,0)'],[1,'rgba(4,6,10,.88)']]);
