@@ -742,24 +742,31 @@ var Music={buffers:{},source:null,gain:null,filter:null,delay:null,delayGain:nul
 
 /* ==================== CONTENT ==================== */
 var BROS=[
+  /* Both palettes are read off the alley plate on the title screen, so the rat
+     you pick is the rat standing in that picture: Rocco grey-furred in a wine
+     leather vest over khaki cargo trousers, Vinnie in the gold hoodie, denim and
+     red high-tops. fleece is the shearling on Rocco's collar; strap is Vinnie's
+     backpack. */
   { name:'ROCCO', full:'ROCCO "THE WRENCH"',
-    tag:'THE BIG BROTHER \u2014 RED VEST, SHELL BELT',
+    tag:'THE BIG BROTHER \u2014 WINE VEST, SHELL BELT',
     perk:'AIR STRIKE: LAND ON ENEMIES \u2022 +35% DAMAGE',
     speed:3.3, jump:-11.9, maxHp:130, cdMul:1.15, dmgMul:1.35, dbl:false, big:true,
-    fur:'#8a5f3e', furL:'#a87a52', furD:'#5a3a22', tail:'#b08472', skin:'#d99a92',
-    chest:'#4a423c', chestD:'#332d29',
-    coat:'#b8392c', coatL:'#d8574a', coatD:'#7d2018', shirt:'#4a423c',
-    pants:'#4f6b3a', pantsD:'#3a5029', boot:'#7a5433', bootL:'#976a44',
+    fur:'#8d8a91', furL:'#adaab2', furD:'#5c5962', tail:'#c19a92', skin:'#d99a92',
+    chest:'#9b979e', chestD:'#76727a',
+    coat:'#6e2b32', coatL:'#8f3a40', coatD:'#43181e',
+    fleece:'#cbc5bd', fleeceD:'#9c968e',
+    pants:'#6f6350', pantsD:'#4e4638', boot:'#3a2f26', bootL:'#5f4c3a',
     glove:'#4a4038', gloveC:'#5f4c3c', trim:'#c9a24a', metal:'#cdd2d6', eye:'#f4ecd8' },
   { name:'VINNIE', full:'VINNIE "WHISKERS"',
-    tag:'THE FAST BROTHER \u2014 BLUE JACKET, RED SNEAKERS',
+    tag:'THE FAST BROTHER \u2014 GOLD HOODIE, RED HIGH-TOPS',
     perk:'GHOST ROLL: MOVE + DOWN \u2022 INVULNERABLE',
     speed:4.2, jump:-12.0, maxHp:85, cdMul:0.6, dmgMul:0.95, dbl:true, big:false,
     fur:'#8b939e', furL:'#b2b9c2', furD:'#575f69', tail:'#c9a39a', skin:'#dfa19d',
     chest:'#c6cbd2', chestD:'#a4abb4',
-    coat:'#3f6491', coatL:'#5f88b5', coatD:'#27405f', shirt:'#c6cbd2',
-    pants:'#33362a', pantsD:'#23261c', boot:'#c0392b', bootL:'#e8e6e0',
-    glove:'#1f2228', gloveC:'#2c3038', trim:'#c9a86a', metal:'#e8e4d8', eye:'#f4ecd8' }
+    coat:'#e0a828', coatL:'#f2c452', coatD:'#a8781a',
+    cap:'#c8342c', capL:'#e04a3c', capD:'#8e211b', strap:'#2b2f37',
+    pants:'#4c5a70', pantsD:'#39445a', boot:'#c3342a', bootL:'#ece9e1',
+    glove:'#1f2228', gloveC:'#2c3038', trim:'#c9342e', metal:'#e8e4d8', eye:'#f4ecd8' }
 ];
 var WEAPONS={
   scratch:   {name:'CLAWS & BITE',power:0,cd:15,dmg:25,auto:true,melee:true,ammo:Infinity,col:'#e8d6a8'},
@@ -4131,13 +4138,103 @@ function limb(x1,y1,x2,y2,w,col){
   g.strokeStyle=col;g.lineWidth=w;g.lineCap='round';
   g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke();g.lineCap='butt';
 }
+/* A joint you can pick out. Two strokes meeting at an angle read as one bent
+   stick; what makes a knee a knee is that it is rounder than the limb, that it
+   takes the light on top, and that the skin creases on the inside of the bend.
+   Same three things make an elbow, so they share this. */
+function joint(x,y,r,col,lit,crease){
+  g.fillStyle=col;ell(g,x,y,r,r*0.94);g.fill();ink(g,'rgba(8,6,8,.5)',1.1);
+  g.fillStyle=lit;ell(g,x+r*0.16,y-r*0.30,r*0.52,r*0.40);g.fill();
+  if(crease){
+    g.strokeStyle='rgba(8,6,8,.45)';g.lineWidth=1;
+    g.beginPath();g.moveTo(x-r*0.8,y+r*0.72);
+    g.quadraticCurveTo(x,y+r*0.34,x+r*0.8,y+r*0.78);g.stroke();
+  }
+}
+/* Rocco's work boots. The foot points +x, so the toe is the right-hand end.
+   A brother is about ninety units tall on a screen where a unit is a pixel or
+   two, so detail here has to be few and large: a pale welt between the leather
+   and the sole is what says "boot" at this size, and it does more than a dozen
+   stitches would. Then a capped toe with its own seam, a turned-down collar,
+   laces, and a heel that stands proud of the tread. */
+function workBoot(dx,far){
+  /* Dark leather on purpose. Rocco's shins are bare fur, and a tan boot under a
+     tan leg is one brown shape; dropping the leather two steps below the fur is
+     what separates them, and the far boot drops two steps again so that a stride
+     that crosses reads as one foot behind the other. */
+  var bY=-15,w=20,i,ly,gx;
+  g.fillStyle=lin(g,0,bY,0,-4,far?[[0,'#2a221c'],[1,'#181310']]:[[0,'#4a3c31'],[1,'#2b221b']]);
+  rr(g,dx,bY,w,11.5,3);g.fill();ink(g,'rgba(8,6,8,.8)',1.9);
+  g.fillStyle=far?'#372c23':'#5f4c3d';                                     // turned-down collar
+  rr(g,dx+0.5,bY-1.8,w-3.5,3.8,1.4);g.fill();ink(g,'rgba(8,6,8,.6)',1.2);
+  g.fillStyle='rgba(255,226,180,'+(far?0.05:0.16)+')';                     // toe cap
+  g.beginPath();g.moveTo(dx+w-7,bY+2.4);
+  g.quadraticCurveTo(dx+w+0.6,bY+3.4,dx+w-0.4,-3.6);
+  g.lineTo(dx+w-7.6,-3.6);g.closePath();g.fill();
+  g.strokeStyle='rgba(8,6,8,.55)';g.lineWidth=1.2;
+  g.beginPath();g.moveTo(dx+w-7.2,bY+2.4);g.lineTo(dx+w-7.7,-3.6);g.stroke();
+  g.strokeStyle=far?'rgba(16,10,6,.6)':'rgba(28,18,11,.8)';g.lineWidth=1.1;
+  g.beginPath();                                                           // laces
+  for(i=0;i<4;i++){ly=bY+2.4+i*2.5;g.moveTo(dx+2.6,ly);g.lineTo(dx+10,ly-1.2);}
+  g.stroke();
+  g.fillStyle=far?'#6b5842':'#a98d6b';                                     // the welt
+  rr(g,dx-0.6,-4.3,w+1.2,1.9,0.8);g.fill();
+  g.fillStyle=far?'#1a1512':'#2b241e';rr(g,dx-0.6,-3,w+1.2,3,1.2);g.fill();// tread
+  g.fillStyle=far?'#160f0a':'#241c16';rr(g,dx-0.6,-5.4,6.4,5.4,1.4);g.fill();// heel block
+  ink(g,'rgba(8,6,8,.6)',1.1);
+  g.strokeStyle=far?'rgba(120,100,76,.22)':'rgba(160,134,102,.4)';g.lineWidth=1;
+  g.beginPath();                                                           // lugs
+  for(i=0;i<3;i++){gx=dx+8.4+i*3;g.moveTo(gx,-2.6);g.lineTo(gx,-0.5);}
+  g.stroke();
+}
+/* Vinnie's high-tops. The white midsole does here what the welt does on the
+   boot — it cuts the shoe off the ground and gives the red something to be red
+   against. Over it: a rubber toe cap, the stripe down the side, a laced tongue,
+   a padded ankle collar and the pull tab at the heel. */
+function sneaker(dx,B,far){
+  var sY=-11,w=18,i,ly;
+  g.fillStyle=far?'#8d2b21':B.boot;
+  rr(g,dx,sY,w,7.2,3);g.fill();ink(g,'rgba(8,6,8,.8)',1.7);
+  g.fillStyle=far?'#8d2b21':'#d4503f';                                     // padded collar
+  rr(g,dx+0.4,sY-2.2,7.4,4,1.8);g.fill();ink(g,'rgba(8,6,8,.6)',1.2);
+  g.fillStyle=far?'#bcb9b2':B.bootL;                                       // rubber toe cap
+  g.beginPath();g.moveTo(dx+w-5.6,-3.8);g.lineTo(dx+w-5.2,sY+2.6);
+  g.quadraticCurveTo(dx+w+0.5,sY+3.4,dx+w+0.3,-3.8);g.closePath();g.fill();
+  ink(g,'rgba(8,6,8,.5)',1);
+  g.strokeStyle='rgba(255,255,255,'+(far?0.34:0.66)+')';g.lineWidth=1.7;   // side stripe
+  g.beginPath();g.moveTo(dx+3,sY+1.4);
+  g.quadraticCurveTo(dx+9,sY+6.4,dx+13.4,sY+4.4);g.stroke();
+  g.strokeStyle='rgba(250,246,236,'+(far?0.4:0.75)+')';g.lineWidth=1;g.beginPath();
+  for(i=0;i<3;i++){ly=sY+1.1+i*2;g.moveTo(dx+7.4,ly);g.lineTo(dx+12,ly-0.7);}
+  g.stroke();
+  g.fillStyle=far?'#b9b6af':B.bootL;rr(g,dx-0.7,-4.3,w+1.4,4.3,1.8);g.fill();
+  ink(g,'rgba(8,6,8,.5)',1.1);
+  g.fillStyle='rgba(0,0,0,.26)';g.fillRect(dx-0.7,-1.9,w+1.4,1.1);         // tread line
+  g.fillStyle='rgba(0,0,0,.16)';rr(g,dx-0.7,-4.3,5.6,4.3,1.8);g.fill();    // heel wedge
+  g.fillStyle=far?'#8d2b21':B.boot;rr(g,dx-1.2,sY-2.6,4,3.6,1.4);g.fill(); // pull tab
+  ink(g,'rgba(8,6,8,.5)',1);
+}
 function drawWeaponArm(B,ang,wep,fireT){
   g.save();g.rotate(ang);
-  // upper arm: bare fur for Rocco, jacket sleeve for Vinnie
-  limb(0,0,13,0,B.big?9.5:7,B.big?B.fur:B.coat);
-  g.fillStyle=B.gloveC;rr(g,B.big?9:10,-5,B.big?7:5,10,2);g.fill();   // glove cuff
+  /* Upper arm, elbow, forearm — bare fur for Rocco, a jacket sleeve for Vinnie.
+     The crook is slight and fixed: it is how he holds a gun, and it keeps the
+     hand at 17.5 where every weapon below is drawn from. */
+  var uw=B.big?11.5:6.4, ex=B.big?8.2:8, ey=1.5;
+  limb(0,-1.4,ex,ey,uw,B.big?B.fur:B.coat);
+  joint(ex,ey,uw*0.56,B.big?B.fur:B.coat,B.big?B.furL:B.coatL,true);
+  limb(ex,ey,15,0,uw*0.86,B.big?B.furD:B.coatD);
+  if(B.big){                                       // a bicep worth drawing, and its scar
+    g.fillStyle='rgba(255,255,255,.12)';ell(g,3.5,-2.6,4.4,2.6);g.fill();
+    g.strokeStyle='rgba(255,255,255,.16)';g.lineWidth=1;
+    g.beginPath();g.moveTo(2,3.4);g.lineTo(6.5,4.6);g.stroke();
+  } else {                                         // ribbed hoodie cuff
+    g.fillStyle=B.trim;rr(g,10.6,-3.9,4.4,7.8,1.4);g.fill();ink(g,'rgba(8,6,8,.55)',1.1);
+  }
+  g.fillStyle=B.gloveC;rr(g,B.big?11:12,-4.6,B.big?6:4.4,9.4,2);g.fill();   // glove cuff
   ink(g,'rgba(8,6,8,.55)',1.2);
   g.fillStyle=B.glove;ell(g,17.5,0,5.2,4.8);g.fill();ink(g,'rgba(8,6,8,.65)',1.2);
+  g.strokeStyle='rgba(8,6,8,.5)';g.lineWidth=0.9;g.beginPath();             // knuckles
+  g.moveTo(19.4,-2.6);g.lineTo(20.2,-0.4);g.moveTo(19.6,0.6);g.lineTo(20.2,2.6);g.stroke();
   g.fillStyle='rgba(255,255,255,.10)';ell(g,16.5,-1.6,2.2,1.4);g.fill();
   if(wep==='scratch'||wep==='knife'){
     if(wep==='knife'){g.fillStyle='#6b4428';rr(g,16,-3,12,6,2);g.fill();g.fillStyle='#dce5e9';
@@ -4258,15 +4355,20 @@ function ratHead(B,big,aimUp){
     g.quadraticCurveTo(16,8,9,7.6);g.closePath();g.fill();
     rr(g,17,6,4.2,9,1.2);g.fill();
     ink(g,'rgba(8,6,8,.4)',1);
-    // Vinnie's backwards ball cap: the short brim points behind his head.
-    g.fillStyle=lin(g,-13,-25,15,-12,[[0,'#31547f'],[0.55,B.coat],[1,B.coatD]]);
-    g.beginPath();g.moveTo(-12,-16);g.quadraticCurveTo(-8,-28,3,-29);
-    g.quadraticCurveTo(13,-27,17,-17);g.lineTo(11,-14);
+    // Vinnie's red ball cap, worn forward, the brim out over his eyes.
+    g.fillStyle=lin(g,-13,-25,15,-12,[[0,B.capL],[0.55,B.cap],[1,B.capD]]);
+    g.beginPath();g.moveTo(-12,-16);g.quadraticCurveTo(-9,-29,3,-30);
+    g.quadraticCurveTo(14,-29,18,-17);g.lineTo(11,-14);
     g.quadraticCurveTo(0,-18,-12,-16);g.closePath();g.fill();ink(g,'rgba(8,6,8,.8)',1.8);
-    g.fillStyle='#b9342b';                                      // rear-facing brim
-    g.beginPath();g.moveTo(-10,-18);g.quadraticCurveTo(-22,-20,-29,-15);
-    g.quadraticCurveTo(-21,-11,-9,-13);g.closePath();g.fill();ink(g,'rgba(8,6,8,.75)',1.5);
-    g.fillStyle='#18253a';rr(g,10,-18,7,4,1.5);g.fill();          // adjustment strap
+    g.strokeStyle='rgba(8,6,8,.32)';g.lineWidth=1.1;              // panel seam
+    g.beginPath();g.moveTo(3,-30);g.quadraticCurveTo(6,-23,4,-16);g.stroke();
+    g.fillStyle=B.capD;                                           // brim, out over the eyes
+    g.beginPath();g.moveTo(13,-19);g.quadraticCurveTo(28,-19,33,-12);
+    g.quadraticCurveTo(26,-9,12,-13);g.closePath();g.fill();ink(g,'rgba(8,6,8,.75)',1.5);
+    g.fillStyle='rgba(255,255,255,.16)';
+    g.beginPath();g.moveTo(14,-18);g.quadraticCurveTo(27,-18,31,-13);
+    g.quadraticCurveTo(24,-13,14,-16);g.closePath();g.fill();
+    g.fillStyle=B.capL;ell(g,2,-29,2,1.6);g.fill();               // button on the crown
   }
   // whiskers
   g.strokeStyle='rgba(255,255,255,.30)';g.lineWidth=1;
@@ -4420,9 +4522,15 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
   g.translate(x,y);g.scale(face*k,k);
   var cr=prone?34:0;
   var sw=Math.sin(walk),bob=inAir?0:Math.abs(Math.cos(walk))*1.6;
-  var hip=-34+cr*0.42-bob*0.3;
-  var chest=-62+cr-bob, neck=-64+cr-bob;
-  var bw=big?18:13;
+  /* The two of them are built differently and the drawing has to say so before
+     a single colour is laid down. Rocco is top-heavy — a long deep torso on
+     short legs, shoulders far wider than his waist, thick arms, big feet.
+     Vinnie is the opposite build: a short torso, long thin legs, narrow
+     shoulders, and he stands a head shorter for all that leg. */
+  var hip=(big?-36:-38)+cr*0.42-bob*0.3;
+  var chest=(big?-68:-60)+cr-bob, neck=(big?-70:-62)+cr-bob;
+  var bw=big?16:12;                      // waist half-width
+  var sh=big?22:13;                      // shoulder half-width — Rocco's V
   var la=inAir?-8:sw*9, lb=inAir?9:-sw*9;
 
   // ================= tail =================
@@ -4432,121 +4540,193 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
   g.lineCap='butt';
 
   // ================= back arm =================
-  g.save();g.translate(-4,chest+10);g.rotate(inAir?-0.5:sw*0.5+0.35);
-  limb(0,0,0,15,big?9:7,big?B.furD:B.coatD);
-  g.fillStyle=B.glove;ell(g,0,17,4.6,4.2);g.fill();
+  /* The far arm swings free, so its elbow is where you actually see one bend.
+     Rocco's is a slab of bare arm; Vinnie's is a loose hoodie sleeve. */
+  g.save();g.translate(big?-7:-4,chest+(big?16:10));g.rotate(inAir?-0.5:sw*0.5+0.35);
+  var aw=big?11:6.4, ex=big?2:1.6, ey=big?9:8.4;
+  limb(0,0,ex,ey,aw,big?B.furD:B.coatD);
+  joint(ex,ey,aw*0.54,big?B.furD:B.coatD,big?B.fur:B.coat,false);
+  limb(ex,ey,0.4,15,aw*0.86,big?'#4d4a53':'#8a6215');
+  if(!big){g.fillStyle=B.trim;rr(g,-3.2,13,6.4,3.6,1.4);g.fill();}   // red cuff
+  g.fillStyle=B.glove;ell(g,0,17,big?5.2:4.2,big?4.8:3.9);g.fill();
+  ink(g,'rgba(8,6,8,.55)',1.1);
   g.restore();
 
   // ================= legs =================
-  if(big){
-    // knee-length cargo shorts, bare shins, work boots
-    g.strokeStyle=B.pantsD;g.lineWidth=15;g.lineCap='round';
-    g.beginPath();g.moveTo(-5,hip);g.lineTo(-5+la*0.4,hip+13);g.stroke();
-    g.strokeStyle=B.pants;
-    g.beginPath();g.moveTo(6,hip);g.lineTo(6+lb*0.4,hip+13);g.stroke();
-    g.strokeStyle=B.furD;g.lineWidth=9;g.lineCap='round';               // shins
-    g.beginPath();g.moveTo(-5+la*0.4,hip+13);g.lineTo(-5+la,hip+24);g.stroke();
-    g.strokeStyle=B.fur;
-    g.beginPath();g.moveTo(6+lb*0.4,hip+13);g.lineTo(6+lb,hip+24);g.stroke();
-    g.lineCap='butt';
-    var bY=-14;
-    g.fillStyle=lin(g,0,bY,0,0,[[0,B.bootL],[1,B.boot]]);
-    rr(g,-14+la,bY,20,14,4);g.fill();ink(g,'rgba(8,6,8,.8)',1.9);
-    rr(g,-1+lb,bY,20,14,4);g.fill();ink(g,'rgba(8,6,8,.8)',1.9);
-    g.fillStyle='rgba(0,0,0,.5)';                                        // soles
-    rr(g,-15+la,-4,22,4,2);g.fill();rr(g,-2+lb,-4,22,4,2);g.fill();
-  } else {
-    // full-length dark cargo pants with rolled cuffs + red sneakers
-    g.strokeStyle=B.pantsD;g.lineWidth=11;g.lineCap='round';
-    g.beginPath();g.moveTo(-5,hip);g.lineTo(-5+la*0.5,hip+14);g.lineTo(-5+la,hip+24);g.stroke();
-    g.strokeStyle=B.pants;
-    g.beginPath();g.moveTo(5,hip);g.lineTo(5+lb*0.5,hip+14);g.lineTo(5+lb,hip+24);g.stroke();
-    g.lineCap='butt';
-    var sY=-11;
-    g.fillStyle=B.boot;
-    rr(g,-13+la,sY,19,11,4);g.fill();ink(g,'rgba(8,6,8,.8)',1.7);
-    rr(g,0+lb,sY,19,11,4);g.fill();ink(g,'rgba(8,6,8,.8)',1.7);
-    g.fillStyle=B.bootL;                                                  // white soles + toe caps
-    rr(g,-14+la,-4.5,21,5,2);g.fill();rr(g,-1+lb,-4.5,21,5,2);g.fill();
-    ell(g,-9+la,sY+6,4.6,4.6);g.fill();ell(g,4+lb,sY+6,4.6,4.6);g.fill();
+  /* Each leg is drawn whole — thigh, knee, shin, foot — far one first, so the
+     near leg lands on top of it the way it does in life. */
+  var far,sd,hx,kx,ky,ax,ay;
+  for(i=0;i<2;i++){
+    far=i===0;sd=far?la:lb;
+    if(big){
+      /* Heavy khaki cargo trousers, thick through the thigh and gathered onto
+         the boot, with a flapped pocket on the near leg. */
+      hx=far?-6:6;kx=hx+sd*0.4;ky=hip+13;ax=hx+sd;ay=hip+21;
+      g.lineCap='round';
+      g.strokeStyle=far?B.pantsD:B.pants;g.lineWidth=16;
+      g.beginPath();g.moveTo(hx,hip-2);g.lineTo(kx,ky);g.stroke();
+      g.strokeStyle=far?B.pantsD:B.pants;g.lineWidth=13.5;
+      g.beginPath();g.moveTo(kx,ky);g.lineTo(ax,ay);g.stroke();
+      g.lineCap='butt';
+      joint(kx,ky,4.6,far?B.pantsD:B.pants,far?'#5c5343':'#8a7c63',!far);
+      if(!far){                                                    // cargo pocket
+        g.fillStyle='#655a48';rr(g,kx-1,ky-13,9.5,9,1.6);g.fill();
+        ink(g,'rgba(8,6,8,.5)',1.2);
+        g.fillStyle='#7d7159';rr(g,kx-1.4,ky-13.6,10.3,3,1.2);g.fill();
+      }
+      g.fillStyle=far?B.pantsD:'#7d7159';                          // trouser gathered on the boot
+      rr(g,ax-7,ay-4.4,14,5.6,2);g.fill();ink(g,'rgba(8,6,8,.6)',1.2);
+      workBoot(ax-8,far);
+    } else {
+      // slim denim, turned up once at the ankle, over red high-tops
+      hx=far?-4:4;kx=hx+sd*0.5;ky=hip+15;ax=hx+sd;ay=hip+27;
+      g.lineCap='round';
+      g.strokeStyle=far?B.pantsD:B.pants;g.lineWidth=9.5;
+      g.beginPath();g.moveTo(hx,hip);g.lineTo(kx,ky);g.lineTo(ax,ay);g.stroke();
+      g.lineCap='butt';
+      // denim worn pale over the knee rather than a joint stuck on the leg
+      joint(kx,ky,3.2,far?B.pantsD:B.pants,far?'#48566c':'#5b6a83',!far);
+      g.fillStyle=far?'#4c5a70':'#6f7f99';                          // turn-up, lighter inside
+      rr(g,ax-5,ay-7,10,4.6,1.4);g.fill();ink(g,'rgba(8,6,8,.55)',1.1);
+      sneaker(ax-6,B,far);
+    }
   }
 
   // ================= torso =================
   if(big){
-    // dark chest fur showing through the open vest
-    g.fillStyle=lin(g,-bw,chest,bw,hip+6,[[0,B.chest],[1,B.chestD]]);
+    /* The whole shape of him is in this outline: shoulders at sh, waist at bw,
+       and the run between them straight enough to read as a slab. */
+    g.fillStyle=lin(g,-sh,chest,sh,hip+6,[[0,B.chest],[1,B.chestD]]);
     g.beginPath();
-    g.moveTo(-bw,chest+3);
-    g.quadraticCurveTo(-bw-4,chest+16,-bw+1,hip+7);
-    g.lineTo(bw-1,hip+7);
-    g.quadraticCurveTo(bw+4,chest+15,bw,chest+3);
-    g.quadraticCurveTo(0,chest-3,-bw,chest+3);
+    g.moveTo(-sh,chest+5);
+    g.quadraticCurveTo(-sh+1,chest+20,-bw,hip+7);
+    g.lineTo(bw,hip+7);
+    g.quadraticCurveTo(sh-1,chest+19,sh,chest+5);
+    g.quadraticCurveTo(0,chest-4,-sh,chest+5);
     g.closePath();g.fill();ink(g,'rgba(8,6,8,.75)',2);
-    // vest panels (worn red, zipper down the middle)
-    g.fillStyle=lin(g,-bw-3,chest,-bw+10,hip+8,[[0,B.coatL],[1,B.coatD]]);
-    rr(g,-bw-3,chest+1,12,hip-chest+7,3);g.fill();ink(g,'rgba(8,6,8,.8)',2);
-    g.fillStyle=lin(g,bw-10,chest,bw+3,hip+8,[[0,B.coat],[1,B.coatD]]);
-    rr(g,bw-10,chest+1,13,hip-chest+7,3);g.fill();ink(g,'rgba(8,6,8,.8)',2);
-    // popped collar
-    g.fillStyle=B.coatL;
-    g.beginPath();g.moveTo(bw-9,chest+2);g.lineTo(bw+2,chest-9);
-    g.lineTo(bw+4,chest+4);g.closePath();g.fill();ink(g,'rgba(8,6,8,.7)',1.6);
-    g.fillStyle=B.coatD;
-    g.beginPath();g.moveTo(-bw+2,chest+2);g.lineTo(-bw-2,chest-7);
-    g.lineTo(-bw+7,chest+3);g.closePath();g.fill();
-    // ---- shell belt around the waist
-    g.fillStyle='#6b5332';rr(g,-bw-2,hip+1,bw*2+4,8,2);g.fill();ink(g,'rgba(8,6,8,.75)',1.5);
-    for(i=0;i<5;i++){
-      var sx=-bw+2+i*(bw*2/4.7);
-      g.fillStyle=B.trim;rr(g,sx,hip+1,5,8,1.5);g.fill();
+    /* Seen side on, the vest is most of him: it wraps from his back round to
+       the front opening, and what shows past that opening is the bare chest.
+       Drawing it the other way round — grey torso with red edges — is what made
+       the leather look like two stripes rather than a coat. */
+    g.fillStyle=lin(g,-sh,chest,sh-8,hip+8,[[0,B.coat],[0.62,B.coatD],[1,'#311116']]);
+    g.beginPath();
+    g.moveTo(-sh-1,chest+4);
+    g.quadraticCurveTo(-sh,chest+20,-bw-2,hip+8);
+    g.lineTo(bw-3,hip+8);
+    g.lineTo(sh-9,chest+6);
+    g.quadraticCurveTo(0,chest-3,-sh-1,chest+4);
+    g.closePath();g.fill();ink(g,'rgba(8,6,8,.8)',2);
+    // the leading edge of the opening, catching the light off the street
+    g.strokeStyle=B.coatL;g.lineWidth=2.2;
+    g.beginPath();g.moveTo(sh-9,chest+6);g.lineTo(bw-3,hip+8);g.stroke();
+    // pectoral shading on the strip of chest the vest leaves open
+    g.fillStyle='rgba(255,255,255,.12)';
+    g.beginPath();g.moveTo(sh-7,chest+7);g.quadraticCurveTo(sh-1,chest+8,sh-3,chest+17);
+    g.quadraticCurveTo(sh-9,chest+16,sh-7,chest+7);g.closePath();g.fill();
+    // deltoid over the vest — the arm is thicker than the shoulder it hangs off
+    g.fillStyle=lin(g,sh-13,chest+7,sh-3,chest+20,[[0,B.furL],[1,B.fur]]);
+    ell(g,sh-7,chest+16,7.8,8.8);g.fill();ink(g,'rgba(8,6,8,.6)',1.5);
+    /* Shearling collar, drawn last of the three so the pale trim sits on top of
+       both the leather and the shoulder instead of behind them. */
+    g.fillStyle=B.fleece;
+    g.beginPath();
+    g.moveTo(sh-11,chest+8);g.quadraticCurveTo(sh-5,chest-4,sh+2,chest+1);
+    g.quadraticCurveTo(sh-1,chest+7,sh-8,chest+11);g.closePath();g.fill();
+    ink(g,'rgba(8,6,8,.65)',1.5);
+    g.fillStyle=B.fleeceD;
+    g.beginPath();
+    g.moveTo(-sh+8,chest+2);g.quadraticCurveTo(-sh,chest-6,-sh-4,chest+1);
+    g.quadraticCurveTo(-sh-1,chest+9,-sh+7,chest+8);g.closePath();g.fill();
+    ink(g,'rgba(8,6,8,.6)',1.4);
+    // bandolier across the chest, shells over the near shoulder
+    g.save();
+    g.beginPath();g.moveTo(-sh,chest+4);g.lineTo(sh,chest+4);
+    g.lineTo(bw,hip+7);g.lineTo(-bw,hip+7);g.closePath();g.clip();
+    g.strokeStyle='#4b3a22';g.lineWidth=7;
+    g.beginPath();g.moveTo(sh-3,chest+2);g.lineTo(-bw-1,hip+9);g.stroke();
+    for(i=0;i<6;i++){
+      var t=i/5, bx=(sh-3)+(-bw-1-(sh-3))*t, by=(chest+2)+(hip+7-chest)*t;
+      g.save();g.translate(bx,by);g.rotate(-1.02);
+      g.fillStyle=B.trim;rr(g,-2.4,-4,4.8,6,1.2);g.fill();
+      g.fillStyle='#8f3a2a';rr(g,-2.4,1.4,4.8,3,1);g.fill();
+      g.restore();
     }
+    g.restore();
+    // ---- shell belt and buckle around the waist
+    g.fillStyle='#5c4728';rr(g,-bw-4,hip+1,bw*2+8,8,2);g.fill();ink(g,'rgba(8,6,8,.75)',1.5);
+    for(i=0;i<4;i++){
+      g.fillStyle=B.trim;rr(g,-bw+1+i*(bw*2/4.2),hip+1.6,4.4,6.8,1.4);g.fill();
+    }
+    g.fillStyle=B.metal;rr(g,bw-5,hip+0.4,7,9.2,1.4);g.fill();ink(g,'rgba(8,6,8,.7)',1.4);
+    g.fillStyle='rgba(0,0,0,.35)';rr(g,bw-3.4,hip+2.4,3.8,5.2,1);g.fill();
   } else {
-    // open blue bomber jacket over a light shirt
-    g.fillStyle=B.shirt;
-    rr(g,-7,chest+1,14,hip-chest+6,2);g.fill();
-    g.fillStyle=lin(g,-bw,chest,bw,hip+6,[[0,B.coatL],[0.55,B.coat],[1,B.coatD]]);
+    /* One gold hoodie, worn loose: the body flares out from the narrow
+       shoulders, the hood is bunched behind the neck, and the ribbed hem and
+       cuffs are the red that ties him to his sneakers and his cap. */
+    g.fillStyle=B.strap;                                          // backpack strap, behind
+    g.beginPath();g.moveTo(-sh+2,chest+2);g.lineTo(-sh+7,chest+2);
+    g.lineTo(-bw+3,hip+6);g.lineTo(-bw-2,hip+6);g.closePath();g.fill();
+    g.fillStyle=lin(g,-sh-2,chest,sh+2,hip+8,[[0,B.coatL],[0.5,B.coat],[1,B.coatD]]);
     g.beginPath();
-    g.moveTo(-bw,chest+2);
-    g.quadraticCurveTo(-bw-3,chest+16,-bw+1,hip+7);
-    g.lineTo(-4,hip+7);g.lineTo(-4,chest+2);
+    g.moveTo(-sh-1,chest+3);
+    g.quadraticCurveTo(-sh-4,chest+16,-bw-3,hip+6);
+    g.lineTo(bw+3,hip+6);
+    g.quadraticCurveTo(sh+4,chest+16,sh+1,chest+3);
+    g.quadraticCurveTo(0,chest-3,-sh-1,chest+3);
     g.closePath();g.fill();ink(g,'rgba(8,6,8,.78)',1.8);
-    g.beginPath();
-    g.moveTo(bw,chest+2);
-    g.quadraticCurveTo(bw+3,chest+15,bw-1,hip+7);
-    g.lineTo(5,hip+7);g.lineTo(5,chest+2);
-    g.closePath();g.fill();ink(g,'rgba(8,6,8,.78)',1.8);
-    // collar
+    // hood, slumped behind the neck
     g.fillStyle=B.coatD;
-    g.beginPath();g.moveTo(bw-1,chest+2);g.lineTo(4,chest-6);g.lineTo(3,chest+6);g.closePath();g.fill();
-    g.beginPath();g.moveTo(-bw+1,chest+2);g.lineTo(-4,chest-5);g.lineTo(-3,chest+6);g.closePath();g.fill();
-    // one clean cream shirt block keeps the blue jacket silhouette readable
-    g.fillStyle='rgba(255,255,255,.18)';rr(g,-4,chest+5,8,hip-chest-1,2);g.fill();
+    g.beginPath();g.moveTo(-sh+1,chest+3);g.quadraticCurveTo(-sh-6,chest-7,-sh+3,chest-9);
+    g.quadraticCurveTo(sh-3,chest-10,sh-2,chest+2);g.closePath();g.fill();
+    ink(g,'rgba(8,6,8,.7)',1.6);
+    g.fillStyle='rgba(0,0,0,.22)';
+    g.beginPath();g.moveTo(-sh+3,chest+2);g.quadraticCurveTo(0,chest-5,sh-3,chest+1);
+    g.quadraticCurveTo(0,chest+2,-sh+3,chest+2);g.closePath();g.fill();
+    // kangaroo pocket
+    g.fillStyle='rgba(0,0,0,.16)';
+    rr(g,-bw-1,hip-9,bw*2+2,8.5,2.5);g.fill();
+    g.strokeStyle='rgba(8,6,8,.34)';g.lineWidth=1.1;
+    g.beginPath();g.moveTo(-bw-1,hip-9);g.lineTo(bw+1,hip-9);g.stroke();
+    // drawstrings
+    g.strokeStyle='#efe7d4';g.lineWidth=1.3;g.lineCap='round';
+    g.beginPath();g.moveTo(2,chest+2);g.lineTo(3.5,chest+11);
+    g.moveTo(6,chest+2);g.lineTo(8,chest+10);g.stroke();g.lineCap='butt';
+    // ribbed hem
+    g.fillStyle=B.trim;rr(g,-bw-3,hip+2,bw*2+6,5.4,1.6);g.fill();
+    ink(g,'rgba(8,6,8,.6)',1.3);
+    // the print on his chest, two bars is all that survives at this size
+    g.fillStyle='rgba(196,44,36,.85)';
+    rr(g,-5,chest+13,13,2.6,1);g.fill();rr(g,-3,chest+18,9,2.2,1);g.fill();
   }
   // rim light on the leading edge
   g.strokeStyle='rgba(255,228,182,.26)';g.lineWidth=2;
-  g.beginPath();g.moveTo(bw-1,chest+5);g.quadraticCurveTo(bw+4,chest+16,bw-1,hip+6);g.stroke();
+  g.beginPath();g.moveTo(sh-1,chest+5);g.quadraticCurveTo(sh+2,chest+16,bw-1,hip+6);g.stroke();
 
   // ================= head =================
-  g.save();g.translate(3,neck-12);
+  /* Rocco's head is bigger and sits straight on his shoulders with no neck to
+     speak of; Vinnie's is smaller and carried further up and forward. */
+  g.save();g.translate(big?5:3,neck-(big?9:12));
+  if(big)g.scale(1.0,1.0);else g.scale(0.94,0.94);
   ratHead(B,big,aim.y<0);
   g.restore();
 
   // ================= material detail / readable gear =================
-  g.strokeStyle=big?'rgba(255,195,150,.18)':'rgba(180,220,255,.22)';g.lineWidth=1.25;
-  g.beginPath();g.moveTo(-bw+3,chest+9);g.quadraticCurveTo(0,chest+13,bw-3,chest+9);g.stroke();
-  g.fillStyle='rgba(255,255,255,.18)';
   if(big){
-    rr(g,-bw-1,chest+15,7,9,1.5);g.fill();                    // worn vest patch
-    g.strokeStyle='rgba(255,220,170,.25)';g.lineWidth=1;
-    g.beginPath();g.moveTo(-bw,hip-6);g.lineTo(-bw+7,hip-2);g.moveTo(bw-8,chest+7);g.lineTo(bw-3,chest+13);g.stroke();
+    // old scars across the chest and shoulder — he has been doing this a while
+    g.strokeStyle='rgba(255,255,255,.16)';g.lineWidth=1.2;
+    g.beginPath();
+    g.moveTo(sh-8,chest+9);g.lineTo(sh-13,chest+17);
+    g.moveTo(6,chest+16);g.lineTo(11,chest+22);g.stroke();
+    g.strokeStyle='rgba(255,220,170,.22)';g.lineWidth=1;
+    g.beginPath();g.moveTo(sh-2,chest+13);g.lineTo(sh-4,chest+22);g.stroke();
   } else {
-    g.fillStyle=B.trim;ell(g,0,chest+14,1.2,1.2);g.fill();ell(g,0,chest+21,1.2,1.2);g.fill();
-    g.strokeStyle='rgba(230,240,255,.28)';g.lineWidth=1.2;g.beginPath();g.moveTo(-bw+2,hip+3);g.lineTo(bw-2,hip+3);g.stroke();
+    g.strokeStyle='rgba(255,255,255,.14)';g.lineWidth=1.1;   // a fold in the loose cotton
+    g.beginPath();g.moveTo(-bw+1,hip-14);g.quadraticCurveTo(0,hip-11,bw-1,hip-15);g.stroke();
   }
 
   // ================= front arm + weapon =================
   g.save();
-  g.translate(big?6:4,chest+11);
+  g.translate(big?12:4,chest+(big?16:11));
   drawWeaponArm(B,Math.atan2(aim.y,aim.x*face),wep,fireT);
   g.restore();
   g.restore();
@@ -4566,26 +4746,144 @@ function drawBrotherPortrait(x,y,broIdx,scale){
     g.restore();
     return;
   }
-  var B=BROS[broIdx],big=B.big,bodyW=big?48:38,headW=big?46:40;
+  /* Front on, the same two builds: Rocco a wide slab of shoulder over short
+     legs, Vinnie narrow and long-legged. Everything he is wearing is the outfit
+     off the alley plate, drawn once here and once side-on for the game. */
+  var B=BROS[broIdx],big=B.big,bodyW=big?54:38,headW=big?46:40,i,lx,s;
+  var shW=big?bodyW*0.60:bodyW*0.44;        // shoulder half-width
+  var wsW=big?bodyW*0.40:bodyW*0.34;        // waist half-width
+  var top=big?-78:-70, waist=big?-44:-42;   // shoulder line and hem
   g.save();g.translate(x,y);g.scale(scale,scale);
   g.strokeStyle=B.tail;g.lineWidth=big?7:5;g.lineCap='round';
   g.beginPath();g.moveTo(bodyW*.24,-29);g.quadraticCurveTo(bodyW*.9,-22,bodyW*.72,-5);g.stroke();g.lineCap='butt';
-  g.strokeStyle=B.pantsD;g.lineWidth=big?15:11;g.lineCap='round';
-  g.beginPath();g.moveTo(-bodyW*.2,-34);g.lineTo(-bodyW*.22,-12);g.moveTo(bodyW*.2,-34);g.lineTo(bodyW*.22,-12);g.stroke();g.lineCap='butt';
-  g.fillStyle=B.boot;rr(g,-bodyW*.42,-13,bodyW*.36,13,4);g.fill();ink(g,'rgba(8,6,8,.8)',1.5);
-  rr(g,bodyW*.06,-13,bodyW*.36,13,4);g.fill();ink(g,'rgba(8,6,8,.8)',1.5);
-  if(!big){g.fillStyle=B.bootL;g.fillRect(-bodyW*.44,-4,bodyW*.4,4);g.fillRect(bodyW*.04,-4,bodyW*.4,4);}
-  g.fillStyle=B.shirt;rr(g,-bodyW*.28,-70,bodyW*.56,39,8);g.fill();
-  g.fillStyle=B.coatL;rr(g,-bodyW*.52,-70,bodyW*.25,40,6);g.fill();ink(g,'rgba(8,6,8,.72)',1.7);
-  g.fillStyle=B.coat;rr(g,bodyW*.27,-70,bodyW*.25,40,6);g.fill();ink(g,'rgba(8,6,8,.72)',1.7);
-  g.strokeStyle=B.coatD;g.lineWidth=2;g.beginPath();g.moveTo(0,-68);g.lineTo(0,-31);g.stroke();
-  if(big){
-    g.fillStyle='#6b5332';rr(g,-bodyW*.52,-36,bodyW*1.04,8,2);g.fill();
-    for(var s=-2;s<=2;s++){g.fillStyle=B.trim;rr(g,s*8-2.5,-37,5,9,1);g.fill();}
+
+  // ---- legs, knees and feet
+  for(i=0;i<2;i++){
+    lx=(i?1:-1)*(big?bodyW*0.22:bodyW*0.20);
+    g.lineCap='round';
+    g.strokeStyle=B.pants;g.lineWidth=big?17:11;
+    g.beginPath();g.moveTo(lx,waist);g.lineTo(lx*1.06,big?-19:-15);g.stroke();
+    g.lineCap='butt';
+    joint(lx*1.04,big?-32:-31,big?5.4:4,B.pants,big?'#8a7c63':'#5b6a83',true);
+    if(big){
+      g.fillStyle='#655a48';rr(g,lx-(i?11:-2),-40,9.5,10,1.6);g.fill();   // cargo pocket
+      ink(g,'rgba(8,6,8,.45)',1.1);
+      g.fillStyle='#7d7159';rr(g,lx+(i?-1.6:-7.6),-19.6,9.2,4.6,1.6);g.fill();
+      ink(g,'rgba(8,6,8,.55)',1.2);
+      // work boot, seen head on: dark leather, pale welt, capped toe
+      g.fillStyle=lin(g,0,-18,0,-4,[[0,'#4a3c31'],[1,'#2b221b']]);
+      rr(g,lx-9.5,-18,19,14,3.5);g.fill();ink(g,'rgba(8,6,8,.8)',1.7);
+      g.fillStyle='#5f4c3d';rr(g,lx-8.6,-19.6,17.2,3.8,1.4);g.fill();
+      ink(g,'rgba(8,6,8,.6)',1.2);
+      g.strokeStyle='rgba(24,17,11,.75)';g.lineWidth=1.2;g.beginPath();
+      for(s=0;s<3;s++){g.moveTo(lx-5,-16+s*3);g.lineTo(lx+5,-16+s*3);}
+      g.stroke();
+      g.fillStyle='#a98d6b';rr(g,lx-10.2,-4.6,20.4,2,0.8);g.fill();        // welt
+      g.fillStyle='#2b241e';rr(g,lx-10.2,-3.2,20.4,3.2,1.2);g.fill();
+    } else {
+      g.fillStyle='#6f7f99';rr(g,lx-6,-20,12,5,1.6);g.fill();             // turn-up
+      ink(g,'rgba(8,6,8,.55)',1.1);
+      g.fillStyle=B.boot;rr(g,lx-8.5,-15,17,11,3.5);g.fill();ink(g,'rgba(8,6,8,.8)',1.6);
+      g.fillStyle='#d4503f';rr(g,lx-7.6,-17.4,15.2,4,1.8);g.fill();       // padded collar
+      ink(g,'rgba(8,6,8,.6)',1.2);
+      g.strokeStyle='rgba(250,246,236,.8)';g.lineWidth=1.1;g.beginPath();
+      for(s=0;s<3;s++){g.moveTo(lx-4,-13.4+s*2.6);g.lineTo(lx+4,-13.4+s*2.6);}
+      g.stroke();
+      g.fillStyle=B.bootL;rr(g,lx-9.2,-4.6,18.4,4.6,1.8);g.fill();        // white midsole
+      ink(g,'rgba(8,6,8,.5)',1.1);
+      g.fillStyle='rgba(0,0,0,.24)';g.fillRect(lx-9.2,-2.2,18.4,1);
+    }
   }
-  g.strokeStyle=big?B.furD:B.coatD;g.lineWidth=big?13:10;g.lineCap='round';
-  g.beginPath();g.moveTo(-bodyW*.43,-63);g.lineTo(-bodyW*.62,-34);g.moveTo(bodyW*.43,-63);g.lineTo(bodyW*.62,-34);g.stroke();
-  g.fillStyle=B.glove;ell(g,-bodyW*.62,-31,big?7:6,big?8:7);g.fill();ell(g,bodyW*.62,-31,big?7:6,big?8:7);g.fill();
+
+  // ---- torso
+  if(big){
+    g.fillStyle=lin(g,-shW,top,shW,waist,[[0,B.chest],[1,B.chestD]]);     // bare chest
+    g.beginPath();
+    g.moveTo(-shW,top+6);g.quadraticCurveTo(-shW-2,top+26,-wsW,waist+4);
+    g.lineTo(wsW,waist+4);g.quadraticCurveTo(shW+2,top+26,shW,top+6);
+    g.quadraticCurveTo(0,top-2,-shW,top+6);g.closePath();g.fill();
+    ink(g,'rgba(8,6,8,.78)',2);
+    g.strokeStyle='rgba(8,6,8,.28)';g.lineWidth=1.6;                      // sternum
+    g.beginPath();g.moveTo(0,top+8);g.lineTo(0,waist+2);g.stroke();
+    g.fillStyle='rgba(255,255,255,.10)';
+    ell(g,-shW*0.42,top+15,shW*0.30,8);g.fill();
+    ell(g,shW*0.42,top+15,shW*0.30,8);g.fill();
+    // the vest, open in a V down the front
+    for(s=-1;s<=1;s+=2){
+      g.fillStyle=lin(g,0,top,0,waist,s<0?[[0,B.coat],[1,B.coatD]]:[[0,B.coatL],[1,B.coat]]);
+      g.beginPath();
+      g.moveTo(s*shW,top+5);
+      g.quadraticCurveTo(s*(shW+2),top+26,s*wsW,waist+5);
+      g.lineTo(s*wsW*0.34,waist+5);g.lineTo(s*shW*0.30,top+7);
+      g.closePath();g.fill();ink(g,'rgba(8,6,8,.78)',1.9);
+    }
+    g.fillStyle=B.fleece;                                                 // shearling collar
+    g.beginPath();
+    g.moveTo(-shW-1,top+7);g.quadraticCurveTo(0,top-6,shW+1,top+7);
+    g.quadraticCurveTo(shW*0.5,top+3,shW*0.28,top+13);
+    g.lineTo(-shW*0.28,top+13);g.quadraticCurveTo(-shW*0.5,top+3,-shW-1,top+7);
+    g.closePath();g.fill();ink(g,'rgba(8,6,8,.66)',1.6);
+    // bandolier over one shoulder
+    g.save();
+    g.beginPath();g.moveTo(-shW,top+5);g.lineTo(shW,top+5);
+    g.lineTo(wsW,waist+5);g.lineTo(-wsW,waist+5);g.closePath();g.clip();
+    g.strokeStyle='#4b3a22';g.lineWidth=8;
+    g.beginPath();g.moveTo(shW-4,top+6);g.lineTo(-wsW+1,waist+7);g.stroke();
+    for(i=0;i<5;i++){
+      var t=i/4,bx=(shW-4)+(-wsW+1-(shW-4))*t,by=(top+6)+(waist+1-top)*t;
+      g.save();g.translate(bx,by);g.rotate(-1.15);
+      g.fillStyle=B.trim;rr(g,-2.6,-4.4,5.2,6.4,1.2);g.fill();
+      g.fillStyle='#8f3a2a';rr(g,-2.6,1.6,5.2,3,1);g.fill();
+      g.restore();
+    }
+    g.restore();
+    // shell belt and buckle
+    g.fillStyle='#5c4728';rr(g,-wsW-3,waist+2,wsW*2+6,9,2);g.fill();ink(g,'rgba(8,6,8,.75)',1.5);
+    for(s=-2;s<=2;s++){g.fillStyle=B.trim;rr(g,s*9-2.4,waist+2.8,4.8,7.4,1.4);g.fill();}
+    g.fillStyle=B.metal;rr(g,-4,waist+1.4,8,10.2,1.5);g.fill();ink(g,'rgba(8,6,8,.7)',1.4);
+    g.fillStyle='rgba(0,0,0,.35)';rr(g,-2,waist+3.6,4,5.8,1);g.fill();
+  } else {
+    g.fillStyle=B.strap;                                                  // backpack straps
+    rr(g,-shW*0.72,top+4,7,30,2);g.fill();rr(g,shW*0.72-7,top+4,7,30,2);g.fill();
+    g.fillStyle=lin(g,-shW,top,shW,waist+6,[[0,B.coatL],[0.5,B.coat],[1,B.coatD]]);
+    g.beginPath();
+    g.moveTo(-shW,top+6);g.quadraticCurveTo(-shW-4,top+22,-wsW-2,waist+4);
+    g.lineTo(wsW+2,waist+4);g.quadraticCurveTo(shW+4,top+22,shW,top+6);
+    g.quadraticCurveTo(0,top-1,-shW,top+6);g.closePath();g.fill();
+    ink(g,'rgba(8,6,8,.78)',1.9);
+    g.fillStyle=B.coatD;                                                  // hood behind the neck
+    g.beginPath();g.moveTo(-shW*0.66,top+7);g.quadraticCurveTo(0,top-11,shW*0.66,top+7);
+    g.quadraticCurveTo(0,top+2,-shW*0.66,top+7);g.closePath();g.fill();
+    ink(g,'rgba(8,6,8,.68)',1.5);
+    g.strokeStyle='#efe7d4';g.lineWidth=1.5;g.lineCap='round';            // drawstrings
+    g.beginPath();g.moveTo(-4,top+8);g.lineTo(-5.5,top+22);
+    g.moveTo(4,top+8);g.lineTo(5.5,top+21);g.stroke();g.lineCap='butt';
+    g.fillStyle='rgba(0,0,0,.15)';                                        // kangaroo pocket
+    rr(g,-wsW+1,waist-15,wsW*2-2,13,3);g.fill();
+    g.strokeStyle='rgba(8,6,8,.3)';g.lineWidth=1.2;
+    g.beginPath();g.moveTo(-wsW+1,waist-15);g.lineTo(wsW-1,waist-15);g.stroke();
+    g.fillStyle='#c42c24';                                                // the print
+    rr(g,-11,top+19,22,4,1.4);g.fill();rr(g,-7,top+27,14,3.4,1.2);g.fill();
+    g.fillStyle=B.trim;rr(g,-wsW-2,waist+3,wsW*2+4,6,2);g.fill();         // ribbed hem
+    ink(g,'rgba(8,6,8,.6)',1.3);
+  }
+
+  // ---- arms, with an elbow each and the right cuff at the wrist
+  for(i=0;i<2;i++){
+    s=i?1:-1;
+    g.lineCap='round';
+    g.strokeStyle=big?B.fur:B.coat;g.lineWidth=big?15:9.5;
+    g.beginPath();g.moveTo(s*shW*0.86,top+11);g.lineTo(s*(shW+(big?4:6)),top+27);g.stroke();
+    g.lineCap='butt';
+    joint(s*(shW+(big?4:6)),top+27,big?6.4:4.4,big?B.fur:B.coat,big?B.furL:B.coatL,false);
+    g.lineCap='round';
+    g.strokeStyle=big?B.furD:B.coatD;g.lineWidth=big?12.5:8;
+    g.beginPath();g.moveTo(s*(shW+(big?4:6)),top+27);g.lineTo(s*(shW+(big?6:8)),waist-3);g.stroke();
+    g.lineCap='butt';
+    if(!big){g.fillStyle=B.trim;rr(g,s*(shW+8)-4.4,waist-6,8.8,5,1.6);g.fill();ink(g,'rgba(8,6,8,.55)',1.1);}
+    g.fillStyle=B.glove;ell(g,s*(shW+(big?6:8)),waist+1,big?7:5.6,big?8:6.4);g.fill();
+    ink(g,'rgba(8,6,8,.6)',1.3);
+  }
   g.fillStyle=B.fur;ell(g,-headW*.38,-97,big?13:14,big?16:18);g.fill();ink(g,'rgba(8,6,8,.75)',1.8);
   ell(g,headW*.38,-97,big?13:14,big?16:18);g.fill();ink(g,'rgba(8,6,8,.75)',1.8);
   g.fillStyle=B.skin;ell(g,-headW*.38,-97,big?7:8,big?10:12);g.fill();ell(g,headW*.38,-97,big?7:8,big?10:12);g.fill();
@@ -4603,8 +4901,16 @@ function drawBrotherPortrait(x,y,broIdx,scale){
   if(big){
     g.strokeStyle='rgba(150,70,65,.9)';g.lineWidth=2;g.beginPath();g.moveTo(4,-107);g.lineTo(11,-86);g.stroke();
   }else{
-    g.fillStyle=B.coat;g.beginPath();g.arc(0,-105,19,Math.PI,Math.PI*2);g.lineTo(17,-100);g.lineTo(-17,-100);g.closePath();g.fill();ink(g,'rgba(8,6,8,.75)',1.6);
-    g.fillStyle='#b9342b';rr(g,-22,-104,8,5,2);g.fill();
+    // the red cap, brim out toward you
+    g.fillStyle=lin(g,-19,-118,19,-99,[[0,B.capL],[1,B.cap]]);
+    g.beginPath();g.arc(0,-105,19,Math.PI,Math.PI*2);g.lineTo(17,-100);g.lineTo(-17,-100);
+    g.closePath();g.fill();ink(g,'rgba(8,6,8,.75)',1.6);
+    g.strokeStyle='rgba(8,6,8,.28)';g.lineWidth=1.2;
+    g.beginPath();g.moveTo(0,-124);g.lineTo(0,-100);g.stroke();
+    g.fillStyle=B.capD;
+    g.beginPath();g.moveTo(-18,-101);g.quadraticCurveTo(0,-92,18,-101);
+    g.quadraticCurveTo(0,-97,-18,-101);g.closePath();g.fill();ink(g,'rgba(8,6,8,.7)',1.5);
+    g.fillStyle=B.capL;ell(g,0,-123,2.4,2);g.fill();
   }
   g.strokeStyle='rgba(255,255,255,.34)';g.lineWidth=1;g.beginPath();
   g.moveTo(-12,-82);g.lineTo(-31,-86);g.moveTo(-12,-79);g.lineTo(-32,-76);
@@ -5795,7 +6101,7 @@ function drawSelect(){
     }
     // Portrait artwork occupies only the safe area between HP and the name block.
     var portraitTop=cy+ch*.13,portraitBottom=cy+ch*.76;
-    var portraitScale=Math.min(cw*.76/78,(portraitBottom-portraitTop)/116);
+    var portraitScale=Math.min(cw*.76/80,(portraitBottom-portraitTop)/126);
     drawBrotherPortrait(cx+cw/2,portraitBottom,i,portraitScale);
     txt(B.name,cx+cw/2,cy+ch*0.80,Math.min(24,cw*0.16),sel?'#e8c25a':'#a8a08e','center');
     txt(B.full.replace(B.name,'').trim()||B.name,cx+cw/2,cy+ch*0.855,Math.min(11,cw*0.075),
