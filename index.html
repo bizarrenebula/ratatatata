@@ -4523,15 +4523,15 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
   var cr=prone?34:0;
   var sw=Math.sin(walk),bob=inAir?0:Math.abs(Math.cos(walk))*1.6;
   /* The two of them are built differently and the drawing has to say so before
-     a single colour is laid down. Rocco is the short one: a deep barrel of a
-     torso on stumpy legs, shoulders twice the width of Vinnie's, thick arms and
-     boots to match, and his head sits straight on his shoulders. Vinnie is the
-     tall one and made of wire — long legs, narrow everything, and he stands a
-     good head above his brother despite weighing half as much. */
-  var hip=(big?-34:-42)+cr*0.42-bob*0.3;
-  var chest=(big?-63:-66)+cr-bob, neck=(big?-65:-68)+cr-bob;
-  var bw=big?18:11;                      // waist half-width
-  var sh=big?25:12.5;                    // shoulder half-width — Rocco's V
+     a single colour is laid down. Rocco is the big brother in every direction —
+     a head taller than Vinnie and twice as wide across the shoulders, a deep
+     barrel of a torso on legs that are short for his height, thick arms, boots
+     to match. Vinnie is the kid: smaller all over, made of wire, and carrying
+     the bigger head of the two relative to what is under it. */
+  var hip=(big?-38:-36)+cr*0.42-bob*0.3;
+  var chest=(big?-74:-60)+cr-bob, neck=(big?-76:-62)+cr-bob;
+  var bw=big?18:10.5;                    // waist half-width
+  var sh=big?25:12;                      // shoulder half-width — Rocco's V
   var la=inAir?-8:sw*9, lb=inAir?9:-sw*9;
 
   // ================= tail =================
@@ -4543,7 +4543,7 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
   // ================= back arm =================
   /* The far arm swings free, so its elbow is where you actually see one bend.
      Rocco's is a slab of bare arm; Vinnie's is a loose hoodie sleeve. */
-  g.save();g.translate(big?-8:-4,chest+(big?15:10));g.rotate(inAir?-0.5:sw*0.5+0.35);
+  g.save();g.translate(big?-8:-4,chest+(big?13:10));g.rotate(inAir?-0.5:sw*0.5+0.35);
   var aw=big?12.5:5.8, ex=big?2.2:1.6, ey=big?9:8.4;
   limb(0,0,ex,ey,aw,big?B.furD:B.coatD);
   joint(ex,ey,aw*0.54,big?B.furD:B.coatD,big?B.fur:B.coat,false);
@@ -4562,7 +4562,7 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
     if(big){
       /* Heavy khaki cargo trousers, thick through the thigh and gathered onto
          the boot, with a flapped pocket on the near leg. */
-      hx=far?-7:7;kx=hx+sd*0.4;ky=hip+11;ax=hx+sd;ay=hip+19;
+      hx=far?-7:7;kx=hx+sd*0.4;ky=hip+12;ax=hx+sd;ay=hip+23;
       g.lineCap='round';
       g.strokeStyle=far?B.pantsD:B.pants;g.lineWidth=17.5;
       g.beginPath();g.moveTo(hx,hip-2);g.lineTo(kx,ky);g.stroke();
@@ -4580,7 +4580,7 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
       workBoot(ax-8.5,far);
     } else {
       // slim denim, turned up once at the ankle, over red high-tops
-      hx=far?-3.5:3.5;kx=hx+sd*0.5;ky=hip+17;ax=hx+sd;ay=hip+31;
+      hx=far?-3.5:3.5;kx=hx+sd*0.5;ky=hip+13;ax=hx+sd;ay=hip+24;
       g.lineCap='round';
       g.strokeStyle=far?B.pantsD:B.pants;g.lineWidth=8;
       g.beginPath();g.moveTo(hx,hip);g.lineTo(kx,ky);g.lineTo(ax,ay);g.stroke();
@@ -4625,8 +4625,8 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
     g.beginPath();g.moveTo(sh-11,chest+7);g.quadraticCurveTo(sh-2,chest+9,sh-4,chest+19);
     g.quadraticCurveTo(sh-12,chest+17,sh-11,chest+7);g.closePath();g.fill();
     // deltoid over the vest — the arm is thicker than the shoulder it hangs off
-    g.fillStyle=lin(g,sh-13,chest+7,sh-3,chest+20,[[0,B.furL],[1,B.fur]]);
-    ell(g,sh-7,chest+16,7.8,8.8);g.fill();ink(g,'rgba(8,6,8,.6)',1.5);
+    g.fillStyle=lin(g,sh-13,chest+5,sh-3,chest+18,[[0,B.furL],[1,B.fur]]);
+    ell(g,sh-7,chest+14,8.2,9.2);g.fill();ink(g,'rgba(8,6,8,.6)',1.5);
     /* Shearling collar, drawn last of the three so the pale trim sits on top of
        both the leather and the shoulder instead of behind them. */
     g.fillStyle=B.fleece;
@@ -4697,7 +4697,7 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
     ink(g,'rgba(8,6,8,.6)',1.3);
     // the print on his chest, two bars is all that survives at this size
     g.fillStyle='rgba(196,44,36,.85)';
-    rr(g,-5,chest+13,13,2.6,1);g.fill();rr(g,-3,chest+18,9,2.2,1);g.fill();
+    rr(g,-5,chest+9,13,2.6,1);g.fill();rr(g,-3,chest+14,9,2.2,1);g.fill();
   }
   // rim light on the leading edge
   g.strokeStyle='rgba(255,228,182,.26)';g.lineWidth=2;
@@ -4706,8 +4706,8 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
   // ================= head =================
   /* Rocco's head is bigger and sits straight on his shoulders with no neck to
      speak of; Vinnie's is smaller and carried further up and forward. */
-  g.save();g.translate(big?5:3,neck-(big?7:12));
-  if(big)g.scale(0.92,0.92);else g.scale(0.92,0.92);
+  g.save();g.translate(big?5:3,neck-(big?8:12));
+  if(big)g.scale(1.0,1.0);else g.scale(0.90,0.90);
   ratHead(B,big,aim.y<0);
   g.restore();
 
@@ -4727,7 +4727,7 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
 
   // ================= front arm + weapon =================
   g.save();
-  g.translate(big?13:4,chest+(big?15:11));
+  g.translate(big?13:4,chest+(big?13:11));
   drawWeaponArm(B,Math.atan2(aim.y,aim.x*face),wep,fireT);
   g.restore();
   g.restore();
@@ -4750,14 +4750,14 @@ function drawBrotherPortrait(x,y,broIdx,scale){
   /* Front on, the same two builds: Rocco a wide slab of shoulder over short
      legs, Vinnie narrow and long-legged. Everything he is wearing is the outfit
      off the alley plate, drawn once here and once side-on for the game. */
-  var B=BROS[broIdx],big=B.big,bodyW=big?58:36,headW=big?46:40,i,lx,s;
+  var B=BROS[broIdx],big=B.big,bodyW=big?58:34,headW=big?46:40,i,lx,s;
   var shW=big?bodyW*0.62:bodyW*0.42;        // shoulder half-width
   var wsW=big?bodyW*0.42:bodyW*0.32;        // waist half-width
-  var top=big?-70:-76, waist=big?-36:-52;   // shoulder line and hem
+  var top=big?-78:-64, waist=big?-42:-40;   // shoulder line and hem
   /* The head is drawn at one fixed size below, so the difference in stature is
      put in here: scaled about the neck and nudged, Rocco ends up a head shorter
      than his brother even though he is half again as wide. */
-  var hs=big?0.98:0.96, hd=big?6:-2;
+  var hs=big?1.04:0.88, hd=big?-4:8;
   g.save();g.translate(x,y);g.scale(scale,scale);
   g.strokeStyle=B.tail;g.lineWidth=big?7:5;g.lineCap='round';
   g.beginPath();g.moveTo(bodyW*.24,-29);g.quadraticCurveTo(bodyW*.9,-22,bodyW*.72,-5);g.stroke();g.lineCap='butt';
@@ -4769,9 +4769,9 @@ function drawBrotherPortrait(x,y,broIdx,scale){
     g.strokeStyle=B.pants;g.lineWidth=big?17:11;
     g.beginPath();g.moveTo(lx,waist);g.lineTo(lx*1.06,big?-19:-15);g.stroke();
     g.lineCap='butt';
-    joint(lx*1.04,big?-27:-34,big?5.8:3.8,B.pants,big?'#8a7c63':'#5b6a83',true);
+    joint(lx*1.04,big?-30:-28,big?5.8:3.6,B.pants,big?'#8a7c63':'#5b6a83',true);
     if(big){
-      g.fillStyle='#655a48';rr(g,lx-(i?11:-2),-33,9.5,9,1.6);g.fill();    // cargo pocket
+      g.fillStyle='#655a48';rr(g,lx-(i?11:-2),-30,9.5,9,1.6);g.fill();    // cargo pocket
       ink(g,'rgba(8,6,8,.45)',1.1);
       g.fillStyle='#7d7159';rr(g,lx+(i?-1.6:-7.6),-19.6,9.2,4.6,1.6);g.fill();
       ink(g,'rgba(8,6,8,.55)',1.2);
@@ -4878,7 +4878,7 @@ function drawBrotherPortrait(x,y,broIdx,scale){
      where the two builds differ most — Vinnie's hoodie stops high on a long
      body, and hanging his elbow from it put his forearm on upside down. */
   var elX=big?4:6, wrX=big?6:8;
-  var shY=top+(big?13:11), elY=top+(big?26:24), wrY=big?-37:-38;
+  var shY=top+(big?13:10), elY=top+(big?26:21), wrY=big?-37:-28;
   for(i=0;i<2;i++){
     s=i?1:-1;
     g.lineCap='round';
