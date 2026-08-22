@@ -793,7 +793,7 @@ var WEAPONS={
   ak:      {name:'AK-47',       power:4, cd:5,  dmg:15,  auto:true,  n:1, spread:0.04,  spd:13,  ammo:210, col:'#ffe9a8', r:3.1},
   bazooka: {name:'BAZOOKA',     power:5, cd:32, dmg:58,  auto:false, n:1, spread:0,     spd:7.5, ammo:16,  col:'#ffb15a', r:7,   rocket:true, splash:46},
   minigun: {name:'MINIGUN',     power:6, cd:2,  dmg:9,   auto:true,  n:1, spread:0.075, spd:14,  ammo:420, col:'#fff0b8', r:2.8, bro:0, spin:true},
-  sniper:  {name:'SNIPER',      power:7, cd:38, dmg:165, auto:false, n:1, spread:0,     spd:26,  ammo:18,  col:'#cfe8ff', r:2.6, bro:1, pierce:3, life:110, neff:1.4}
+  sniper:  {name:'SNIPER',      power:7, cd:38, dmg:165, auto:false, n:1, spread:0,     spd:26,  ammo:18,  col:'#cfe8ff', r:2.6, bro:1, pierce:1, life:110, neff:1.3}
 };
 /* The two specials pair off, so a drop meant for the brother who is not out
    here becomes the piece the one who is can actually use. Co-op would hand it
@@ -3414,8 +3414,9 @@ function updateProjectiles(){
       e=enemies[j];
       if(e.hidden||(e.inB||null)!==(P.inB||null))continue;
       if(e.dead||b.x<=e.x||b.x>=e.x+e.w||b.y<=e.y||b.y>=e.y+e.h)continue;
-      /* A rifle round passes through what it kills. The list is per bullet, so
-         one round cannot bill the same body twice as it crosses it. */
+      /* A rifle round goes through the first body and takes the one standing
+         behind it, and then it is spent. The list is per bullet, so one round
+         cannot bill the same body twice as it crosses it. */
       if(b.hits){
         if(b.hits.indexOf(e)>=0)continue;
         b.hits.push(e);
@@ -5835,22 +5836,37 @@ function paintVignette(){
   g.fillRect(0,0,w,h);
   g.fillStyle='rgba(70,40,20,.10)';g.fillRect(0,0,w,h);
 }
+/* The two heads, cut out of the front views by scripts/cut-avatars.py. These
+   load whatever USE_RIG_ART says, because a face in the corner of the screen is
+   not the rig: it never moves, never aims, and costs one drawImage a frame. */
+var avatarArt=[new Image(),new Image()];
+avatarArt[0].src=RIG_DIR+'rocco-avatar.png';
+avatarArt[1].src=RIG_DIR+'vinnie-avatar.png';
+function avatarReady(i){var a=avatarArt[i];return !!(a&&a.complete&&a.naturalWidth);}
 function paintHUD(){
   var w=view.cssW,B=BROS[P.bro],pad=10;
   var hh=Math.min(60,view.cssH*0.115);
   g.fillStyle=lin(g,0,0,0,hh,[[0,'rgba(10,9,11,.88)'],[1,'rgba(10,9,11,.30)']]);
   g.fillRect(0,0,w,hh);
   g.fillStyle='rgba(201,162,74,.55)';g.fillRect(0,hh-2,w,1.5);
-  // portrait medallion
+  /* Portrait medallion. The face in it is the drawn one — his head cut off the
+     front view in the reference art, which is a better likeness than anything
+     worth building out of arcs at this size. The arcs are still here and still
+     correct for when the file has not loaded, or cannot. */
   var pr=hh*0.36,px=pad+pr,py=hh*0.46;
   g.save();
   g.beginPath();g.arc(px,py,pr,0,6.283);g.clip();
   g.fillStyle=lin(g,px-pr,py-pr,px+pr,py+pr,[[0,B.coatL],[1,'#14110f']]);
   g.fillRect(px-pr,py-pr,pr*2,pr*2);
-  g.fillStyle=B.fur;g.beginPath();g.arc(px,py+pr*0.34,pr*0.62,0,6.283);g.fill();
-  g.fillStyle=B.furD;g.beginPath();g.arc(px-pr*0.42,py-pr*0.20,pr*0.30,0,6.283);g.fill();
-  g.fillStyle=B.eye;g.beginPath();g.arc(px+pr*0.20,py+pr*0.20,pr*0.13,0,6.283);g.fill();
-  g.fillStyle='#161314';g.fillRect(px-pr,py-pr*0.62,pr*2,pr*0.34);
+  if(avatarReady(P.bro)){
+    var av=avatarArt[P.bro],d=pr*2.06;
+    g.drawImage(av,px-d/2,py-d*0.50,d,d);
+  } else {
+    g.fillStyle=B.fur;g.beginPath();g.arc(px,py+pr*0.34,pr*0.62,0,6.283);g.fill();
+    g.fillStyle=B.furD;g.beginPath();g.arc(px-pr*0.42,py-pr*0.20,pr*0.30,0,6.283);g.fill();
+    g.fillStyle=B.eye;g.beginPath();g.arc(px+pr*0.20,py+pr*0.20,pr*0.13,0,6.283);g.fill();
+    g.fillStyle='#161314';g.fillRect(px-pr,py-pr*0.62,pr*2,pr*0.34);
+  }
   g.restore();
   g.strokeStyle='#c9a24a';g.lineWidth=2;g.beginPath();g.arc(px,py,pr,0,6.283);g.stroke();
   // health
