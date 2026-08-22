@@ -17,7 +17,7 @@
   #stage{flex:1 1 100%;position:relative;overflow:hidden;background:#0a0d0f;}
   #panel{display:none;visibility:hidden;position:fixed;inset:0;z-index:8;pointer-events:none;}
   #panel canvas{position:absolute;inset:0;pointer-events:auto;}
-  #mobilePause{display:none;position:fixed;left:max(10px,env(safe-area-inset-left));top:max(9px,env(safe-area-inset-top));
+  #mobilePause{display:none;position:fixed;right:max(10px,env(safe-area-inset-right));top:max(9px,env(safe-area-inset-top));
     z-index:11;width:38px;height:38px;border:1px solid rgba(255,255,255,.34);border-radius:10px;
     background:rgba(8,12,14,.36);color:rgba(255,255,255,.78);font:bold 15px Arial,sans-serif;backdrop-filter:blur(3px);}
   /* The size knob is hidden: it sat over the score and read as part of the game
@@ -634,19 +634,34 @@ window.addEventListener('beforeunload',function(){Net.alive=false;try{if(Net.pc)
 var actx=null;
 function initAudio(){
   if(!actx){try{actx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}
-  if(actx&&actx.state==='suspended')actx.resume();
-  if(actx)Music.init();
-  /* The arcade should be playing when you arrive, not from the moment you press
-     something. Browsers will not start audio before a gesture, so this is the
-     earliest it can honestly happen: the first time the context is allowed to
-     run, and only while the title is still up. */
-  if(actx&&actx.state==='running'&&state==='TITLE'&&Music.mode!=='menu')Music.menu();
+  if(!actx)return;
+  Music.init();
+  /* Queue the music straight away, whether or not the context is allowed to run
+     yet. A suspended context has a frozen clock: a source started against it
+     makes no sound and loses no ground, and the moment the context is resumed
+     the track begins from its first sample. So the arcade is playing from the
+     instant the browser permits it rather than from the gesture after that.
+
+     resume() is the reason it used to take two. It returns a promise, so the
+     state is still 'suspended' on the line after the call — the old check for
+     'running' could not be true on the gesture that did the resuming, and the
+     music waited for whatever the player pressed next. */
+  if(state==='TITLE'&&Music.mode!=='menu')Music.menu();
+  if(actx.state!=='suspended')return;
+  var r;
+  try{r=actx.resume();}catch(e){}
+  if(r&&r.then)r.then(function(){
+    if(state==='TITLE'&&Music.mode!=='menu')Music.menu();
+  },function(){});
 }
 /* Ask once at load in case the browser already trusts this origin — it usually
    will not, and then the first key or tap does it. Either way nothing is lost. */
 window.addEventListener('load',function(){setTimeout(initAudio,60);});
-['pointerdown','keydown','touchstart'].forEach(function(n){
-  window.addEventListener(n,function(){if(state==='TITLE')initAudio();},{passive:true});
+/* Any gesture at all, in any state — the context can be suspended again by the
+   browser long after the title screen, and coming back to a silent game is
+   worse than the cost of one cheap call. */
+['pointerdown','keydown','touchstart','pointerup'].forEach(function(n){
+  window.addEventListener(n,function(){initAudio();},{passive:true});
 });
 function tone(f,dur,type,vol,slide){
   if(!actx)return;
@@ -5972,6 +5987,12 @@ var avatarArt=[new Image(),new Image()];
 avatarArt[0].src=RIG_DIR+'rocco-avatar.png';
 avatarArt[1].src=RIG_DIR+'vinnie-avatar.png';
 function avatarReady(i){var a=avatarArt[i];return !!(a&&a.complete&&a.naturalWidth);}
+/* The pause button is a DOM element pinned to the top-right corner, and only on
+   a touch device in landscape — the same condition the stylesheet shows it on.
+   The HUD asks here how much of that corner is spoken for. matchMedia keeps its
+   own answer up to date, so reading it every frame costs nothing. */
+var _mqPause=window.matchMedia?window.matchMedia('(orientation:landscape) and (pointer:coarse)'):null;
+function pauseInset(){return (_mqPause&&_mqPause.matches)?46:0;}
 function paintHUD(){
   var w=view.cssW,B=BROS[P.bro],pad=10;
   var hh=Math.min(60,view.cssH*0.115);
@@ -6013,9 +6034,12 @@ function paintHUD(){
     txt(WEAPONS[P.weapon].name,wx,hh*0.36,hh*0.26,WEAPONS[P.weapon].col||'#fff');
     txt(P.ammo===Infinity?'\u221E':(''+P.ammo),wx,hh*0.66,hh*0.26,'#bfb6a2');
   }
-  // right cluster
-  txt(('0000000'+score).slice(-7),w-pad,hh*0.34,hh*0.30,'#e8d6a8','right');
-  txt(level.boss?'FINAL':('STAGE '+stage+'/10'),w-pad,hh*0.66,hh*0.24,'#9a907e','right');
+  /* Right cluster. The pause button lives in that corner on touch devices, so
+     the whole column steps left of it rather than only the top line — a right
+     edge that lines up on two rows and not the third reads as a mistake. */
+  var padR=pad+pauseInset();
+  txt(('0000000'+score).slice(-7),w-padR,hh*0.34,hh*0.30,'#e8d6a8','right');
+  txt(level.boss?'FINAL':('STAGE '+stage+'/10'),w-padR,hh*0.66,hh*0.24,'#9a907e','right');
   // nades + lives bottom-left
   var i,ny=hh+16;
   for(i=0;i<Math.min(P.nades,6);i++){
@@ -6024,12 +6048,12 @@ function paintHUD(){
   }
   for(i=0;i<Math.min(lives,5);i++){
     g.fillStyle='#c9a24a';
-    g.beginPath();g.arc(w-pad-8-i*15,ny,5,0,6.283);g.fill();
-    g.fillStyle='#8a6a20';g.beginPath();g.arc(w-pad-11-i*15,ny-4,2,0,6.283);g.fill();
+    g.beginPath();g.arc(w-padR-8-i*15,ny,5,0,6.283);g.fill();
+    g.fillStyle='#8a6a20';g.beginPath();g.arc(w-padR-11-i*15,ny-4,2,0,6.283);g.fill();
   }
   /* Tokens sit under the lives, because that is what they are: the lives you
      have not spent yet. */
-  var tx=w-pad-10,ty=ny+15;
+  var tx=w-padR-10,ty=ny+15;
   g.fillStyle=lin(g,tx-7,ty-7,tx+6,ty+7,[[0,'#ffe9a2'],[1,'#9a6c1e']]);
   g.beginPath();g.arc(tx,ty,6,0,6.283);g.fill();
   g.strokeStyle='rgba(40,26,6,.8)';g.lineWidth=1.4;g.stroke();
