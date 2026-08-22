@@ -1,0 +1,9 @@
+{
+  "_comment": "loopStart/loopEnd are SECONDS. They cut inside the encoder's padding so the loop seam has no hole in it — measured from the decoded audio with the browser's own decoder, which is the one that has to agree. gain is 0..1; cutoff is the low-pass in Hz that the game opens up as a fight heats up.",
+  "tracks": {
+    "menu":        { "loopStart": 0, "loopEnd": 177.97, "gain": 0.20, "cutoff": 5200 },
+    "level-game1": { "loopStart": 0, "loopEnd": 186.54, "gain": 0.16, "cutoff": 3400 },
+    "level-game2": { "loopStart": 0, "loopEnd": 183.94, "gain": 0.16, "cutoff": 3400 },
+    "boss":        { "loopStart": 0, "loopEnd": 77.96,  "gain": 0.24, "cutoff": 6000 }
+  }
+}

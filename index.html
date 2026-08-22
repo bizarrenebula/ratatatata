@@ -698,48 +698,177 @@ var SFX={
   roll:function(){noise(0.16,0.055,850);tone(190,0.11,'triangle',0.025,90);},
   bite:function(){tone(240,0.075,'square',0.045,95);noise(0.055,0.045,1500);}
 };
-var Music={buffers:{},source:null,gain:null,filter:null,delay:null,delayGain:null,mode:'',pending:null,loading:false,
-  segmentSeconds:9,stage:1,combat:false,
-  init:function(){
-    if(this.loading||!actx)return;this.loading=true;var self=this;
-    Promise.all(['menu-theme.wav','ambient-themes.wav','boss-theme.wav'].map(function(name){
-      return fetch('assets/audio/'+name+'?v=2').then(function(r){return r.arrayBuffer();}).then(function(b){return actx.decodeAudioData(b);});
-    })).then(function(b){self.buffers.menu=b[0];self.buffers.ambient=b[1];self.buffers.boss=b[2];
-      if(self.pending){var p=self.pending;self.pending=null;p.mode==='menu'?self.menu():self.game(p.stage);}}).catch(function(){});
+/* ==================== MUSIC ====================
+   Four tracks under assets/audio/. One for every screen you are not playing on
+   — title, mode menu and character select are the same piece — two that take
+   turns across the levels, and one for a mini-boss or the boss, which takes
+   over from whichever level theme was playing and hands it back afterwards.
+
+   Formats are tried in order per track, so a file only has to exist in one of
+   them; whichever is found first is what plays.
+
+   Looping is done on declared sample positions rather than on the file's own
+   ends. An encoder pads the finish of a file, and a loop that runs to the last
+   sample before jumping back leaves a hole of exactly that length on every pass
+   — two seconds of it on one of these. loopStart and loopEnd in music.json cut
+   inside the padding so the seam is tight. They were measured from the decoded
+   audio with the browser's own decoder, which is the one that has to agree. */
+var MUSIC_DIR='assets/audio/', MUSIC_EXT=['mp3','ogg','m4a','wav'];
+var MUSIC_TRACKS={
+  menu:  {file:'menu',       gain:0.20, cutoff:5200},
+  game1: {file:'level-game1',gain:0.16, cutoff:3400},
+  game2: {file:'level-game2',gain:0.16, cutoff:3400},
+  boss:  {file:'boss',       gain:0.24, cutoff:6000}
+};
+/* The two level themes take turns, a different one each stage, so no two levels
+   in a row play the same piece. Odd stages take the first, even the second. */
+function levelTrack(n){return ((n|0)%2)?'game1':'game2';}
+
+var Music={
+  buffers:{}, meta:{}, voice:null, mode:'', want:'', stage:1, combat:false,
+  tried:{}, legacy:null, loadingMeta:false, ready:false,
+  /* One voice is one playing track: its source, its own gain to fade on, and
+     the filter and echo the game leans on to signal danger. Two exist only
+     during a crossfade. */
+  makeVoice:function(buf,spec,startAt){
+    var s=actx.createBufferSource();
+    s.buffer=buf;s.loop=true;
+    if(spec.loopStart!==undefined)s.loopStart=spec.loopStart;
+    if(spec.loopEnd!==undefined&&spec.loopEnd>0)s.loopEnd=Math.min(spec.loopEnd,buf.duration);
+    var gain=actx.createGain();gain.gain.value=0;
+    var filt=actx.createBiquadFilter();
+    filt.type='lowpass';filt.frequency.value=spec.cutoff||3300;filt.Q.value=.45;
+    var dly=actx.createDelay(.5);dly.delayTime.value=.17;
+    var dg=actx.createGain();dg.gain.value=.075;
+    s.connect(filt);filt.connect(gain);gain.connect(actx.destination);
+    filt.connect(dly);dly.connect(dg);dg.connect(actx.destination);
+    s.start(0,startAt||0);
+    return {src:s,gain:gain,filter:filt,delay:dg,spec:spec,target:spec.gain};
   },
-  stop:function(){if(this.source){try{this.source.stop();}catch(e){}this.source=null;}},
-  connect:function(src,vol,cutoff){
-    this.gain=actx.createGain();this.gain.gain.value=vol;
-    this.filter=actx.createBiquadFilter();this.filter.type='lowpass';this.filter.frequency.value=cutoff||3300;this.filter.Q.value=.45;
-    src.connect(this.filter);this.filter.connect(this.gain);this.gain.connect(actx.destination);this.source=src;
-    this.delay=actx.createDelay(.5);this.delay.delayTime.value=.17;
-    this.delayGain=actx.createGain();this.delayGain.gain.value=.075;
-    this.filter.connect(this.delay);this.delay.connect(this.delayGain);this.delayGain.connect(actx.destination);
+  fadeOut:function(v,secs){
+    if(!v)return;
+    var now=actx.currentTime,t=secs===undefined?0.8:secs;
+    try{
+      v.gain.gain.cancelScheduledValues(now);
+      v.gain.gain.setValueAtTime(v.gain.gain.value,now);
+      v.gain.gain.linearRampToValueAtTime(0,now+t);
+      v.src.stop(now+t+0.05);
+    }catch(e){}
   },
-  menu:function(){
-    this.mode='menu';if(!this.buffers.menu){this.pending={mode:'menu'};this.init();return;}this.stop();
-    var s=actx.createBufferSource();s.buffer=this.buffers.menu;s.loop=true;this.connect(s,.10,3100);s.start();
+  fadeIn:function(v,secs){
+    var now=actx.currentTime,t=secs===undefined?0.8:secs;
+    try{
+      v.gain.gain.cancelScheduledValues(now);
+      v.gain.gain.setValueAtTime(0,now);
+      v.gain.gain.linearRampToValueAtTime(v.target,now+t);
+    }catch(e){}
   },
+  stop:function(){this.fadeOut(this.voice,0.25);this.voice=null;this.mode='';this.want='';},
+  /* Fetches one track, trying each extension until something both downloads and
+     decodes. A track that is simply not there is remembered as missing so the
+     next request does not go looking for it again. */
+  load:function(key){
+    var self=this,spec=MUSIC_TRACKS[key];
+    if(!spec||!actx)return Promise.resolve(null);
+    if(this.buffers[key])return Promise.resolve(this.buffers[key]);
+    if(this.tried[key])return this.tried[key];
+    var chain=Promise.resolve(null);
+    MUSIC_EXT.forEach(function(ext){
+      chain=chain.then(function(buf){
+        if(buf)return buf;
+        return fetch(MUSIC_DIR+spec.file+'.'+ext)
+          .then(function(r){return r.ok?r.arrayBuffer():null;})
+          .then(function(ab){return ab?actx.decodeAudioData(ab):null;})
+          .catch(function(){return null;});
+      });
+    });
+    this.tried[key]=chain.then(function(buf){
+      if(buf)self.buffers[key]=buf;
+      return buf;
+    });
+    return this.tried[key];
+  },
+  /* Loop points and per-track level, if the author supplied any. Everything in
+     it is optional; a missing file leaves the defaults above in place. */
+  loadMeta:function(){
+    if(this.loadingMeta)return this.loadingMeta;
+    this.loadingMeta=fetch(MUSIC_DIR+'music.json')
+      .then(function(r){return r.ok?r.json():null;})
+      .then(function(j){
+        if(!j||!j.tracks)return null;
+        /* Keyed either way: by the file name, which is what an author is
+           thinking in when writing this, or by the internal slot name. */
+        for(var k in MUSIC_TRACKS){
+          var spec=MUSIC_TRACKS[k],t=j.tracks[spec.file]||j.tracks[k];
+          if(!t)continue;
+          if(t.loopStart!==undefined)spec.loopStart=t.loopStart;
+          if(t.loopEnd!==undefined)spec.loopEnd=t.loopEnd;
+          if(t.gain!==undefined)spec.gain=t.gain;
+          if(t.cutoff!==undefined)spec.cutoff=t.cutoff;
+        }
+        return j;
+      }).catch(function(){return null;});
+    return this.loadingMeta;
+  },
+  init:function(){if(actx)this.loadMeta();},
+  /* Ask for a track by name. Playing it is whatever happens after the file
+     arrives, and if the player has moved on by then the request is dropped —
+     which is what want is for. */
+  play:function(key,fade){
+    if(!actx)return;
+    var self=this;
+    this.want=key;
+    this.loadMeta().then(function(){return self.load(key);}).then(function(buf){
+      if(self.want!==key)return;                       // moved on while loading
+      if(!buf)return;                                 // nothing supplied for this slot
+      if(self.voice&&self.voice.key===key)return;      // already on
+      var old=self.voice;
+      self.voice=self.makeVoice(buf,MUSIC_TRACKS[key],0);
+      self.voice.key=key;
+      self.fadeIn(self.voice,fade);
+      self.fadeOut(old,fade);
+      self.ready=true;
+    });
+  },
+  menu:function(){this.mode='menu';this.combat=false;this.play('menu',0.7);},
   game:function(n){
     this.mode='game';this.stage=n;this.combat=false;
-    if(!this.buffers.ambient){this.pending={mode:'game',stage:n};this.init();return;}this.playAmbient();
+    this.play(levelTrack(n),0.7);
   },
-  playAmbient:function(){
-    this.stop();this.combat=false;var idx=clamp(this.stage-1,0,9),start=idx*this.segmentSeconds,s=actx.createBufferSource();s.buffer=this.buffers.ambient;
-    s.loop=true;s.loopStart=start;s.loopEnd=start+this.segmentSeconds;this.connect(s,.078,2050);s.start(0,start);
-  },
-  playBoss:function(){
-    if(!this.buffers.boss)return;this.stop();this.combat=true;var s=actx.createBufferSource();s.buffer=this.buffers.boss;s.loop=true;
-    this.connect(s,.145,4400);s.start();
-  },
+  playBoss:function(){this.combat=true;this.play('boss',0.5);},
+  playAmbient:function(){this.combat=false;this.play(levelTrack(this.stage),0.5);},
+  /* The music reads the fight: more of them near you and the filter opens and
+     the level comes up, and a mini-boss or the boss swaps to its own piece if
+     one was supplied. Without a boss track the level theme simply opens all the
+     way, which is a good deal better than silence. */
   update:function(){
-    if(this.mode!=='game'||!this.source||!this.gain||!level)return;
-    var mini=null,threat=0;for(var i=0;i<enemies.length;i++){var e=enemies[i];if(!e.dead&&Math.abs(e.x-P.x)<420)threat++;
-      if(e.miniBoss&&!e.dead&&(e.engaged||Math.abs(e.x-P.x)<560))mini=e;}
+    if(this.mode!=='game'||!this.voice||!level)return;
+    var mini=null,threat=0,i,e;
+    for(i=0;i<enemies.length;i++){
+      e=enemies[i];
+      if(!e.dead&&Math.abs(e.x-P.x)<420)threat++;
+      if(e.miniBoss&&!e.dead&&(e.engaged||Math.abs(e.x-P.x)<560))mini=e;
+    }
     var wantsBoss=!!mini||!!(boss&&boss.state!=='dead');
-    if(wantsBoss!==this.combat){if(wantsBoss)this.playBoss();else this.playAmbient();return;}
-    var now=actx.currentTime;
-    if(!this.combat){this.filter.frequency.setTargetAtTime(Math.min(2850,1900+threat*95),now,.45);this.gain.gain.setTargetAtTime(Math.min(.095,.072+threat*.003),now,.5);}
+    if(wantsBoss!==this.combat){
+      if(wantsBoss){
+        var self=this;
+        this.load('boss').then(function(b){
+          if(b)self.playBoss();
+          else {self.combat=true;}                     // no boss track: stay and open up
+        });
+      } else this.playAmbient();
+      this.combat=wantsBoss;
+      return;
+    }
+    var now=actx.currentTime,v=this.voice,base=v.spec.cutoff||3300;
+    if(this.combat&&v.key!=='boss'){
+      v.filter.frequency.setTargetAtTime(base*1.9,now,.5);
+      v.gain.gain.setTargetAtTime(v.target*1.25,now,.5);
+    } else if(!this.combat){
+      v.filter.frequency.setTargetAtTime(Math.min(base*1.45,base+threat*95),now,.45);
+      v.gain.gain.setTargetAtTime(Math.min(v.target*1.22,v.target+threat*.003),now,.5);
+    }
   }
 };
 
