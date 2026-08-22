@@ -20,8 +20,11 @@
   #mobilePause{display:none;position:fixed;left:max(10px,env(safe-area-inset-left));top:max(9px,env(safe-area-inset-top));
     z-index:11;width:38px;height:38px;border:1px solid rgba(255,255,255,.34);border-radius:10px;
     background:rgba(8,12,14,.36);color:rgba(255,255,255,.78);font:bold 15px Arial,sans-serif;backdrop-filter:blur(3px);}
-  #sizeCtl{position:fixed;right:max(10px,env(safe-area-inset-right));top:max(9px,env(safe-area-inset-top));
-    z-index:11;display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid rgba(255,255,255,.28);
+  /* The size knob is hidden: it sat over the score and read as part of the game
+     rather than a browser control. The setting itself is untouched — whatever
+     size was last chosen is still restored from the save on load. */
+  #sizeCtl{display:none !important;position:fixed;right:max(10px,env(safe-area-inset-right));top:max(9px,env(safe-area-inset-top));
+    z-index:11;align-items:center;gap:6px;padding:4px 6px;border:1px solid rgba(255,255,255,.28);
     border-radius:10px;background:rgba(8,12,14,.42);backdrop-filter:blur(3px);}
   #sizeCtl button{width:30px;height:30px;border:1px solid rgba(255,255,255,.30);border-radius:8px;
     background:rgba(255,255,255,.08);color:rgba(255,255,255,.86);font:bold 17px Arial,sans-serif;line-height:1;}
@@ -768,17 +771,59 @@ var BROS=[
     pants:'#4c5a70', pantsD:'#39445a', boot:'#c3342a', bootL:'#ece9e1',
     glove:'#1f2228', gloveC:'#2c3038', trim:'#c9342e', metal:'#e8e4d8', eye:'#f4ecd8' }
 ];
+/* Seven guns and a set of claws.
+
+   Ownership is the spine of it. A weapon with no bro belongs to both brothers;
+   one with a bro belongs to that brother alone. Rocco is the heavy — sawn-off
+   and minigun. Vinnie is the quick one — twin pistols and the rifle. The pistol,
+   the AK and the bazooka are common to both. Claws are not a weapon you carry:
+   they are what happens when something gets close enough to bite.
+
+   Damage climbs with the tier, and it climbs on purpose — every step up is worth
+   more damage a second than the step below it, so a rarer drop is always a
+   better gun and never a sidegrade. neff is how many of a shotgun's pellets
+   actually land at a range you would use it from, and splash is the bazooka's
+   blast on top of its direct hit; both are there so the ramp can be checked
+   rather than asserted. weapons-test walks the table and proves it. */
 var WEAPONS={
-  scratch:   {name:'CLAWS & BITE',power:0,cd:15,dmg:25,auto:true,melee:true,ammo:Infinity,col:'#e8d6a8'},
-  knife:     {name:'STREET KNIFE',power:1,cd:13,dmg:39,auto:true,melee:true,ammo:Infinity,col:'#dfe8ef'},
-  pistol:    {name:'.38 SNUB',    power:2,cd:11, dmg:11, auto:false, n:1, spread:0,    spd:11, ammo:Infinity, col:'#ffd98a', r:3.4},
-  machinegun:{name:'TOMMY GUN',   power:3,cd:5,  dmg:9,  auto:true,  n:1, spread:0.035,spd:12, ammo:260,      col:'#ffe9a8', r:3.0},
-  spread:    {name:'SAWN-OFF',    power:4,cd:17, dmg:10, auto:true,  n:5, spread:0.26, spd:10, ammo:110,      col:'#ffb05a', r:3.6},
-  flame:     {name:'FLAMER',      power:5,cd:3,  dmg:5,  auto:true,  n:1, spread:0.16, spd:7,  ammo:340,      col:'#ff7a2a', r:6, life:26},
-  bazooka:   {name:'BAZOOKA',     power:6,cd:34, dmg:42, auto:false, n:1, spread:0,    spd:7,  ammo:24,       col:'#ffb15a', r:7,rocket:true}
+  scratch: {name:'CLAWS & BITE',power:0, cd:14, dmg:26,  melee:true, auto:true, ammo:Infinity, col:'#e8d6a8'},
+  pistol:  {name:'.38 SNUB',    power:1, cd:11, dmg:13,  auto:false, n:1, spread:0,     spd:11,  ammo:Infinity, col:'#ffd98a', r:3.4},
+  akimbo:  {name:'TWIN .38s',   power:2, cd:6,  dmg:12,  auto:true,  n:1, spread:0.045, spd:11,  ammo:220, col:'#ffe0a0', r:3.4, bro:1, twin:true},
+  spread:  {name:'SAWN-OFF',    power:3, cd:16, dmg:18,  auto:true,  n:5, spread:0.25,  spd:10,  ammo:80,  col:'#ffb05a', r:3.6, bro:0, neff:2},
+  ak:      {name:'AK-47',       power:4, cd:5,  dmg:15,  auto:true,  n:1, spread:0.04,  spd:13,  ammo:210, col:'#ffe9a8', r:3.1},
+  bazooka: {name:'BAZOOKA',     power:5, cd:32, dmg:58,  auto:false, n:1, spread:0,     spd:7.5, ammo:16,  col:'#ffb15a', r:7,   rocket:true, splash:46},
+  minigun: {name:'MINIGUN',     power:6, cd:2,  dmg:9,   auto:true,  n:1, spread:0.075, spd:14,  ammo:420, col:'#fff0b8', r:2.8, bro:0, spin:true},
+  sniper:  {name:'SNIPER',      power:7, cd:38, dmg:165, auto:false, n:1, spread:0,     spd:26,  ammo:18,  col:'#cfe8ff', r:2.6, bro:1, pierce:3, life:110, neff:1.4}
 };
-var PICKUP_WEAPONS=['knife','pistol','machinegun','spread','flame','bazooka'];
-/* Combat tuning. Player output is lifted across the board; on top of that, a
+/* The two specials pair off, so a drop meant for the brother who is not out
+   here becomes the piece the one who is can actually use. Co-op would hand it
+   over; on your own it would otherwise be a pickup that does nothing. */
+var WEAPON_SWAP={spread:'akimbo',akimbo:'spread',minigun:'sniper',sniper:'minigun'};
+function weaponFor(wep,broIdx){
+  var w=WEAPONS[wep];
+  if(!w||w.melee)return 'pistol';
+  if(w.bro===undefined||w.bro===broIdx)return wep;
+  var alt=WEAPON_SWAP[wep],aw=alt&&WEAPONS[alt];
+  return (aw&&(aw.bro===undefined||aw.bro===broIdx))?alt:'ak';
+}
+/* What a brother ends up holding when he walks over a gun. Vinnie's second
+   pistol is the one that turns into something else: he already has one, so the
+   pair of them become the twins. */
+function resolvePickup(wep,broIdx,owned){
+  var got=weaponFor(wep,broIdx);
+  if(got==='pistol'&&broIdx===1&&owned&&owned.indexOf('pistol')>=0)got='akimbo';
+  return got;
+}
+/* Common guns fall often, the specials less, and the two that end a fight on
+   their own least of all. */
+var DROP_TABLE=[['pistol',15],['ak',14],['spread',11],['akimbo',11],
+                ['minigun',5],['sniper',4],['bazooka',4]];
+var DROP_TOTAL=(function(){var t=0,i;for(i=0;i<DROP_TABLE.length;i++)t+=DROP_TABLE[i][1];return t;})();
+function rollWeapon(rnd){
+  var r=(rnd?rnd():Math.random())*DROP_TOTAL,i;
+  for(i=0;i<DROP_TABLE.length;i++){r-=DROP_TABLE[i][1];if(r<=0)return DROP_TABLE[i][0];}
+  return 'pistol';
+}/* Combat tuning. Player output is lifted across the board; on top of that, a
    share of every direct hit lands in the head — an instant kill on rank-and-file
    enemies, and double damage on anything with a boss health bar (mini-bosses
    and P.C.U.-9 are too armoured to drop from one, but they feel it). Splash
@@ -937,6 +982,14 @@ var SCALE_MIN=0.5,SCALE_MAX=2,SCALE_STEP=0.05,charScale=1.75;
    bump — they are icons, not bodies. Level pacing (gap widths, jump physics)
    is deliberately NOT scaled, so the traversal still plays exactly as tuned. */
 var BUILD_SCALE=1.75, ITEM_SCALE=1.25, ITEM_D=Math.round(26*ITEM_SCALE);
+/* A brother is drawn about 112 of his own units from sole to ear, and each of
+   those units is 0.55 world pixels before the size knob multiplies them. His
+   collision box is a good deal shorter than that — it always has been — so
+   anything sized against the box comes out looking too small for him. Doorways
+   are the place it shows: cut them against the drawing, at the largest size the
+   knob goes to, so the biggest rat in the game still walks through without
+   ducking. A storey is 82*BUILD_SCALE tall, which leaves this comfortable. */
+var DRAWN_H=Math.round(112*0.55*SCALE_MAX), DOOR_H=Math.round(DRAWN_H*1.03);
 var storedScale=Save.d.charScale;
 if(storedScale>=SCALE_MIN&&storedScale<=SCALE_MAX)charScale=storedScale;
 
@@ -969,7 +1022,7 @@ if(sizeVal)sizeVal.textContent=charScale.toFixed(2)+'×';
 function makePlayer(b){
   var B=BROS[b];
   P={bro:b,x:80,y:300,vx:0,vy:0,w:P_W*charScale,h:P_STAND*charScale,facing:1,onGround:false,prone:false,
-     hp:B.maxHp,maxHp:B.maxHp,weapon:'scratch',weapons:['scratch'],weaponAmmo:{scratch:Infinity},ammo:Infinity,nades:4,cd:0,inv:90,jumpHold:0,
+     hp:B.maxHp,maxHp:B.maxHp,weapon:'pistol',weapons:['pistol'],weaponAmmo:{pistol:Infinity},ammo:Infinity,nades:4,cd:0,inv:90,jumpHold:0,
      jumps:0,coyote:0,anim:0,dead:false,checkX:80,checkY:300,swapCd:0,fireT:0,lean:0,
      inB:null,doorT:0,atDoor:null,winCd:0,rollT:0,rollMax:24,rollDir:1,rollCd:0,rollPow:1,
      rollAir:false,airRollUsed:false,nadeReady:false,nadeCharge:0,airBoost:0,jumpLock:0,
@@ -997,6 +1050,18 @@ function groundYAt(lv,x){
 function objectiveText(n,type,thing){
   return 'RECOVER THE '+thing.toUpperCase();
 }
+/* Would the objective sit inside something solid if it went here? Uses the same
+   reachability rule as the buried-item sweep, against the box the objective
+   would occupy. */
+function routeSpotClear(lv,rs){
+  var box={x:Math.round(rs.x-ITEM_D/2),y:Math.round(rs.y-28),w:ITEM_D,h:ITEM_D},i,o;
+  for(i=0;i<lv.obstacles.length;i++){
+    o=lv.obstacles[i];
+    if(o.decorative||o.decor||!o.platform)continue;
+    if(itemBuried(box,o))return false;
+  }
+  return true;
+}
 function configureObjective(lv,rng,n){
   if(lv.boss){lv.objective={type:'boss',text:'ELIMINATE P.C.U.-9',taskDone:false,done:false,progress:0,total:1};return;}
   var biomeLoot=lv.flow&&lv.flow.loot,thing=biomeLoot?biomeLoot[Math.floor(rng()*biomeLoot.length)]:campaign.things[(n-1)%campaign.things.length];
@@ -1007,10 +1072,29 @@ function configureObjective(lv,rng,n){
      player has no decision left to make. So the objective takes a route spot —
      the sump you have to walk, the roofs you have to cross, the container you
      have to climb — which is off the ground lane without being off the path. */
-  var pick=lv.routeSpots.length?lv.routeSpots[Math.floor(rng()*lv.routeSpots.length)]:null;
+  /* Any route spot will do, but not one with a pipe or a plank standing in it:
+     the objective is exempt from the buried-item sweep — moving it is what would
+     take it off the path — so the clear spot has to be chosen here instead.
+     Rotating through the list from a random start keeps the placement as varied
+     as picking at random while still landing somewhere reachable. */
+  var pick=null,ri,rs,n0=lv.routeSpots.length;
+  if(n0){
+    var start=Math.floor(rng()*n0);
+    for(ri=0;ri<n0;ri++){
+      rs=lv.routeSpots[(start+ri)%n0];
+      if(routeSpotClear(lv,rs)){pick=rs;break;}
+    }
+    if(!pick){pick=lv.routeSpots[start];pick.crowded=true;}
+  }
   if(pick){
-    lv.items.push({x:Math.round(pick.x-ITEM_D/2),y:Math.round(pick.y-28),w:ITEM_D,h:ITEM_D,
-                   kind:'mission',bob:rng()*6.28,objective:true});
+    var mi={x:Math.round(pick.x-ITEM_D/2),y:Math.round(pick.y-28),w:ITEM_D,h:ITEM_D,
+            kind:'mission',bob:rng()*6.28,objective:true};
+    /* Every route spot on this stage has something standing in it. Lifting the
+       objective onto the lid nudges it off the declared spot, which is a shame;
+       leaving it inside the pipe makes the stage impossible to finish, which is
+       not. Reachable wins. */
+    if(pick.crowded)liftClear(lv,mi);
+    lv.items.push(mi);
     var ug=groundYAt(lv,pick.x);
   } else {
     var ix=Math.round(lv.length*.45),iy=(groundYAt(lv,ix)||470)-28;
@@ -1028,7 +1112,7 @@ function stockPockets(lv,rng){
     if(k.plat)deckItem(lv,rng,k.plat,k.x,kind);
     else lv.items.push({x:Math.round(k.x-ITEM_D/2),y:Math.round(k.y-ITEM_D-6),w:ITEM_D,h:ITEM_D,
                         kind:kind,bob:rng()*6.28,
-                        wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)]});
+                        wep:rollWeapon(rng)});
   }
 }
 function configureMiniBoss(lv,n){
@@ -1248,6 +1332,77 @@ function propSpaceFree(lv,x,w,pad){
   if(lv.exit&&x+w>lv.exit.x-200)return false;
   return true;
 }
+/* Collectibles go down before the barrels, the dumpsters and the themed props,
+   and not one of those passes knew an item was already standing there — so a
+   clip could end up inside a barrel: drawn behind it, and impossible to walk
+   into because the barrel is solid. This is the last word on it, run after
+   everything else is placed. Anything still buried is lifted onto the lid of
+   whatever swallowed it when that lid is somewhere a brother can reach, and
+   pushed out to the side when it is not.
+
+   The retry is bounded because moving an item clear of one body can put it
+   inside the next, and two overlapping props could otherwise pass it back and
+   forth forever. */
+/* Is this item genuinely out of reach inside that body, or merely touching it?
+   The distinction matters: a pickup clipping the corner of a crate is still
+   walked into, and moving those was shunting mission objectives off the route
+   they were deliberately placed on.
+
+   Out of reach means both of: most of the item is inside the body horizontally,
+   so it cannot be brushed from either side; and its top edge is below the body's
+   lid, so standing on the lid does not reach down to it either. */
+function itemBuried(it,o){
+  var ovx=Math.min(it.x+it.w,o.x+o.w)-Math.max(it.x,o.x);
+  if(ovx<it.w*0.5)return false;
+  if(it.y+it.h<=o.y||it.y>=o.y+o.h)return false;
+  return it.y>o.y+4;
+}
+function freeItems(lv){
+  var i,j,it,o,tries,top,moved=0;
+  for(i=0;i<lv.items.length;i++){
+    it=lv.items[i];
+    if(it.inB)continue;                      // indoors is deliberate placement
+    /* The objective is placed on a declared route spot on purpose, and lifting
+       it onto a crate lid takes it off that spot — which is the whole design
+       guarantee that every stage has one path through it. Scenery never gets to
+       overrule the mission, so it is left where the generator put it and
+       items-test asserts separately that nothing ever buries one. */
+    if(it.objective)continue;
+    for(tries=0;tries<12;tries++){
+      top=null;
+      for(j=0;j<lv.obstacles.length;j++){
+        o=lv.obstacles[j];
+        if(o.decorative||o.decor||!o.platform)continue;   // scenery you walk through
+        if(!itemBuried(it,o))continue;
+        if(!top||o.y<top.y)top=o;            // the highest lid over this spot
+      }
+      if(!top)break;
+      it.y=Math.round(top.y-it.h-5);
+      moved++;
+    }
+  }
+  return moved;
+}
+/* Always up, never sideways. Sliding an item out of one crate drops it into the
+   next one along a stacked wall and it can shuttle between the two forever;
+   lifting is monotone, so a stack resolves in as many steps as it has boxes and
+   then stops. */
+function liftClear(lv,it){
+  var tries,j,o,top,moved=0;
+  for(tries=0;tries<12;tries++){
+    top=null;
+    for(j=0;j<lv.obstacles.length;j++){
+      o=lv.obstacles[j];
+      if(o.decorative||o.decor||!o.platform)continue;
+      if(!itemBuried(it,o))continue;
+      if(!top||o.y<top.y)top=o;
+    }
+    if(!top)break;
+    it.y=Math.round(top.y-it.h-5);
+    moved++;
+  }
+  return moved;
+}
 /* Registers a prop as both a destructible obstacle and the platform you stand
    on, matching how the pre-existing barrels and dumpsters already work. */
 function addProp(lv,type,x,y,w,h,hp,opt){
@@ -1352,7 +1507,7 @@ function deckSpawn(lv,plat,x,t){
 function deckItem(lv,rng,plat,x,kind){
   lv.items.push({x:Math.round(clamp(x,plat.x+8,plat.x+plat.w-ITEM_D-8)),
                  y:Math.round(plat.y-ITEM_D-6),w:ITEM_D,h:ITEM_D,kind:kind,bob:rng()*6.28,
-                 wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)]});
+                 wep:rollWeapon(rng)});
 }
 /* propSpaceFree asks only about x, which is the right question for scenery that
    stands on the floor and the wrong one for a street with rooftops 290px over
@@ -1780,7 +1935,7 @@ function buildLevel(n){
           var sl=bld.slabs[si], rl=rng();
           lv.items.push({x:Math.round(sl.x+sl.w/2-ITEM_D/2),y:sl.y-28,w:ITEM_D,h:ITEM_D,inB:bld,bob:rng()*6.28,
             kind:rl<0.20?'token':rl<0.50?'cheese':rl<0.75?'nade':'weapon',
-            wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)]});
+            wep:rollWeapon(rng)});
         }
         var enemySlab=bld.slabs[si],insideType=(n>=4&&rng()<0.55)?'weasel':'mouse';
         lv.spawns.push({x:Math.round(enemySlab.x+enemySlab.w*.55),y:enemySlab.y-(insideType==='weasel'?38:32),
@@ -1811,11 +1966,14 @@ function buildLevel(n){
     for(px=520;px<lv.length-200;px+=620+rng()*380){
       var iy=groundYAt(lv,px);
       if(iy===null)continue;
+      /* Clips outnumber guns on the floor: a gun you cannot feed is a gun you
+         stop using, and the specials only drop as guns rarely. */
       var roll=rng(),kind='cheese';
-      if(roll>0.52)kind='weapon';
-      if(roll>0.86)kind='nade';
+      if(roll>0.40)kind='ammo';
+      if(roll>0.66)kind='weapon';
+      if(roll>0.88)kind='nade';
       lv.items.push({x:Math.round(px),y:iy-30,w:ITEM_D,h:ITEM_D,kind:kind,
-        wep:PICKUP_WEAPONS[Math.floor(rng()*PICKUP_WEAPONS.length)],bob:rng()*6.28});
+        wep:rollWeapon(rng),bob:rng()*6.28});
     }
     for(px=500;px<lv.length-300;px+=720+rng()*420){
       var sy=groundYAt(lv,px);
@@ -1861,6 +2019,7 @@ function buildLevel(n){
   stockPockets(lv,rng);
   configureMiniBoss(lv,n);
   sanitizeEnemySpawns(lv);
+  freeItems(lv);
   // background silhouettes (3 parallax bands) + street lamps
   for(px=-200;px<lv.length+400;px+=70+rng()*130){
     lv.props.push({x:px,y:rng(),w:60+rng()*130,h:120+rng()*260,band:rng()<0.5?0:1,s:rng()});
@@ -2062,11 +2221,18 @@ function damageEnemy(e,d){
     SFX.enemyDeath(e.t,!!e.miniBoss);
     // What a mini-boss is really carrying is its token.
     if(e.miniBoss)items.push({x:e.x+e.w/2-ITEM_D/2,y:e.y-6,w:ITEM_D,h:ITEM_D,kind:'token',bob:0});
-    var dropW=e.t==='mouse'?'knife':e.t==='cat'?'bazooka':e.t==='weasel'?'pistol':e.t==='lizard'?'machinegun':null;
-    if(dropW)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'weapon',wep:dropW,bob:0});
+    /* What falls off a body. The bigger the thing you killed the better the odds
+       of a gun rather than a clip for one you already carry; a mouse is worth a
+       handful of rounds and not much else. */
+    var gunOdds=e.t==='cat'?0.55:e.t==='lizard'?0.34:e.t==='weasel'?0.24:0.10;
+    var roll=Math.random();
+    if(roll<gunOdds)
+      items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'weapon',wep:rollWeapon(),bob:0});
+    else if(roll<gunOdds+0.30)
+      items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'ammo',wep:rollWeapon(),bob:0});
     else if(e.t==='bat')items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
-    else if(Math.random()<0.13)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'cheese',bob:0});
-    else if(Math.random()<0.07)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
+    else if(roll<gunOdds+0.43)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'cheese',bob:0});
+    else if(roll<gunOdds+0.50)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
   }
 }
 /* ---- headshots ----
@@ -2147,7 +2313,7 @@ function respawnAtCheckpoint(){
       burst(nearby.x+12,nearby.y+12,'#7a7a7a',6,3);enemies.splice(ei,1);
     }
   }
-  if(WEAPONS[P.weapon].ammo!==Infinity&&P.ammo<=0)equipWeapon('scratch');
+  if(WEAPONS[P.weapon].ammo!==Infinity&&P.ammo<=0)equipWeapon('pistol');
   P.nades=Math.max(P.nades,3);ebullets=[];nades=[];
   state='PLAY';stateT=0;
 }
@@ -2162,9 +2328,9 @@ function killPlayer(){
 function equipWeapon(wep,ammo,activate){
   if(!WEAPONS[wep])return;
   if(P.weaponAmmo)P.weaponAmmo[P.weapon]=P.ammo;
-  if(!P.weapons)P.weapons=['scratch'];
+  if(!P.weapons)P.weapons=['pistol'];
   if(P.weapons.indexOf(wep)<0)P.weapons.push(wep);
-  if(!P.weaponAmmo)P.weaponAmmo={scratch:Infinity};
+  if(!P.weaponAmmo)P.weaponAmmo={pistol:Infinity};
   // Intrinsically unlimited weapons can never inherit or retain a finite pickup count.
   if(WEAPONS[wep].ammo===Infinity)P.weaponAmmo[wep]=Infinity;
   else if(ammo!==undefined)P.weaponAmmo[wep]=Math.max(P.weaponAmmo[wep]||0,ammo);
@@ -2281,26 +2447,31 @@ function fireWeapon(){
     swings.push({x:0,y:0,w:46,h:38,life:10,max:10,dmg:playerDmg(w.dmg),done:{},kind:P.weapon});
     SFX.swing();return;
   }
-  if(P.ammo<=0){equipWeapon('scratch');return;}
+  if(P.ammo<=0){equipWeapon('pistol');return;}
   P.cd=Math.max(2,Math.round(w.cd*B.cdMul));
   var count=w.n||1,i,m=muzzlePt(aim);
+  /* The twins alternate, so the shot leaves whichever hand is not still
+     recovering — a small offset across the aim line, which at this size is the
+     whole read of two guns rather than one. */
+  if(w.twin){P.twinSide=-(P.twinSide||1);m.x-=aim.y*4*P.twinSide;m.y+=aim.x*4*P.twinSide;}
   for(i=0;i<count;i++){
     var off=(count===1)?(w.spread?rnd(-w.spread,w.spread):0):((i-(count-1)/2)*w.spread);
     var ang=Math.atan2(aim.y,aim.x)+off;
     bullets.push({x:m.x,y:m.y,vx:Math.cos(ang)*w.spd,vy:Math.sin(ang)*w.spd,
-      dmg:playerDmg(w.dmg),life:w.life||70,col:w.col,r:w.r,fire:P.weapon==='flame',rocket:!!w.rocket});
+      dmg:playerDmg(w.dmg),life:w.life||70,col:w.col,r:w.r,rocket:!!w.rocket,
+      pierce:w.pierce||0,hits:w.pierce?[]:null});
   }
   if(P.ammo!==Infinity){P.ammo-=1;P.weaponAmmo[P.weapon]=P.ammo;}
   flashes.push({x:m.x,y:m.y,a:Math.atan2(aim.y,aim.x),life:6,max:6,
-    s:P.weapon==='spread'?1.5:P.weapon==='machinegun'?0.8:1});
+    s:P.weapon==='spread'?1.5:(P.weapon==='ak'||P.weapon==='minigun')?0.8:P.weapon==='sniper'?1.3:1});
   addLight(m.x,m.y,P.weapon==='spread'?150:100,'#ffcf7a',7);
   P.fireT=6;
-  if(P.weapon==='machinegun')SFX.mgun();
+  if(P.weapon==='ak'||P.weapon==='minigun')SFX.mgun();
   else if(P.weapon==='spread')SFX.spread();
-  else if(P.weapon==='flame'){if(tick%4===0)SFX.flame();}
   else if(P.weapon==='bazooka')SFX.boom();
+  else if(P.weapon==='sniper'){SFX.boom();tone(2200,0.05,'square',0.02,900);}
   else SFX.shoot();
-  P.vx-=aim.x*(P.weapon==='spread'?0.7:0.15);
+  P.vx-=aim.x*(P.weapon==='spread'?0.7:P.weapon==='sniper'?0.9:P.weapon==='minigun'?0.05:0.15);
 }
 /* Grenades charge smoothly rather than through three fixed steps. Let go
    straight away and the brother lobs one just past his feet; hold and the throw
@@ -2695,11 +2866,13 @@ function updatePlayer(){
   var w=WEAPONS[P.weapon];
   if(!rolling){
     /* Held auto-fire has no rising edge, so semi-autos would otherwise fire a
-       single shot per push; their own cooldown is what paces them here. The
-       bite stays on the rising edge only — rolling it into held fire made the
-       brother melee forever whenever an enemy was close, and tryBite turns him
-       to face his target, which would wrestle the aim stick for facing. */
-    var bit=pressed('fire')&&tryBite();
+       single shot per push; their own cooldown is what paces them here.
+       Claws are automatic and deliberately greedy: anything inside the bite
+       zone gets bitten while fire is held, in preference to shooting it. At
+       that range a gun is the wrong tool, and the bite hits harder than the
+       pistol does. It has its own cooldown, so holding fire in a crowd is a
+       stream of bites rather than one long one. */
+    var bit=inp.fire&&tryBite();
     if(!bit&&inp.fire&&(w.auto||mobileAutoFire||pressed('fire')))fireWeapon();
   }
   if(!P.nadeReady&&!rolling&&pressed('nade')&&P.nades>0){
@@ -3214,7 +3387,6 @@ function updateProjectiles(){
   var i,j,b,e,p;
   for(i=bullets.length-1;i>=0;i--){
     b=bullets[i];b.px=b.x;b.py=b.y;b.x+=b.vx;b.y+=b.vy;b.life--;
-    if(b.fire){b.vy+=0.06;b.r*=0.985;}
     var kill=(b.life<=0||b.x<cam.x-60||b.x>cam.x+view.w+60||b.y<cam.y-60||b.y>640);
     if(!kill&&level.buildings)for(var bi=0;bi<level.buildings.length;bi++){
       var wins=level.buildings[bi].windows;
@@ -3225,7 +3397,7 @@ function updateProjectiles(){
     if(!kill&&level.obstacles)for(var oi=0;oi<level.obstacles.length;oi++){
       var ob=level.obstacles[oi];
       if(!ob.dead&&!ob.decorative&&b.x>ob.x&&b.x<ob.x+ob.w&&b.y>ob.y&&b.y<ob.y+ob.h){
-        damageObstacle(ob,b.dmg);kill=!b.fire;break;
+        damageObstacle(ob,b.dmg);kill=true;break;
       }
     }
     if(!kill)for(j=0;j<level.plats.length;j++){
@@ -3241,11 +3413,21 @@ function updateProjectiles(){
     if(!kill)for(j=0;j<enemies.length;j++){
       e=enemies[j];
       if(e.hidden||(e.inB||null)!==(P.inB||null))continue;
-      if(!e.dead&&b.x>e.x&&b.x<e.x+e.w&&b.y>e.y&&b.y<e.y+e.h){
-        playerHitEnemy(e,b.dmg);if(b.rocket)explode(b.x,b.y,68,28,true);if(!b.fire)kill=true;break;}
+      if(e.dead||b.x<=e.x||b.x>=e.x+e.w||b.y<=e.y||b.y>=e.y+e.h)continue;
+      /* A rifle round passes through what it kills. The list is per bullet, so
+         one round cannot bill the same body twice as it crosses it. */
+      if(b.hits){
+        if(b.hits.indexOf(e)>=0)continue;
+        b.hits.push(e);
+      }
+      playerHitEnemy(e,b.dmg);
+      if(b.rocket)explode(b.x,b.y,68,28,true);
+      if(b.pierce>0){b.pierce--;burst(b.x,b.y,b.col||'#fff',4,2);continue;}
+      kill=true;break;
     }
     if(!kill&&boss&&boss.state!=='dead'&&b.x>boss.x+8&&b.x<boss.x+boss.w-6&&
-       b.y>boss.y-38&&b.y<boss.y+boss.h){playerHitBoss(b.dmg);if(!b.fire)kill=true;}
+       b.y>boss.y-38&&b.y<boss.y+boss.h){playerHitBoss(b.dmg);
+      if(b.pierce>0)b.pierce--;else kill=true;}
     if(kill)bullets.splice(i,1);
   }
   for(i=ebullets.length-1;i>=0;i--){
@@ -3319,9 +3501,26 @@ function updateProjectiles(){
         addLight(it.x+it.w/2,it.y+it.h/2,90,'#ffd76a',16);
       }
       else {
-        var pickupIsStronger=WEAPONS[it.wep].power>WEAPONS[P.weapon].power;
-        equipWeapon(it.wep,WEAPONS[it.wep].ammo,pickupIsStronger);SFX.pick();score+=100;
-        burst(it.x+13,it.y+13,WEAPONS[it.wep].col||'#fff',14,3);}
+        /* Guns are routed before they are handed over: a drop meant for the
+           brother who stayed home becomes the piece this one can use, and
+           Vinnie's second pistol becomes the pair. */
+        var got=resolvePickup(it.wep,P.bro,P.weapons),gw=WEAPONS[got];
+        if(it.kind==='ammo'){
+          /* A clip for a gun he has tops it up; a clip for one he does not is
+             worth the gun and a couple of rounds rather than nothing at all. */
+          var have=P.weapons.indexOf(got)>=0;
+          var give=gw.ammo===Infinity?Infinity:Math.max(1,Math.round(gw.ammo*(have?0.5:0.3)));
+          if(have){
+            P.weaponAmmo[got]=(P.weaponAmmo[got]===Infinity)?Infinity:(P.weaponAmmo[got]||0)+give;
+            if(P.weapon===got)P.ammo=P.weaponAmmo[got];
+          } else equipWeapon(got,give,false);
+          SFX.pick();score+=40;
+          burst(it.x+13,it.y+13,gw.col||'#fff',9,2.4);
+        } else {
+          equipWeapon(got,gw.ammo,gw.power>WEAPONS[P.weapon].power);SFX.pick();score+=100;
+          burst(it.x+13,it.y+13,gw.col||'#fff',14,3);
+        }
+      }
       addLight(it.x+13,it.y+13,110,'#ffe6a8',14);
       items.splice(i,1);
     }
@@ -3713,20 +3912,27 @@ function paintBuildings(){
       }
     }
     // door
-    var d=b.door, dTop=b.gy-58;
+    var d=b.door, dH=DOOR_H, dTop=b.gy-dH;
     if(isSewer){
-      g.fillStyle='#17231f';ell(g,d.x+d.w/2,dTop+30,34,34);g.fill();
+      var sr=Math.min(d.w*0.52,dH*0.42);
+      g.fillStyle='#17231f';ell(g,d.x+d.w/2,dTop+dH*0.46,sr,sr);g.fill();
       g.strokeStyle='#70877d';g.lineWidth=7;g.stroke();
       g.strokeStyle='rgba(220,240,225,.18)';g.lineWidth=2;g.stroke();
     }
-    g.fillStyle='#241a12';g.fillRect(d.x-6,dTop-6,d.w+12,64);
-    g.fillStyle='rgba(5,5,6,.92)';g.fillRect(d.x,dTop,d.w,58);
+    g.fillStyle='#241a12';g.fillRect(d.x-6,dTop-7,d.w+12,dH+7);
+    g.fillStyle='rgba(5,5,6,.92)';g.fillRect(d.x,dTop,d.w,dH);
     var doorW=d.w*(1-b.doorOpen*.84);
     g.fillStyle=lin(g,d.x,dTop,d.x+d.w,b.gy,[[0,'#6b4a2a'],[1,'#332314']]);
-    g.fillRect(d.x,dTop,doorW,58);
+    g.fillRect(d.x,dTop,doorW,dH);
     g.fillStyle='rgba(0,0,0,.35)';
-    if(doorW>12){g.fillRect(d.x+4,dTop+5,Math.max(2,doorW-8),20);g.fillRect(d.x+4,dTop+30,Math.max(2,doorW-8),20);
-      g.fillStyle='#c9a24a';ell(g,d.x+doorW-7,dTop+32,2.6,2.6);g.fill();}
+    if(doorW>12){
+      var pw=Math.max(2,doorW-10),ph=dH*0.30;
+      g.fillRect(d.x+5,dTop+dH*0.07,pw,ph);
+      g.fillRect(d.x+5,dTop+dH*0.45,pw,ph);
+      g.fillStyle='rgba(255,255,255,.05)';
+      g.fillRect(d.x+5,dTop+dH*0.07,pw,2);g.fillRect(d.x+5,dTop+dH*0.45,pw,2);
+      g.fillStyle='#c9a24a';ell(g,d.x+doorW-8,dTop+dH*0.55,3,3);g.fill();
+    }
     g.fillStyle='rgba(255,220,150,.16)';g.fillRect(d.x,dTop,doorW,2);
     g.globalAlpha=1;
     // hanging sign / sewer access marker
@@ -4236,32 +4442,109 @@ function drawWeaponArm(B,ang,wep,fireT){
   g.strokeStyle='rgba(8,6,8,.5)';g.lineWidth=0.9;g.beginPath();             // knuckles
   g.moveTo(19.4,-2.6);g.lineTo(20.2,-0.4);g.moveTo(19.6,0.6);g.lineTo(20.2,2.6);g.stroke();
   g.fillStyle='rgba(255,255,255,.10)';ell(g,16.5,-1.6,2.2,1.4);g.fill();
-  if(wep==='scratch'||wep==='knife'){
-    if(wep==='knife'){g.fillStyle='#6b4428';rr(g,16,-3,12,6,2);g.fill();g.fillStyle='#dce5e9';
-      g.beginPath();g.moveTo(27,-4);g.lineTo(49,0);g.lineTo(27,4);g.closePath();g.fill();ink(g,'rgba(0,0,0,.55)',1.2);}
-  } else if(wep==='machinegun'){
-    g.fillStyle=lin(g,16,-7,16,7,[[0,'#5a606b'],[1,'#1d2027']]);
-    rr(g,14,-5,34,10,2);g.fill();ink(g,'rgba(0,0,0,.65)',1.6);
-    g.fillStyle='#3a3f47';ell(g,30,8,7.5,7.5);g.fill();ink(g,'rgba(0,0,0,.6)',1.4);
-    g.fillStyle='#6b4a2a';rr(g,10,-3,10,9,2);g.fill();
+  /* Each gun is built the way a real one is: a receiver, then the barrel, then
+     whatever hangs off it — magazine, stock, drum, scope. It is the parts
+     sticking out that tell one from another at this size, not the body, so the
+     magazine on the AK is deep, the sawn-off is two fat tubes and nothing else,
+     the minigun is all barrel cluster, and the rifle is mostly scope. */
+  if(wep==='scratch'){
+    /* nothing in his hand — the claws are the weapon */
+  } else if(wep==='ak'){
+    g.fillStyle=lin(g,16,-6,16,6,[[0,'#5d646f'],[1,'#1b1e24']]);       // receiver
+    rr(g,13,-5,20,10,2);g.fill();ink(g,'rgba(0,0,0,.7)',1.6);
+    g.fillStyle='#2f343b';rr(g,32,-2.6,17,5.2,1.5);g.fill();           // barrel
+    ink(g,'rgba(0,0,0,.6)',1.2);
+    g.fillStyle='#3b424a';rr(g,44,-4.4,7,3,1);g.fill();                // gas block
+    g.fillStyle='#7b4a28';                                             // curved magazine
+    g.beginPath();g.moveTo(20,4);g.lineTo(29,4);g.quadraticCurveTo(31,15,26,17);
+    g.quadraticCurveTo(20,17,19,8);g.closePath();g.fill();ink(g,'rgba(0,0,0,.65)',1.4);
+    g.fillStyle='#8a5730';rr(g,4,-2,11,7,2);g.fill();ink(g,'rgba(0,0,0,.6)',1.3);  // stock
+    g.fillStyle='#6b4326';rr(g,29,2.5,7,6,1.5);g.fill();               // fore grip
+    g.fillStyle='rgba(255,255,255,.12)';rr(g,14,-4,18,2,1);g.fill();
+  } else if(wep==='minigun'){
+    g.fillStyle=lin(g,14,-9,14,9,[[0,'#565e6a'],[1,'#14171c']]);       // housing
+    rr(g,11,-8,20,16,4);g.fill();ink(g,'rgba(0,0,0,.72)',1.8);
+    var spin=Math.sin(tick*0.9)*2.4;                                   // the cluster turns
+    g.fillStyle='#3d444d';
+    for(var mb=0;mb<4;mb++){
+      var by=-5.2+mb*3.4+spin*(mb%2?1:-1)*0.25;
+      rr(g,29,by-1.3,26,2.7,1.2);g.fill();
+    }
+    ink(g,'rgba(0,0,0,.5)',1);
+    g.fillStyle='#20242a';rr(g,53,-6,4,12,1.5);g.fill();               // muzzle plate
+    g.fillStyle='#6f7883';ell(g,31,0,3.4,7.5);g.fill();ink(g,'rgba(0,0,0,.6)',1.3);
+    g.fillStyle='#2a2f36';                                             // ammo drum
+    ell(g,17,10,9,7);g.fill();ink(g,'rgba(0,0,0,.7)',1.6);
+    g.fillStyle='#c9a24a';ell(g,17,10,3.4,2.6);g.fill();
+    g.fillStyle='rgba(255,255,255,.14)';rr(g,12,-7,16,2.4,1.2);g.fill();
   } else if(wep==='spread'){
-    g.fillStyle=lin(g,16,-8,16,8,[[0,'#7a5230'],[1,'#3a2413']]);
-    rr(g,12,-6,22,12,3);g.fill();ink(g,'rgba(0,0,0,.6)',1.6);
-    g.fillStyle='#4a4f57';rr(g,32,-6,16,12,2);g.fill();ink(g,'rgba(0,0,0,.6)',1.4);
-  } else if(wep==='flame'){
-    g.fillStyle=lin(g,16,-6,16,6,[[0,'#5f6670'],[1,'#23262c']]);
-    rr(g,14,-5,28,10,3);g.fill();ink(g,'rgba(0,0,0,.6)',1.5);
-    g.fillStyle='#c9502a';rr(g,40,-6,8,12,2);g.fill();
+    /* Sawn off at both ends: two fat tubes, a stub of a grip and no barrel to
+       speak of. The whole silhouette is the width of the bores. */
+    g.fillStyle=lin(g,14,-7,14,7,[[0,'#6a707a'],[1,'#22262c']]);
+    rr(g,13,-6.5,32,6,2);g.fill();ink(g,'rgba(0,0,0,.65)',1.5);
+    rr(g,13,0.5,32,6,2);g.fill();ink(g,'rgba(0,0,0,.65)',1.5);
+    g.fillStyle='#12151a';ell(g,45,-3.5,2,3);g.fill();ell(g,45,3.5,2,3);g.fill();
+    g.fillStyle=lin(g,4,-6,4,8,[[0,'#a26536'],[1,'#5b3419']]);         // walnut furniture
+    g.beginPath();g.moveTo(14,-6);g.lineTo(14,7);g.quadraticCurveTo(2,11,-1,4);
+    g.quadraticCurveTo(1,-4,14,-6);g.closePath();g.fill();ink(g,'rgba(0,0,0,.65)',1.5);
+    g.fillStyle='#3a4048';rr(g,20,-1.2,9,2.4,1);g.fill();              // barrel band
+    g.fillStyle='rgba(255,255,255,.13)';rr(g,15,-6,26,1.8,0.9);g.fill();
   } else if(wep==='bazooka'){
-    g.fillStyle=lin(g,15,-8,15,8,[[0,'#65715f'],[1,'#222a24']]);rr(g,12,-7,48,14,5);g.fill();ink(g,'rgba(0,0,0,.7)',1.7);
-    g.fillStyle='#161a18';ell(g,61,0,6,9);g.fill();g.fillStyle='#8b5a32';rr(g,20,5,9,9,2);g.fill();
+    g.fillStyle=lin(g,15,-9,15,9,[[0,'#6b7663'],[1,'#1f2620']]);       // tube
+    rr(g,10,-8,52,16,6);g.fill();ink(g,'rgba(0,0,0,.72)',1.8);
+    g.fillStyle='#161a18';ell(g,62,0,5,9);g.fill();                    // muzzle bell
+    g.fillStyle='#2b332c';
+    g.beginPath();g.moveTo(58,-9);g.lineTo(66,-12);g.lineTo(66,12);g.lineTo(58,9);
+    g.closePath();g.fill();ink(g,'rgba(0,0,0,.6)',1.4);
+    g.fillStyle='#3d4a3d';rr(g,4,-6,8,12,2);g.fill();ink(g,'rgba(0,0,0,.6)',1.3);  // back plate
+    g.fillStyle='#8b5a32';rr(g,22,6,9,9,2);g.fill();ink(g,'rgba(0,0,0,.55)',1.2);  // grip
+    g.fillStyle='#26302a';rr(g,32,-13,15,5,1.5);g.fill();              // sight rail
+    g.strokeStyle='#c9a24a';g.lineWidth=1.4;
+    g.beginPath();g.moveTo(38,-13);g.lineTo(38,-17);g.stroke();
+    g.fillStyle='rgba(255,255,255,.10)';rr(g,14,-7,40,3,1.5);g.fill();
+  } else if(wep==='sniper'){
+    g.fillStyle=lin(g,16,-5,16,5,[[0,'#4a5158'],[1,'#15181c']]);       // long receiver
+    rr(g,10,-4,26,8,2);g.fill();ink(g,'rgba(0,0,0,.7)',1.5);
+    g.fillStyle='#23272c';rr(g,35,-2,26,4,1.4);g.fill();               // long barrel
+    ink(g,'rgba(0,0,0,.6)',1.1);
+    g.fillStyle='#31363c';rr(g,58,-3.2,6,6.4,1.4);g.fill();            // muzzle brake
+    g.fillStyle='#1b1f24';rr(g,20,-12,22,7,2.4);g.fill();              // scope
+    ink(g,'rgba(0,0,0,.7)',1.5);
+    g.fillStyle='#8fd0ff';ell(g,41,-8.5,1.8,2.6);g.fill();             // lit objective
+    g.fillStyle='#2a2f35';rr(g,24,-6,3,3,1);g.fill();rr(g,36,-6,3,3,1);g.fill();
+    g.fillStyle=lin(g,0,-4,0,8,[[0,'#6d5233'],[1,'#3a2a18']]);         // cheek-piece stock
+    g.beginPath();g.moveTo(11,-4);g.lineTo(11,4);g.lineTo(-2,9);
+    g.quadraticCurveTo(-6,3,-2,-3);g.closePath();g.fill();ink(g,'rgba(0,0,0,.6)',1.4);
+    g.strokeStyle='#2a2f35';g.lineWidth=1.6;                           // bipod, folded back
+    g.beginPath();g.moveTo(44,2);g.lineTo(38,10);g.moveTo(44,2);g.lineTo(48,10);g.stroke();
+  } else if(wep==='akimbo'){
+    /* Two of them, one behind the other — the far gun sits low and dark so the
+       pair reads as depth rather than as one wide gun. */
+    var tw;
+    for(tw=0;tw<2;tw++){
+      var oy=tw?0:5.5,dk=!tw;
+      g.fillStyle=dk?'#4c5158':lin(g,16,-5+oy,16,5+oy,[[0,'#c3c8cf'],[1,'#5d636b']]);
+      rr(g,13,-4+oy,17,7,2);g.fill();ink(g,'rgba(0,0,0,.65)',1.4);
+      g.fillStyle=dk?'#232a30':'#24282d';rr(g,29,-2.4+oy,8,4,1.2);g.fill();
+      g.fillStyle=dk?'#4a3524':'#7a5334';                              // grip
+      g.beginPath();g.moveTo(15,2+oy);g.lineTo(22,2+oy);g.lineTo(19,12+oy);
+      g.lineTo(12,12+oy);g.closePath();g.fill();ink(g,'rgba(0,0,0,.6)',1.3);
+      if(!dk){g.fillStyle='rgba(255,255,255,.20)';rr(g,15,-3.4,13,1.8,0.9);g.fill();}
+    }
   } else {
-    g.fillStyle=lin(g,16,-5,16,5,[[0,'#6a707a'],[1,'#20232a']]);
-    rr(g,15,-4,21,8,2);g.fill();ink(g,'rgba(0,0,0,.65)',1.5);
-    g.fillStyle='#4a3320';rr(g,13,0,9,9,2);g.fill();
+    g.fillStyle=lin(g,16,-5,16,5,[[0,'#c3c8cf'],[1,'#5a6068']]);       // .38 snub
+    rr(g,13,-4.6,19,8,2);g.fill();ink(g,'rgba(0,0,0,.65)',1.5);
+    g.fillStyle='#24282d';rr(g,31,-2.6,7,4.4,1.3);g.fill();
+    g.fillStyle='#3a4048';ell(g,19,1.5,4.2,4);g.fill();                // cylinder
+    ink(g,'rgba(0,0,0,.55)',1.1);
+    g.fillStyle=lin(g,10,0,10,12,[[0,'#8a5c38'],[1,'#4a3020']]);       // grip
+    g.beginPath();g.moveTo(14,3);g.lineTo(21,3);g.lineTo(18,13);
+    g.lineTo(10,13);g.closePath();g.fill();ink(g,'rgba(0,0,0,.6)',1.3);
+    g.fillStyle='rgba(255,255,255,.20)';rr(g,15,-4,13,2,1);g.fill();
   }
-  if(fireT>0&&wep!=='scratch'&&wep!=='knife'){
-    var mx=wep==='bazooka'?64:wep==='machinegun'||wep==='spread'?50:wep==='flame'?51:39;
+  if(fireT>0&&wep!=='scratch'){
+    var mx=wep==='bazooka'?66:wep==='sniper'?64:wep==='minigun'?57:
+           wep==='spread'?47:wep==='ak'?51:wep==='akimbo'?37:38;
     g.globalCompositeOperation='lighter';
     g.fillStyle='rgba(255,222,120,.95)';
     g.beginPath();g.moveTo(mx,0);g.lineTo(mx+16,-7);g.lineTo(mx+11,0);g.lineTo(mx+18,7);g.closePath();g.fill();
@@ -5170,27 +5453,54 @@ function drawWeaponIcon(c,x,y,wep,col,scale){
   if(wep==='scratch'){
     c.strokeStyle='#e8d6a8';c.lineWidth=3;c.beginPath();
     c.moveTo(-9,7);c.quadraticCurveTo(-2,-5,5,-9);c.moveTo(-3,9);c.quadraticCurveTo(4,-3,11,-7);c.stroke();
-  }else if(wep==='knife'){
-    c.rotate(-.48);c.fillStyle='#e8edf0';c.beginPath();c.moveTo(-11,-2);c.lineTo(5,-3);c.lineTo(11,0);c.lineTo(5,3);c.lineTo(-11,2);c.closePath();c.fill();c.stroke();
-    c.fillStyle='#70452b';rr(c,-13,-4,5,8,1.5);c.fill();c.stroke();
   }else if(wep==='pistol'){
-    c.fillStyle='#c7cbd0';rr(c,-10,-6,18,7,2);c.fill();c.stroke();c.fillStyle='#6b4a31';
-    c.beginPath();c.moveTo(2,0);c.lineTo(8,0);c.lineTo(5,10);c.lineTo(-1,10);c.closePath();c.fill();c.stroke();
-    c.fillStyle='#24282d';c.fillRect(8,-4,5,3);
-  }else if(wep==='machinegun'){
-    c.fillStyle='#3b4245';rr(c,-10,-5,17,7,2);c.fill();c.stroke();c.fillRect(6,-4,9,2.5);
-    c.fillStyle='#7b4b2b';c.beginPath();c.moveTo(-10,-3);c.lineTo(-15,-7);c.lineTo(-15,4);c.lineTo(-9,2);c.closePath();c.fill();c.stroke();
-    c.fillStyle='#25282b';ell(c,0,5,6,6);c.fill();c.stroke();
+    c.fillStyle='#c7cbd0';rr(c,-10,-6,18,7,2);c.fill();c.stroke();
+    c.fillStyle='#3a4048';ell(c,-3,-1,3.4,3.2);c.fill();c.stroke();
+    c.fillStyle='#7a5334';c.beginPath();c.moveTo(-6,0);c.lineTo(1,0);c.lineTo(-2,10);
+    c.lineTo(-9,10);c.closePath();c.fill();c.stroke();
+    c.fillStyle='#24282d';c.fillRect(8,-4,6,3);
+  }else if(wep==='akimbo'){
+    for(var t=0;t<2;t++){
+      var oy=t?-3:3,dk=!t;
+      c.fillStyle=dk?'#5a6068':'#c7cbd0';rr(c,-11,-3+oy,15,6,2);c.fill();c.stroke();
+      c.fillStyle=dk?'#24282d':'#3a4048';c.fillRect(4,-2+oy,7,3);
+      c.fillStyle=dk?'#4a3020':'#7a5334';
+      c.beginPath();c.moveTo(-8,2+oy);c.lineTo(-2,2+oy);c.lineTo(-4,9+oy);
+      c.lineTo(-10,9+oy);c.closePath();c.fill();c.stroke();
+    }
+  }else if(wep==='ak'){
+    c.fillStyle='#4a5158';rr(c,-9,-4,17,7,2);c.fill();c.stroke();
+    c.fillStyle='#2f343b';c.fillRect(7,-2.5,9,3.5);
+    c.fillStyle='#7b4a28';c.beginPath();c.moveTo(-3,3);c.lineTo(4,3);
+    c.quadraticCurveTo(6,11,1,12);c.quadraticCurveTo(-4,12,-4,6);c.closePath();c.fill();c.stroke();
+    c.fillStyle='#8a5730';c.beginPath();c.moveTo(-9,-3);c.lineTo(-16,-6);c.lineTo(-16,3);
+    c.lineTo(-8,2);c.closePath();c.fill();c.stroke();
+  }else if(wep==='minigun'){
+    c.fillStyle='#4a525c';rr(c,-10,-7,14,14,4);c.fill();c.stroke();
+    c.fillStyle='#33393f';
+    for(var mb=0;mb<4;mb++)rr(c,3,-5+mb*3,14,2.2,1);
+    c.fill();
+    c.fillStyle='#20242a';rr(c,16,-5,3,10,1);c.fill();c.stroke();
+    c.fillStyle='#2a2f36';ell(c,-8,8,6,4.6);c.fill();c.stroke();
+    c.fillStyle='#c9a24a';ell(c,-8,8,2,1.6);c.fill();
   }else if(wep==='spread'){
-    c.rotate(-.12);c.strokeStyle='#171a1c';c.lineWidth=4;c.beginPath();c.moveTo(-5,-2);c.lineTo(14,-2);c.moveTo(-5,2);c.lineTo(14,2);c.stroke();
-    c.strokeStyle='#8a512d';c.lineWidth=7;c.beginPath();c.moveTo(-14,5);c.lineTo(-3,0);c.stroke();
-  }else if(wep==='flame'){
-    c.fillStyle='#a44728';ell(c,-5,2,7,9);c.fill();c.stroke();c.fillStyle='#353b3e';rr(c,0,-5,10,6,2);c.fill();c.stroke();
-    c.strokeStyle='#555d60';c.lineWidth=3;c.beginPath();c.moveTo(8,-3);c.lineTo(14,-7);c.stroke();
-    c.fillStyle='#ff9a32';c.beginPath();c.moveTo(13,-9);c.lineTo(18,-7);c.lineTo(13,-4);c.closePath();c.fill();
+    c.rotate(-.1);
+    c.fillStyle='#6a707a';rr(c,-3,-5,18,4,1.6);c.fill();c.stroke();
+    rr(c,-3,0,18,4,1.6);c.fill();c.stroke();
+    c.fillStyle='#12151a';c.fillRect(15,-4,2,2.4);c.fillRect(15,1,2,2.4);
+    c.fillStyle='#8a512d';c.beginPath();c.moveTo(-3,-5);c.lineTo(-3,4);
+    c.quadraticCurveTo(-15,9,-17,2);c.quadraticCurveTo(-15,-5,-3,-5);c.closePath();c.fill();c.stroke();
+  }else if(wep==='sniper'){
+    c.fillStyle='#4a5158';rr(c,-8,-3,14,6,2);c.fill();c.stroke();
+    c.fillStyle='#23272c';c.fillRect(5,-1.6,13,3.2);
+    c.fillStyle='#1b1f24';rr(c,-4,-9,13,5,2);c.fill();c.stroke();
+    c.fillStyle='#8fd0ff';ell(c,8,-6.5,1.5,2);c.fill();
+    c.fillStyle='#6d5233';c.beginPath();c.moveTo(-8,-3);c.lineTo(-8,3);c.lineTo(-16,7);
+    c.quadraticCurveTo(-19,1,-16,-3);c.closePath();c.fill();c.stroke();
   }else if(wep==='bazooka'){
     c.rotate(-.08);c.fillStyle='#4f633b';rr(c,-13,-5,25,10,4);c.fill();c.stroke();
     c.fillStyle='#b86a32';c.beginPath();c.moveTo(10,-7);c.lineTo(16,-3);c.lineTo(16,3);c.lineTo(10,7);c.closePath();c.fill();c.stroke();
+    c.fillStyle='#26302a';rr(c,-4,-10,10,3,1);c.fill();
     c.strokeStyle='#252b22';c.lineWidth=3;c.beginPath();c.moveTo(-4,5);c.lineTo(-2,11);c.stroke();
   }
   c.restore();
@@ -5238,6 +5548,19 @@ function paintItems(){
       g.fillStyle='#2a3018';g.fillRect(x-4,y-11,8,5);
       g.fillStyle='#c9a05a';g.fillRect(x+2,y-13,9,3);
       g.fillStyle='rgba(255,255,255,.18)';ell(g,x-3,y-1,2.6,3.4);g.fill();
+    } else if(it.kind==='ammo'){
+      /* A clip, not a crate: shorter than a weapon box and stamped in the colour
+         of whatever it feeds, so you can tell across a room which gun it is for
+         without reading anything. */
+      var acol=(WEAPONS[it.wep]||WEAPONS.pistol).col||'#fff';
+      g.fillStyle=lin(g,x-12,y-9,x+12,y+9,[[0,'#3d4a3a'],[1,'#1a201a']]);
+      rr(g,x-12,y-9,24,18,3);g.fill();ink(g,'rgba(6,8,6,.85)',2);
+      g.fillStyle='rgba(255,255,255,.07)';rr(g,x-9.5,y-6.5,19,7,2);g.fill();
+      g.fillStyle=acol;
+      for(var ai=0;ai<3;ai++){rr(g,x-8+ai*5.6,y+0.5,3.6,6.5,1);g.fill();}
+      g.fillStyle='rgba(0,0,0,.45)';
+      for(ai=0;ai<3;ai++){rr(g,x-8+ai*5.6,y+0.5,3.6,1.8,0.8);g.fill();}
+      g.strokeStyle=hexA(acol,0.5);g.lineWidth=1.2;rr(g,x-12,y-9,24,18,3);g.stroke();
     } else {
       var col=WEAPONS[it.wep].col||'#fff';
       g.fillStyle=lin(g,x-14,y-13,x+14,y+13,[[0,'#4a4034'],[1,'#1d1a16']]);
@@ -5338,12 +5661,16 @@ function paintProjectiles(){
   }
   for(i=0;i<bullets.length;i++){
     var b=bullets[i];
-    if(b.fire){
+    if(b.hits){
+      /* A rifle round leaves a streak you can read across the screen — it is the
+         one shot in the game worth aiming rather than pointing. */
+      var ln0=Math.hypot(b.vx,b.vy)||1,tx=b.vx/ln0,ty=b.vy/ln0;
       g.globalCompositeOperation='lighter';
-      var a=Math.min(1,b.life/24);
-      g.fillStyle=rad(g,b.x,b.y,0,b.r*2.4,[[0,'rgba(255,230,150,'+a+')'],
-        [0.4,'rgba(255,120,40,'+(a*0.75)+')'],[1,'rgba(120,20,0,0)']]);
-      g.beginPath();g.arc(b.x,b.y,b.r*2.4,0,6.283);g.fill();
+      g.strokeStyle='rgba(190,225,255,.55)';g.lineWidth=b.r*1.5;g.lineCap='round';
+      g.beginPath();g.moveTo(b.x,b.y);g.lineTo(b.x-tx*30,b.y-ty*30);g.stroke();
+      g.strokeStyle='rgba(255,255,255,.9)';g.lineWidth=b.r*0.7;
+      g.beginPath();g.moveTo(b.x+tx*4,b.y+ty*4);g.lineTo(b.x-tx*16,b.y-ty*16);g.stroke();
+      g.lineCap='butt';
       g.globalCompositeOperation='source-over';
     } else {
       var ln=Math.hypot(b.vx,b.vy),ux=b.vx/ln,uy=b.vy/ln;
@@ -5977,8 +6304,8 @@ function drawTitle(){
     var faceA=sideA<0?-1:1,faceB=-faceA,swapLift=Math.sin(swapMix*Math.PI)*10;
     g.save();g.translate(w/2+sideA*heroGap+faceA*ha.slide,heroY-ha.jump-swapLift-20);
     g.rotate(faceA*ha.roll);g.translate(0,20);g.scale(heroScale,heroScale);
-    P.bro=0;P.weapon='machinegun';P.fireT=ha.fire;
-    drawBrother(0,0,faceA,0,{x:faceA,y:0},ha.walk,ha.duck,ha.jump>0||swapLift>0,1,'machinegun',ha.fire);
+    P.bro=0;P.weapon='ak';P.fireT=ha.fire;
+    drawBrother(0,0,faceA,0,{x:faceA,y:0},ha.walk,ha.duck,ha.jump>0||swapLift>0,1,'ak',ha.fire);
     g.restore();
     g.save();g.translate(w/2+sideB*heroGap+faceB*hb.slide,heroY-hb.jump-swapLift-20);
     g.rotate(faceB*hb.roll);g.translate(0,20);g.scale(heroScale,heroScale);
