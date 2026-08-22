@@ -972,7 +972,7 @@ function rollWeapon(rnd){
 }/* Combat tuning. Player output is lifted across the board; on top of that, a
    share of every direct hit lands in the head — an instant kill on rank-and-file
    enemies, and double damage on anything with a boss health bar (mini-bosses
-   and P.C.U.-9 are too armoured to drop from one, but they feel it). Splash
+   and the Catman are too solid to drop from one, but they feel it). Splash
    damage never rolls a headshot: a grenade does not aim. */
 var PLAYER_DMG_MUL=1.5, HEADSHOT_CHANCE=0.15, HEADSHOT_BOSS_MUL=2;
 function playerDmg(base){return base*BROS[P.bro].dmgMul*PLAYER_DMG_MUL;}
@@ -981,16 +981,16 @@ function rollHeadshot(){return Math.random()<HEADSHOT_CHANCE;}
    player can always walk out of the fight and come back on their own terms. */
 var MINI_LEASH=430;
 var MINI_BOSSES=[
- {type:'thug',name:'SILKFANG',title:'THE SEWER RONIN'},
- {type:'brute',name:'CATZILLA',title:'THE NINE-LIFE HEAVY'},
- {type:'gunner',name:'GENERAL LONGTAIL',title:'THE STREET TACTICIAN'},
- {type:'prowler',name:'MAJOR BOOMWING',title:'THE AIRBORNE MENACE'},
- {type:'thug',name:'RAZORWHISKER',title:'THE CARGO SAMURAI'},
- {type:'brute',name:'IRONCLAW',title:'THE WAREHOUSE WALL'},
- {type:'gunner',name:'THE PALE MARSHAL',title:'THE AVENUE COMMANDER'},
- {type:'prowler',name:'NIGHT SIREN',title:'THE VENT STALKER'},
- {type:'thug',name:'NEON BLADE',title:'THE HALLWAY DUELIST'},
- {type:'gunner',name:'COLONEL VERMIN',title:'THE LAST DOORKEEPER'}
+ {type:'thug',      name:'SILKFANG',        title:'THE SEWER RONIN'},
+ {type:'brute',     name:'CATZILLA',        title:'THE NINE-LIFE HEAVY'},
+ {type:'gunner',    name:'DUTCH WHISKERS',  title:'THE STREET TACTICIAN'},
+ {type:'prowler',   name:'MIDNIGHT MOLL',   title:'THE ROOFTOP STALKER'},
+ {type:'enforcer',  name:'RAZOR TABBY',     title:'THE CARGO SAMURAI'},
+ {type:'brute',     name:'IRONCLAW',        title:'THE WAREHOUSE WALL'},
+ {type:'terminator',name:'MISTER BOOM',     title:'THE AVENUE DEMOLITION'},
+ {type:'gunner',    name:'THE PALE MARSHAL',title:'THE AVENUE COMMANDER'},
+ {type:'enforcer',  name:'NEON CLAW',       title:'THE BACK-ROOM DUELIST'},
+ {type:'terminator',name:'COLONEL MITTENS', title:'THE LAST DOORKEEPER'}
 ];
 
 var STAGES=[
@@ -1008,13 +1008,13 @@ var STAGES=[
   gnd:'#333a33', gtop:'#5d7a44', lamp:'#c9ff9a', rain:0, motes:44, rays:1, prop:'junk'},
  {name:'CORPORATE AVENUE',sub:'follow the vans to their nest',sky:['#1c1706','#4a3d0c','#8a7420'], fog:'#d8c46a', sil:'#120e05', sil2:'#221c08',
   gnd:'#4b4322', gtop:'#a08f30', lamp:'#ffe98a', rain:0, motes:56, rays:1, prop:'city'},
- {name:'P.C.U. VENTILATION',sub:'the quiet way into the tower',sky:['#0a0f22','#1e2a55','#4a5c9a'], fog:'#8fa0d8', sil:'#070a16', sil2:'#101630',
+ {name:'CLUB AIR SHAFTS',sub:'the quiet way in off the roof',sky:['#0a0f22','#1e2a55','#4a5c9a'], fog:'#8fa0d8', sil:'#070a16', sil2:'#101630',
   gnd:'#2f3550', gtop:'#5d6aa0', lamp:'#ffcf7a', rain:0, motes:24, rays:0, prop:'pipe'},
- {name:'P.C.U. HALLWAYS', sub:'executive floor, exterminator rules',sky:['#0a0810','#221a2c','#3f3050'], fog:'#8a7aa8', sil:'#07050b', sil2:'#120e1a',
+ {name:'CLUB BACK ROOMS', sub:'members only, and you are not',sky:['#0a0810','#221a2c','#3f3050'], fog:'#8a7aa8', sil:'#07050b', sil2:'#120e1a',
   gnd:'#38323c', gtop:'#665a70', lamp:'#a8d8ff', rain:0, motes:50, rays:1, prop:'city'},
- {name:'DIRECTOR\u2019S OFFICE',sub:'one door between them and P.C.U.-9',sky:['#180408','#4a0c10','#8a1f1c'], fog:'#d85a44', sil:'#100305', sil2:'#1e070a',
+ {name:'THE COUNTING ROOM',sub:'one door between them and the Catman',sky:['#180408','#4a0c10','#8a1f1c'], fog:'#d85a44', sil:'#100305', sil2:'#1e070a',
   gnd:'#43282c', gtop:'#96403c', lamp:'#ff9a5a', rain:0, motes:38, rays:1, prop:'city'},
- {name:'EXTERMINATION CORE',sub:'PEST CONTROL UNIT 9 AWAITS',sky:['#0a0410','#380a2c','#6a1450'], fog:'#c95aa8', sil:'#08030c', sil2:'#170620',
+ {name:'THE CATMAN\u2019S FLOOR',sub:'HE HAS BEEN EXPECTING THEM',sky:['#0a0410','#380a2c','#6a1450'], fog:'#c95aa8', sil:'#08030c', sil2:'#170620',
   gnd:'#3a2438', gtop:'#7f3c6c', lamp:'#ff8ad8', rain:0, motes:60, rays:1, prop:'city'}
 ];
 var STAGE_FLOW=[
@@ -1027,8 +1027,8 @@ var STAGE_FLOW=[
  {inlet:'loading gate',exit:'officevent',route:'climb',label:'ENTER THE OFFICE VENT',loot:['employee pass','tower directory','ventilation plan']},
  {inlet:'vent grille',exit:'ventshaft',route:'climb',label:'CLIMB THE VENT SHAFT',loot:['air-system key','internal memo','floor schematic']},
  {inlet:'ceiling vent',exit:'hallway',route:'climb',label:'REACH THE DIRECTOR\u2019S FLOOR',loot:['executive keycard','guard roster','office code']},
- {inlet:'service hall',exit:'blastdoor',route:'climb',label:'BLOW THE BOSS DOOR',loot:['override charge','P.C.U.-9 dossier','director access card']},
- {inlet:'breached door',exit:'boss',route:'boss',label:'ELIMINATE P.C.U.-9',loot:['P.C.U.-9 core']}
+ {inlet:'service hall',exit:'blastdoor',route:'climb',label:'BLOW THE BOSS DOOR',loot:['door charge','the Catman\u2019s ledger','private-floor key']},
+ {inlet:'breached door',exit:'boss',route:'boss',label:'FINISH THE CATMAN',loot:['the Catman\u2019s ring']}
 ];
 
 /* ==================== SAVE ==================== */
@@ -1209,7 +1209,7 @@ function routeSpotClear(lv,rs){
   return true;
 }
 function configureObjective(lv,rng,n){
-  if(lv.boss){lv.objective={type:'boss',text:'ELIMINATE P.C.U.-9',taskDone:false,done:false,progress:0,total:1};return;}
+  if(lv.boss){lv.objective={type:'boss',text:'FINISH THE CATMAN',taskDone:false,done:false,progress:0,total:1};return;}
   var biomeLoot=lv.flow&&lv.flow.loot,thing=biomeLoot?biomeLoot[Math.floor(rng()*biomeLoot.length)]:campaign.things[(n-1)%campaign.things.length];
   var o=lv.objective={type:'recover',text:objectiveText(n,'recover',thing),taskDone:false,done:false,progress:0,total:1,thing:thing};
   /* The job sits on the way through, never down a branch. A stage has one path
@@ -1855,7 +1855,7 @@ function addRoofRun(lv,rng,x){
     addDeck(lv,'firestep',ex,ey,134,15,{tag:'descent'});
     ex+=46;
   }
-  /* And the reason to have gone up at all: a P.C.U. hoarding sealing the street
+  /* And the reason to have gone up at all: a mob hoarding sealing the street
      between the two flights, so the pavement stops being an option. Placed last,
      once both ends of the climb are known. */
   var b1=x+220,b2=ex-160,bx,sealed=false;
@@ -3059,7 +3059,7 @@ function updatePlayer(){
 }
 
 /* ==================== ENEMY UPDATE ==================== */
-/* Stomp: tougher enemies shrug more of it off. P.C.U.-9 cannot be stomped. */
+/* Stomp: tougher enemies shrug more of it off. The Catman cannot be stomped. */
 var STOMP={mouse:9999, bat:20, weasel:16, lizard:18, cat:13};
 function canStomp(e){
   if(P.bro!==0||P.dead||P.vy<=0.8)return false;             // Rocco's unique air strike
@@ -4284,7 +4284,7 @@ function paintObstacles(){
       g.fillStyle='rgba(20,15,12,.5)';g.fillRect(o.x+6,o.y+o.h*0.44,boxW-12,4);
       g.fillStyle='#b3342b';rr(g,o.x+boxW*0.2,o.y+o.h*0.18,boxW*0.55,o.h*0.2,3);g.fill();
       g.fillStyle='#f2dfad';g.font='bold '+Math.max(9,Math.round(o.h*0.13))+'px Impact,sans-serif';g.textAlign='center';
-      g.fillText('P.C.U.',o.x+boxW*0.475,o.y+o.h*0.335);g.textAlign='left';
+      g.fillText('C&C',o.x+boxW*0.475,o.y+o.h*0.335);g.textAlign='left';
       g.fillStyle=lin(g,o.x+boxW,o.y,o.x+boxW,tb,[[0,'#4f6274'],[1,'#1d2833']]);  // cab
       g.beginPath();
       g.moveTo(o.x+boxW+4,o.y+o.h*0.30);g.lineTo(o.x+boxW+cabW*0.55,o.y+o.h*0.30);
@@ -4399,7 +4399,7 @@ function paintObstacles(){
       g.fillStyle='rgba(96,132,110,.20)';                                        // tide line
       g.fillRect(o.x,o.y+o.h*0.72,o.w,o.h*0.28);
     } else if(o.type==='barricade'){
-      /* Two storeys of P.C.U. hoarding across the pavement. It is not scenery
+      /* Two storeys of mob hoarding across the pavement. It is not scenery
          and it is not cover: it is the reason the roofs exist. */
       g.fillStyle=lin(g,o.x,o.y,o.x+o.w,o.y,[[0,'#3a3f45'],[.4,'#565d65'],[1,'#20242a']]);
       g.fillRect(o.x,o.y,o.w,o.h);ink(g,'rgba(5,7,9,.9)',2.5);
@@ -4433,7 +4433,7 @@ function paintObstacles(){
       g.fillStyle='rgba(220,240,238,.13)';g.fillRect(o.x+3,o.y+2,o.w-6,3);
       g.fillStyle='#b3342b';rr(g,o.x+o.w*0.16,o.y+o.h*0.34,o.w*0.68,30,3);g.fill();ink(g,'rgba(8,6,6,.7)',1.5);
       g.fillStyle='#f2dfad';g.font='bold 19px Impact,sans-serif';g.textAlign='center';
-      g.fillText('P.C.U. FREIGHT',o.x+o.w/2,o.y+o.h*0.34+22);g.textAlign='left';
+      g.fillText('CATMAN HAULAGE',o.x+o.w/2,o.y+o.h*0.34+22);g.textAlign='left';
       g.fillStyle='#1b3438';                                                     // door furniture
       g.fillRect(o.x+o.w-22,o.y+16,6,o.h-32);g.fillRect(o.x+o.w-40,o.y+16,6,o.h-32);
     } else if(o.type==='lowbeam'){
@@ -4444,7 +4444,7 @@ function paintObstacles(){
       g.fillStyle='#30363b';g.fillRect(o.x,o.y,o.w,o.h);g.strokeStyle='#777f82';g.lineWidth=3;g.strokeRect(o.x,o.y,o.w,o.h);
       g.strokeStyle='#555d62';g.lineWidth=4;for(var gb=10;gb<o.h;gb+=18){g.beginPath();g.moveTo(o.x+2,o.y+gb);g.lineTo(o.x+o.w-2,o.y+gb);g.stroke();}
       g.fillStyle='#b3342b';rr(g,o.x-27,o.y+18,76,25,3);g.fill();ink(g,'rgba(8,6,6,.7)',1.5);
-      g.fillStyle='#f2dfad';g.font='bold 11px Impact,sans-serif';g.textAlign='center';g.fillText('P.C.U. LOCK',o.x+11,o.y+35);g.textAlign='left';
+      g.fillStyle='#f2dfad';g.font='bold 11px Impact,sans-serif';g.textAlign='center';g.fillText('C&C LOCK',o.x+11,o.y+35);g.textAlign='left';
     }
     g.restore();
   }
@@ -5426,239 +5426,461 @@ function drawBrotherPortrait(x,y,broIdx,scale,band,cardW){
   g.restore();
   g.restore();
 }
-function drawMouseThug(e){
-  var s=Math.sin(e.anim),x=e.x+e.w/2,y=e.y+e.h;
-  var sq=e.squash/10,elite=(e.miniBoss?1.28:1)*charScale;
-  g.save();g.translate(x,y);g.scale(e.facing*0.74*elite*(1+sq*0.32),0.74*elite*(1-sq*0.45));
-  if(e.flash>0)g.globalAlpha=0.75;
-  g.strokeStyle='#5e5a58';g.lineWidth=3.5;g.lineCap='round';
-  g.beginPath();g.moveTo(-6,-13);g.quadraticCurveTo(-24,-18+s*3,-28,-3);g.stroke();g.lineCap='butt';
-  g.strokeStyle='#1c1e22';g.lineWidth=7;g.lineCap='round';
-  g.beginPath();g.moveTo(-3,-12);g.lineTo(-4+s*5,-1);g.stroke();
-  g.beginPath();g.moveTo(3,-12);g.lineTo(4-s*5,-1);g.stroke();g.lineCap='butt';
-  g.fillStyle=lin(g,-10,-30,10,-10,[[0,'#6d6e74'],[1,'#33353b']]);
-  g.beginPath();g.moveTo(-9,-11);g.quadraticCurveTo(-12,-28,-1,-30);
-  g.quadraticCurveTo(10,-31,10,-12);g.closePath();g.fill();ink(g,'rgba(6,6,8,.75)',1.8);
-  g.fillStyle='#8a2f2a';g.fillRect(-9,-20,19,4);
-  g.fillStyle='#4d4f55';ell(g,-5,-36,6.5,7);g.fill();ink(g,'rgba(6,6,8,.7)',1.4);
-  g.fillStyle=lin(g,-8,-40,14,-26,[[0,'#9a9ba2'],[1,'#4e5057']]);
-  g.beginPath();g.moveTo(-9,-30);g.quadraticCurveTo(-9,-42,2,-42);
-  g.quadraticCurveTo(13,-41,17,-32);g.quadraticCurveTo(19,-28,12,-27);
-  g.quadraticCurveTo(0,-25,-9,-30);g.closePath();g.fill();ink(g,'rgba(6,6,8,.8)',1.8);
-  g.fillStyle='#241a1a';ell(g,17,-31,2.4,2);g.fill();
-  g.fillStyle='#ffe08a';ell(g,6,-35,3.2,2.8);g.fill();
-  g.fillStyle='#100c0c';ell(g,7,-35,1.3,1.7);g.fill();
-  g.fillStyle='#22262c';                      // flat cap
-  g.beginPath();g.moveTo(-9,-40);g.quadraticCurveTo(0,-49,10,-41);
-  g.lineTo(16,-39);g.lineTo(-8,-38);g.closePath();g.fill();ink(g,'rgba(6,6,8,.7)',1.5);
-  g.fillStyle='rgba(230,220,205,.20)';ell(g,-5,-36,2.8,3.6);g.fill();
-  g.strokeStyle='rgba(235,225,210,.34)';g.lineWidth=.8;g.beginPath();g.moveTo(15,-29);g.lineTo(28,-32);g.moveTo(15,-27);g.lineTo(28,-24);g.stroke();
-  g.fillStyle='#b99147';ell(g,0,-18,1.5,1.5);g.fill();ell(g,0,-13,1.5,1.5);g.fill();
-  var kn=Math.sin(e.anim*2)*3;
-  g.strokeStyle='#5e5a58';g.lineWidth=5;g.lineCap='round';
-  g.beginPath();g.moveTo(2,-24);g.lineTo(13,-20+kn);g.stroke();g.lineCap='butt';
-  if(e.miniBoss){g.fillStyle='#6f3828';rr(g,10,-23+kn,13,5,2);g.fill();g.fillStyle='#c9a24a';g.fillRect(20,-25+kn,3,9);}
-  g.fillStyle=lin(g,13,-24+kn,26,-16+kn,[[0,'#eef2f6'],[1,'#8e97a2']]);
-  g.beginPath();g.moveTo(e.miniBoss?22:13,-22+kn);g.lineTo(e.miniBoss?51:28,-19+kn);g.lineTo(e.miniBoss?22:13,-17+kn);g.closePath();g.fill();
-  ink(g,'rgba(6,6,8,.6)',1.2);
-  g.restore();
-}
-function drawBatBomber(e){
-  var x=e.x+e.w/2,y=e.y+e.h/2,f=Math.sin(e.anim*3);
-  var sq=e.squash/10;
-  var elite=(e.miniBoss?1.28:1)*charScale;
-  g.save();g.translate(x,y);g.scale(e.facing*0.95*elite*(1+sq*0.30),0.95*elite*(1-sq*0.42));
-  if(e.flash>0)g.globalAlpha=0.75;
-  g.fillStyle=lin(g,-30,-16,0,10,[[0,'#3a2450'],[1,'#6b4a92']]);
-  g.beginPath();g.moveTo(-4,-3);
-  g.quadraticCurveTo(-18,-16-f*8,-30,-10-f*10);
-  g.quadraticCurveTo(-22,-2,-24,6);g.quadraticCurveTo(-14,1,-6,5);g.closePath();g.fill();
-  ink(g,'rgba(8,4,12,.8)',1.6);
-  g.beginPath();g.moveTo(4,-3);
-  g.quadraticCurveTo(18,-16+f*8,30,-10+f*10);
-  g.quadraticCurveTo(22,-2,24,6);g.quadraticCurveTo(14,1,6,5);g.closePath();g.fill();
-  ink(g,'rgba(8,4,12,.8)',1.6);
-  g.fillStyle=lin(g,-8,-12,8,10,[[0,'#8e6cb8'],[1,'#452e60']]);
-  ell(g,0,-2,8,10);g.fill();ink(g,'rgba(8,4,12,.8)',1.8);
-  g.fillStyle='#2f1f45';
-  g.beginPath();g.moveTo(-7,-8);g.lineTo(-10,-19);g.lineTo(-1,-10);g.closePath();g.fill();
-  g.beginPath();g.moveTo(7,-8);g.lineTo(10,-19);g.lineTo(1,-10);g.closePath();g.fill();
-  g.fillStyle='#ffd23a';ell(g,-3.4,-5,2.4,2);g.fill();ell(g,3.4,-5,2.4,2);g.fill();
-  g.fillStyle='#0f0a12';ell(g,-3.2,-5,1,1.4);g.fill();ell(g,3.6,-5,1,1.4);g.fill();
-  g.fillStyle='#f2f2f2';
-  g.beginPath();g.moveTo(-2.6,1);g.lineTo(-1.4,4);g.lineTo(-0.4,1);g.closePath();g.fill();
-  g.beginPath();g.moveTo(2.6,1);g.lineTo(1.4,4);g.lineTo(0.4,1);g.closePath();g.fill();
-  g.fillStyle=lin(g,-5,7,5,15,[[0,'#5a6b3a'],[1,'#2c3520']]);
-  ell(g,0,11,5.5,6);g.fill();ink(g,'rgba(8,8,6,.7)',1.4);
-  g.fillStyle='#8a7a3a';g.fillRect(-1.5,5,3,3);
-  g.strokeStyle='rgba(205,185,145,.45)';g.lineWidth=1.4;          // wing ribs + bomb harness
-  g.beginPath();g.moveTo(-5,-2);g.lineTo(-23,-9-f*7);g.moveTo(-5,1);g.lineTo(-20,3);g.moveTo(5,-2);g.lineTo(23,-9+f*7);g.moveTo(5,1);g.lineTo(20,3);g.stroke();
-  g.strokeStyle='#6e5434';g.lineWidth=2;g.beginPath();g.moveTo(-6,3);g.lineTo(5,14);g.moveTo(6,3);g.lineTo(-5,14);g.stroke();
-  g.restore();
-}
-function drawWeasel(e){
-  var x=e.x+e.w/2,y=e.y+e.h,sn=Math.sin(e.anim*0.8),sq=e.squash/10;
-  var elite=(e.miniBoss?1.28:1)*charScale;
-  g.save();g.translate(x,y);g.scale(e.facing*0.78*elite*(1+sq*0.3),0.78*elite*(1-sq*0.42));
-  if(e.flash>0)g.globalAlpha=0.75;
-  if(!e.perch){
-    g.strokeStyle='#a87a44';g.lineWidth=4;g.lineCap='round';
-    g.beginPath();g.moveTo(-7,-16);g.quadraticCurveTo(-26,-22+sn*5,-30,-4);g.stroke();g.lineCap='butt';
-    g.strokeStyle='#2b2f28';g.lineWidth=7;g.lineCap='round';
-    g.beginPath();g.moveTo(-3,-15);g.lineTo(-4+sn*4,-2);g.stroke();
-    g.beginPath();g.moveTo(4,-15);g.lineTo(5-sn*4,-2);g.stroke();g.lineCap='butt';
-    g.fillStyle='#171a16';rr(g,-9,-4,12,5,2);g.fill();rr(g,1,-4,12,5,2);g.fill();
+/* ==================== THE CATMAN'S PEOPLE ====================
+   One cat, built to order. Every one of them is the same animal — pointed ears,
+   short muzzle, heavy tail, eyes that catch the light — at a different size,
+   dressed for a different job, holding a different thing. That last part is
+   what actually reads in a fight: at this scale you have about a second to tell
+   a rocket from a pistol, and the silhouette of what it is carrying is the only
+   cue fast enough. Build and dress are what tell them apart when they are
+   standing still.
+
+   Local space is the same as everything else that draws a body here: the feet
+   sit on y=0, up is negative, and the caller has already turned it to face the
+   right way. Proportions are fractions of H so a doorman and an alley cat are
+   the same drawing at different heights rather than two drawings. */
+function catFigure(e,k){
+  var H=k.H,W=k.W,i;
+  var sw=Math.sin(e.anim),bob=e.onGround?Math.abs(Math.cos(e.anim))*H*0.012:0;
+  var stride=(e.onGround&&Math.abs(e.vx)>0.15)?sw*H*0.10:0;
+  var hipY=-H*0.46+bob, chestY=-H*0.70+bob, headY=-H*0.865+bob;
+  var hr=H*0.155;                                  // head radius
+  var fur=k.fur,furD=k.furD,furL=k.furL;
+
+  // ---- tail: heavy at the root, curling away behind
+  g.strokeStyle=furD;g.lineWidth=H*0.055;g.lineCap='round';
+  g.beginPath();g.moveTo(-W*0.80,hipY+H*0.06);
+  g.quadraticCurveTo(-W*2.4,hipY-H*0.06+sw*H*0.05,-W*2.7,hipY+H*0.28+sw*H*0.03);
+  g.stroke();
+  g.strokeStyle=fur;g.lineWidth=H*0.030;g.stroke();
+  g.lineCap='butt';
+
+  // ---- legs, the far one a shade back
+  for(i=0;i<2;i++){
+    /* Set wide enough apart to read as two. At this size a stance narrower
+       than the leg is thick just makes one dark column with a foot on it. */
+    var far=i===0,lx=far?-W*0.58:W*0.52,off=far?-stride:stride;
+    g.strokeStyle=far?k.pantD:k.pant;g.lineWidth=H*(k.heavy?0.098:0.072);
+    g.lineCap='round';
+    g.beginPath();g.moveTo(lx,hipY);g.lineTo(lx+off*0.5,hipY+H*0.26);
+    g.lineTo(lx+off,hipY+H*0.44);g.stroke();g.lineCap='butt';
+    g.fillStyle=far?'#15181c':'#22262c';
+    rr(g,lx+off-W*0.40,-H*0.052,W*0.92,H*0.052,H*0.016);g.fill();
+    ink(g,'rgba(6,6,8,.7)',1.3);
   }
-  g.fillStyle=lin(g,-9,-40,10,-12,[[0,'#d4a464'],[1,'#8a6636']]);
-  g.beginPath();g.moveTo(-8,-14);g.quadraticCurveTo(-11,-38,-1,-41);
-  g.quadraticCurveTo(9,-43,10,-30);g.quadraticCurveTo(11,-18,8,-14);g.closePath();g.fill();
-  ink(g,'rgba(6,6,8,.78)',1.7);
-  g.fillStyle='#e6d2a8';
-  g.beginPath();g.moveTo(2,-16);g.quadraticCurveTo(9,-26,7,-38);
-  g.quadraticCurveTo(2,-32,1,-16);g.closePath();g.fill();
-  g.fillStyle='#3c4a3a';rr(g,-9,-38,11,22,3);g.fill();ink(g,'rgba(6,6,8,.6)',1.3);
-  g.fillStyle='#c9a24a';ell(g,-4,-30,1.3,1.3);g.fill();ell(g,-4,-24,1.3,1.3);g.fill();
-  g.fillStyle=lin(g,-6,-56,16,-40,[[0,'#dcb070'],[1,'#9a7440']]);
-  g.beginPath();g.moveTo(-7,-42);g.quadraticCurveTo(-9,-56,3,-57);
-  g.quadraticCurveTo(14,-58,19,-49);g.quadraticCurveTo(24,-45,17,-43);
-  g.quadraticCurveTo(4,-39,-7,-42);g.closePath();g.fill();ink(g,'rgba(6,6,8,.8)',1.7);
-  g.fillStyle='#a87a44';ell(g,-4,-56,4.6,4.4);g.fill();ell(g,4,-57,4.2,4);g.fill();
-  g.fillStyle='#d9a2a0';ell(g,-4,-56,2.4,2.2);g.fill();ell(g,4,-57,2,1.9);g.fill();
-  g.fillStyle='#2a1c18';ell(g,20,-46,2.2,1.9);g.fill();
-  g.fillStyle='#f2ead6';ell(g,9,-50,3.4,3);g.fill();
-  g.fillStyle='#131010';ell(g,10.2,-50,1.4,1.8);g.fill();
-  g.strokeStyle='rgba(12,9,8,.8)';g.lineWidth=1.8;
-  g.beginPath();g.moveTo(5,-54);g.lineTo(13,-52);g.stroke();
-  g.fillStyle='#2c2f26';
-  g.beginPath();g.moveTo(-8,-55);g.quadraticCurveTo(2,-65,12,-55);
-  g.lineTo(19,-53);g.lineTo(-7,-52);g.closePath();g.fill();ink(g,'rgba(6,6,8,.7)',1.4);
-  g.strokeStyle='rgba(255,235,195,.30)';g.lineWidth=1;g.beginPath();g.moveTo(17,-45);g.lineTo(30,-48);g.moveTo(17,-43);g.lineTo(30,-40);g.stroke();
-  g.fillStyle='#70452c';rr(g,-10,-24,7,10,1.5);g.fill();          // belt pouch
-  g.strokeStyle='#c9a24a';g.lineWidth=1;g.strokeRect(-9,-23,5,8);
-  var pa=clamp(Math.atan2((P.y+P.h/2)-(e.y+12),Math.max(30,Math.abs(P.x+P.w/2-(e.x+e.w/2)))),-0.7,0.7);
-  g.save();g.translate(2,-32);g.rotate(pa);
-  g.strokeStyle='#c09050';g.lineWidth=5;g.lineCap='round';
-  g.beginPath();g.moveTo(0,0);g.lineTo(12,0);g.stroke();g.lineCap='butt';
-  g.fillStyle='#22262c';rr(g,11,-3,13,6,1.5);g.fill();ink(g,'rgba(6,6,8,.7)',1.2);
-  g.fillStyle='#3c4048';rr(g,11,1,5,7,1.5);g.fill();
+
+  // ---- far arm, hanging
+  g.strokeStyle=k.sleeveD||furD;g.lineWidth=H*(k.heavy?0.075:0.055);g.lineCap='round';
+  g.beginPath();g.moveTo(-W*0.55,chestY+H*0.05);
+  g.lineTo(-W*0.75-stride*0.4,chestY+H*0.28);g.stroke();g.lineCap='butt';
+
+  // ---- torso
+  g.fillStyle=lin(g,-W,chestY,W,hipY+H*0.05,[[0,k.coatL],[1,k.coatD]]);
+  g.beginPath();
+  g.moveTo(-W,chestY+H*0.02);
+  g.quadraticCurveTo(-W*1.12,chestY+H*0.16,-W*0.72,hipY+H*0.04);
+  g.lineTo(W*0.72,hipY+H*0.04);
+  g.quadraticCurveTo(W*1.12,chestY+H*0.16,W,chestY+H*0.02);
+  g.quadraticCurveTo(0,chestY-H*0.05,-W,chestY+H*0.02);
+  g.closePath();g.fill();ink(g,'rgba(6,6,8,.78)',1.9);
+  if(k.stripe){                                    // pinstripes, for the suits
+    g.strokeStyle='rgba(230,235,245,.16)';g.lineWidth=1;
+    g.beginPath();
+    for(i=-2;i<=2;i++){g.moveTo(i*W*0.32,chestY+H*0.03);g.lineTo(i*W*0.32,hipY+H*0.02);}
+    g.stroke();
+  }
+  if(k.shirt){                                     // collar and tie
+    g.fillStyle=k.shirt;
+    g.beginPath();g.moveTo(-W*0.22,chestY);g.lineTo(W*0.22,chestY);
+    g.lineTo(0,chestY+H*0.16);g.closePath();g.fill();
+    g.fillStyle=k.tie||'#8a2f2a';
+    g.beginPath();g.moveTo(-W*0.07,chestY+H*0.05);g.lineTo(W*0.07,chestY+H*0.05);
+    g.lineTo(W*0.05,hipY-H*0.02);g.lineTo(-W*0.05,hipY-H*0.02);g.closePath();g.fill();
+  }
+  if(k.plate){                                     // strapped-on armour
+    g.fillStyle='#4b535d';rr(g,-W*0.82,chestY+H*0.05,W*1.64,H*0.17,H*0.02);g.fill();
+    ink(g,'rgba(6,6,8,.75)',1.6);
+    g.fillStyle='rgba(255,255,255,.10)';rr(g,-W*0.74,chestY+H*0.07,W*1.48,H*0.035,H*0.012);g.fill();
+    g.fillStyle='#c9a24a';
+    for(i=-1;i<=1;i++){ell(g,i*W*0.5,chestY+H*0.20,W*0.06,W*0.06);g.fill();}
+  }
+  if(k.belt){
+    g.fillStyle='#3a2c1c';rr(g,-W*0.78,hipY-H*0.05,W*1.56,H*0.05,H*0.012);g.fill();
+    g.fillStyle=k.beltStud||'#c9a24a';
+    for(i=-1;i<=2;i++){rr(g,i*W*0.36-W*0.05,hipY-H*0.045,W*0.10,H*0.04,1);g.fill();}
+  }
+
+  // ---- head: the shape that says cat before anything else does
+  g.save();g.translate(W*0.10,headY);
+  // ears, set wide and pricked
+  g.fillStyle=furD;
+  g.beginPath();g.moveTo(-hr*0.92,-hr*0.30);g.lineTo(-hr*1.20,-hr*1.42);
+  g.lineTo(-hr*0.16,-hr*0.86);g.closePath();g.fill();ink(g,'rgba(6,6,8,.72)',1.4);
+  g.fillStyle=fur;
+  g.beginPath();g.moveTo(hr*0.30,-hr*0.92);g.lineTo(hr*0.62,-hr*1.66);
+  g.lineTo(hr*1.02,-hr*0.52);g.closePath();g.fill();ink(g,'rgba(6,6,8,.72)',1.4);
+  g.fillStyle=k.inner||'#c98a86';
+  g.beginPath();g.moveTo(hr*0.44,-hr*0.86);g.lineTo(hr*0.62,-hr*1.34);
+  g.lineTo(hr*0.84,-hr*0.66);g.closePath();g.fill();
+  // skull, wide at the cheeks and short in the muzzle
+  g.fillStyle=lin(g,-hr,-hr,hr,hr,[[0,furL],[0.6,fur],[1,furD]]);
+  g.beginPath();
+  g.moveTo(-hr*0.95,-hr*0.10);
+  g.quadraticCurveTo(-hr*0.90,-hr*1.00,0,-hr*0.98);
+  g.quadraticCurveTo(hr*0.92,-hr*0.95,hr*1.02,-hr*0.10);
+  g.quadraticCurveTo(hr*1.10,hr*0.70,hr*0.30,hr*0.86);
+  g.quadraticCurveTo(-hr*0.70,hr*0.94,-hr*0.95,-hr*0.10);
+  g.closePath();g.fill();ink(g,'rgba(6,6,8,.8)',1.9);
+  // cheek ruffs
+  g.fillStyle=furL;
+  g.beginPath();g.moveTo(hr*0.10,hr*0.30);g.quadraticCurveTo(hr*1.16,hr*0.34,hr*0.72,hr*0.86);
+  g.quadraticCurveTo(hr*0.10,hr*0.90,hr*0.10,hr*0.30);g.closePath();g.fill();
+  // eyes: slit pupils, and the reason you can see it in the dark
+  g.fillStyle=k.eye||'#8fe36a';
+  ell(g,hr*0.62,-hr*0.16,hr*0.27,hr*0.23);g.fill();
+  ell(g,-hr*0.16,-hr*0.18,hr*0.24,hr*0.21);g.fill();
+  g.fillStyle='#0d1208';
+  ell(g,hr*0.66,-hr*0.16,hr*0.075,hr*0.20);g.fill();
+  ell(g,-hr*0.13,-hr*0.18,hr*0.070,hr*0.18);g.fill();
+  g.strokeStyle='rgba(8,8,10,.75)';g.lineWidth=hr*0.09;g.lineCap='round';
+  g.beginPath();
+  g.moveTo(hr*0.30,-hr*0.50);g.lineTo(hr*0.92,-hr*0.38);
+  g.moveTo(-hr*0.46,-hr*0.44);g.lineTo(hr*0.06,-hr*0.52);g.stroke();g.lineCap='butt';
+  // muzzle and nose
+  g.fillStyle=furL;
+  ell(g,hr*0.52,hr*0.46,hr*0.44,hr*0.28);g.fill();
+  g.fillStyle=k.nose||'#3a2a26';
+  g.beginPath();g.moveTo(hr*0.70,hr*0.26);g.lineTo(hr*1.00,hr*0.30);
+  g.lineTo(hr*0.85,hr*0.48);g.closePath();g.fill();
+  g.strokeStyle='rgba(255,255,255,.34)';g.lineWidth=1;
+  g.beginPath();
+  g.moveTo(hr*0.80,hr*0.44);g.lineTo(hr*1.85,hr*0.20);
+  g.moveTo(hr*0.80,hr*0.56);g.lineTo(hr*1.85,hr*0.66);g.stroke();
+  if(k.fangs){
+    g.fillStyle='#f2ede0';
+    g.beginPath();g.moveTo(hr*0.42,hr*0.58);g.lineTo(hr*0.58,hr*0.58);
+    g.lineTo(hr*0.50,hr*0.92);g.closePath();g.fill();
+  }
+  if(k.hat==='fedora'){
+    g.fillStyle=k.hatCol||'#2a2f38';
+    g.beginPath();g.ellipse(hr*0.10,-hr*0.90,hr*1.45,hr*0.24,0,0,6.283);g.fill();
+    ink(g,'rgba(6,6,8,.75)',1.5);
+    g.beginPath();g.moveTo(-hr*0.62,-hr*0.92);g.quadraticCurveTo(-hr*0.44,-hr*1.86,hr*0.30,-hr*1.80);
+    g.quadraticCurveTo(hr*0.90,-hr*1.70,hr*0.82,-hr*0.92);g.closePath();g.fill();
+    ink(g,'rgba(6,6,8,.75)',1.5);
+    g.fillStyle='rgba(0,0,0,.42)';rr(g,-hr*0.60,-hr*1.16,hr*1.44,hr*0.22,2);g.fill();
+  } else if(k.hat==='flatcap'){
+    g.fillStyle=k.hatCol||'#3a3f34';
+    g.beginPath();g.moveTo(-hr*0.86,-hr*0.86);g.quadraticCurveTo(0,-hr*1.66,hr*0.86,-hr*0.90);
+    g.lineTo(hr*1.42,-hr*0.78);g.lineTo(-hr*0.80,-hr*0.72);g.closePath();g.fill();
+    ink(g,'rgba(6,6,8,.72)',1.5);
+  } else if(k.hat==='helmet'){
+    g.fillStyle=k.hatCol||'#4a525c';
+    g.beginPath();g.arc(hr*0.06,-hr*0.42,hr*1.06,Math.PI*1.02,Math.PI*2.02);
+    g.lineTo(hr*1.20,-hr*0.30);g.lineTo(-hr*1.04,-hr*0.34);g.closePath();g.fill();
+    ink(g,'rgba(6,6,8,.8)',1.8);
+    g.fillStyle='rgba(255,255,255,.12)';rr(g,-hr*0.70,-hr*1.20,hr*1.40,hr*0.20,2);g.fill();
+    g.fillStyle='#d84a3a';                                  // targeting eye
+    ell(g,hr*0.88,-hr*0.20,hr*0.16,hr*0.12);g.fill();
+    addLight&&0;
+  }
   g.restore();
+
+  // ---- near arm, and the thing it is holding
+  g.save();
+  g.translate(W*0.72,chestY+H*0.12);
+  g.rotate(k.aim||0);
+  var aw=H*(k.heavy?0.082:0.058);
+  /* Outlined, because the sleeve is usually the same family of colour as the
+     coat behind it and without a line the arm disappears into the body. */
+  g.strokeStyle='rgba(6,6,8,.62)';g.lineWidth=aw+2.2;g.lineCap='round';
+  g.beginPath();g.moveTo(-W*0.10,0);g.lineTo(H*0.20,H*0.02);g.stroke();
+  g.strokeStyle=k.sleeve||fur;g.lineWidth=aw;
+  g.beginPath();g.moveTo(-W*0.10,0);g.lineTo(H*0.20,H*0.02);g.stroke();g.lineCap='butt';
+  g.fillStyle=k.glove||furD;ell(g,H*0.225,H*0.02,aw*0.56,aw*0.52);g.fill();
+  ink(g,'rgba(6,6,8,.65)',1.3);
+  catWeapon(e,k,H);
   g.restore();
 }
-function drawLizard(e){
-  var x=e.x+e.w/2,y=e.y+e.h,s=Math.sin(e.anim);
-  g.save();g.translate(x,y);g.scale(e.facing*.78*charScale,.78*charScale);if(e.flash>0)g.globalAlpha=.72;
-  g.strokeStyle='#477447';g.lineWidth=4;g.beginPath();g.moveTo(-7,-14);g.quadraticCurveTo(-29,-17+s*4,-32,-3);g.stroke();
-  g.fillStyle='#1b2420';rr(g,-10,-5,9,5,2);g.fill();rr(g,2,-5,9,5,2);g.fill();
-  g.fillStyle=lin(g,-10,-42,10,-10,[[0,'#70a85c'],[1,'#315c38']]);rr(g,-10,-40,20,29,7);g.fill();ink(g,'rgba(4,8,5,.8)',1.7);
-  g.fillStyle='#263b32';rr(g,-11,-31,22,8,2);g.fill();
-  g.fillStyle='#78b866';g.beginPath();g.moveTo(-8,-41);g.lineTo(-5,-58);g.lineTo(8,-61);g.lineTo(20,-52);g.lineTo(16,-44);g.closePath();g.fill();ink(g,'rgba(4,8,5,.8)',1.8);
-  g.fillStyle='#d5ef55';ell(g,9,-52,3,2.4);g.fill();g.fillStyle='#111';ell(g,10,-52,1,2.2);g.fill();
-  g.beginPath();g.moveTo(-4,-57);g.lineTo(-1,-66);g.lineTo(3,-59);g.lineTo(7,-68);g.lineTo(10,-59);g.fillStyle='#4d8548';g.fill();
-  g.save();g.translate(3,-31);g.rotate(clamp(Math.atan2(P.y-e.y,Math.max(25,Math.abs(P.x-e.x))),-.65,.65));
-  g.strokeStyle='#60865a';g.lineWidth=5;g.beginPath();g.moveTo(0,0);g.lineTo(13,0);g.stroke();
-  g.fillStyle='#222a27';rr(g,11,-5,34,10,3);g.fill();g.fillStyle='#56615c';g.fillRect(37,-3,15,5);g.fillStyle='#8b5a32';rr(g,18,3,8,8,2);g.fill();g.restore();g.restore();
+/* What each of them brought to work. Drawn from the paw outward, so a role can
+   be given a different weapon without touching the body it hangs off. */
+function catWeapon(e,k,H){
+  var wx=H*0.26,wy=H*0.02;
+  if(k.arm==='claws'){
+    g.strokeStyle='#e8e2d2';g.lineWidth=Math.max(1.4,H*0.016);g.lineCap='round';
+    g.beginPath();
+    g.moveTo(wx,wy-H*0.03);g.lineTo(wx+H*0.10,wy-H*0.07);
+    g.moveTo(wx,wy);g.lineTo(wx+H*0.12,wy-H*0.01);
+    g.moveTo(wx,wy+H*0.03);g.lineTo(wx+H*0.10,wy+H*0.05);
+    g.stroke();g.lineCap='butt';
+  } else if(k.arm==='pistol'){
+    g.fillStyle='#c3c8cf';rr(g,wx,wy-H*0.022,H*0.13,H*0.040,H*0.010);g.fill();
+    ink(g,'rgba(6,6,8,.7)',1.3);
+    g.fillStyle='#24282d';rr(g,wx+H*0.12,wy-H*0.012,H*0.05,H*0.022,1);g.fill();
+    g.fillStyle='#6b4a31';
+    g.beginPath();g.moveTo(wx+H*0.01,wy+H*0.016);g.lineTo(wx+H*0.06,wy+H*0.016);
+    g.lineTo(wx+H*0.045,wy+H*0.075);g.lineTo(wx-H*0.005,wy+H*0.075);g.closePath();g.fill();
+  } else if(k.arm==='shotgun'){
+    g.fillStyle='#6a707a';rr(g,wx-H*0.04,wy-H*0.028,H*0.26,H*0.026,H*0.008);g.fill();
+    ink(g,'rgba(6,6,8,.7)',1.3);
+    g.fillStyle='#8a512d';rr(g,wx-H*0.10,wy-H*0.010,H*0.10,H*0.045,H*0.010);g.fill();
+    ink(g,'rgba(6,6,8,.6)',1.2);
+    g.fillStyle='#12151a';rr(g,wx+H*0.20,wy-H*0.026,H*0.02,H*0.024,1);g.fill();
+  } else if(k.arm==='bottle'){
+    g.fillStyle='rgba(120,200,150,.85)';
+    g.beginPath();g.moveTo(wx,wy-H*0.030);g.lineTo(wx+H*0.075,wy-H*0.030);
+    g.lineTo(wx+H*0.075,wy+H*0.030);g.lineTo(wx,wy+H*0.030);g.closePath();g.fill();
+    g.fillStyle='rgba(150,220,180,.8)';rr(g,wx+H*0.073,wy-H*0.014,H*0.05,H*0.028,2);g.fill();
+    ink(g,'rgba(6,6,8,.5)',1.1);
+    g.fillStyle='#d8b06a';rr(g,wx+H*0.118,wy-H*0.020,H*0.022,H*0.040,1);g.fill();
+    if(e.timer<26){                                   // lit, and about to leave
+      g.fillStyle='rgba(255,170,60,.9)';
+      ell(g,wx+H*0.14,wy-H*0.03,H*0.022,H*0.030);g.fill();
+    }
+  } else if(k.arm==='bazooka'){
+    var hot=e.rocketeer&&e.engaged&&e.timer<48&&e.shots>0;
+    g.fillStyle=lin(g,wx,wy-H*0.06,wx,wy+H*0.06,[[0,'#6b7663'],[1,'#1f2620']]);
+    rr(g,wx-H*0.12,wy-H*0.052,H*0.42,H*0.104,H*0.030);g.fill();
+    ink(g,'rgba(6,6,8,.8)',1.8);
+    g.fillStyle='#161a18';ell(g,wx+H*0.30,wy,H*0.030,H*0.058);g.fill();
+    g.fillStyle='#2b332c';rr(g,wx+H*0.02,wy-H*0.095,H*0.10,H*0.034,2);g.fill();
+    g.fillStyle='#8b5a32';rr(g,wx-H*0.02,wy+H*0.040,H*0.06,H*0.058,2);g.fill();
+    if(hot){
+      /* The tube lights before it fires. Without this the rocket is a coin
+         toss; with it, it is a thing you saw coming and did not move. */
+      var pulse=0.45+0.55*Math.abs(Math.sin(tick*0.35));
+      g.fillStyle='rgba(255,150,60,'+(0.30+0.45*pulse)+')';
+      ell(g,wx+H*0.30,wy,H*0.048,H*0.080);g.fill();
+      g.strokeStyle='rgba(255,120,50,'+(0.35+0.4*pulse)+')';g.lineWidth=2;
+      rr(g,wx-H*0.12,wy-H*0.052,H*0.42,H*0.104,H*0.030);g.stroke();
+    }
+  } else if(k.arm==='fists'){
+    g.fillStyle='#68717b';rr(g,wx-H*0.01,wy-H*0.035,H*0.10,H*0.070,H*0.018);g.fill();
+    ink(g,'rgba(6,6,8,.7)',1.4);
+    g.fillStyle='#c9a24a';
+    for(var q=0;q<3;q++){ell(g,wx+H*0.02+q*H*0.026,wy-H*0.024,H*0.011,H*0.011);g.fill();}
+  }
 }
-function drawCatBrute(e){
-  var x=e.x+e.w/2,y=e.y+e.h,s=Math.sin(e.anim*0.7);
-  var sq=e.squash/10;
+/* ---- the roles ----
+   Each of these is a size, a wardrobe and a weapon. Nothing else differs. */
+function catRole(e){
+  var lo={fur:'#8b8f98',furD:'#4e535b',furL:'#b3b8c0',eye:'#8fe36a'};
+  if(e.t==='thug')return {H:46,W:9,fur:'#6f6a62',furD:'#3d3a35',furL:'#948d82',
+    eye:'#c8e36a',coatL:'#4a4038',coatD:'#241f1b',pant:'#33302a',pantD:'#211f1b',
+    arm:'claws',fangs:true,heavy:false,inner:'#b07a76'};
+  if(e.t==='gunner')return {H:52,W:10,fur:lo.fur,furD:lo.furD,furL:lo.furL,eye:'#e3c56a',
+    coatL:'#3d4250',coatD:'#1c1f27',pant:'#2b2f3a',pantD:'#1a1d24',stripe:true,
+    shirt:'#d8d2c0',tie:'#8a2f2a',hat:'fedora',hatCol:'#22262e',
+    sleeve:'#343947',sleeveD:'#22262e',glove:'#1f2228',arm:'pistol'};
+  if(e.t==='enforcer')return {H:56,W:12,fur:'#7d7468',furD:'#453f38',furL:'#a49a8c',
+    eye:'#6ad8e3',coatL:'#41493c',coatD:'#1f241c',pant:'#2c322a',pantD:'#1b1f19',
+    hat:'flatcap',hatCol:'#333a30',belt:true,fangs:true,
+    sleeve:'#3a4236',sleeveD:'#242a20',glove:'#1c211a',arm:'shotgun'};
+  if(e.t==='brute')return {H:72,W:17,fur:'#c98a3a',furD:'#7a4d18',furL:'#e8b566',
+    eye:'#8fe36a',coatL:'#4c545f',coatD:'#20242b',pant:'#22262c',pantD:'#15181c',
+    heavy:true,belt:true,fangs:true,plate:false,
+    sleeve:'#c98a3a',sleeveD:'#7a4d18',glove:'#5c3c14',arm:'fists'};
+  if(e.t==='prowler')return {H:44,W:8,fur:'#5a4f6b',furD:'#332c40',furL:'#7d7091',
+    eye:'#ffd76a',coatL:'#2f2a3c',coatD:'#191626',pant:'#241f30',pantD:'#161320',
+    arm:'bottle',fangs:true,inner:'#9a7aa8'};
+  return {H:62,W:15,fur:'#6e6a66',furD:'#3c3a38',furL:'#928d88',eye:'#ff7a5a',
+    coatL:'#40474f',coatD:'#1c2026',pant:'#262a2f',pantD:'#171a1e',
+    heavy:true,plate:true,hat:'helmet',hatCol:'#49515b',
+    sleeve:'#3c434b',sleeveD:'#252a30',glove:'#1a1d21',arm:'bazooka'};
+}
+/* Every one of them is drawn through here. The size knob, the mini-boss bump
+   and the squash on landing all apply the same way they always did. */
+function drawCatFoe(e){
+  var x=e.x+e.w/2,y=e.y+e.h,sq=e.squash/10;
+  var k=catRole(e);
   var elite=(e.miniBoss?1.28:1)*charScale;
-  g.save();g.translate(x,y);g.scale(e.facing*0.66*elite*(1+sq*0.26),0.66*elite*(1-sq*0.38));
+  /* The figure is authored at k.H units tall and the box it lives in is e.bh,
+     so this is the one number that keeps the drawing on its own feet whatever
+     the size knob is doing. */
+  var fit=(e.bh||e.h)/(k.H*0.86);
+  g.save();
+  g.translate(x,y);
+  g.scale(e.facing*fit*elite*(1+sq*0.28),fit*elite*(1-sq*0.40));
   if(e.flash>0)g.globalAlpha=0.75;
-  g.strokeStyle='#b5762e';g.lineWidth=6;g.lineCap='round';
-  g.beginPath();g.moveTo(-12,-22);g.quadraticCurveTo(-34,-30+s*6,-32,-6);g.stroke();g.lineCap='butt';
-  g.strokeStyle='#22262c';g.lineWidth=11;g.lineCap='round';
-  g.beginPath();g.moveTo(-7,-20);g.lineTo(-9,-4);g.stroke();
-  g.beginPath();g.moveTo(6,-20);g.lineTo(8,-4);g.stroke();g.lineCap='butt';
-  g.fillStyle='#0e1013';rr(g,-16,-6,14,6,2);g.fill();rr(g,1,-6,14,6,2);g.fill();
-  g.fillStyle=lin(g,-17,-48,17,-14,[[0,'#4c545f'],[1,'#20242b']]);
-  g.beginPath();g.moveTo(-16,-16);g.quadraticCurveTo(-20,-44,-6,-47);
-  g.quadraticCurveTo(12,-50,16,-40);g.quadraticCurveTo(19,-22,15,-16);g.closePath();g.fill();
-  ink(g,'rgba(6,6,8,.8)',2);
-  g.fillStyle='#8a5a2a';rr(g,-14,-42,26,9,2);g.fill();
-  g.fillStyle='#141619';rr(g,-16,-26,32,6,2);g.fill();
-  g.fillStyle=lin(g,-14,-72,18,-48,[[0,'#e8a556'],[1,'#a2621f']]);
-  g.beginPath();g.moveTo(-13,-50);g.quadraticCurveTo(-16,-70,-2,-72);
-  g.quadraticCurveTo(14,-74,17,-58);g.quadraticCurveTo(19,-50,10,-48);
-  g.quadraticCurveTo(-4,-45,-13,-50);g.closePath();g.fill();ink(g,'rgba(6,6,8,.8)',2);
-  g.fillStyle='#c07f2c';
-  g.beginPath();g.moveTo(-12,-66);g.lineTo(-15,-82);g.lineTo(-1,-70);g.closePath();g.fill();
-  g.beginPath();g.moveTo(9,-70);g.lineTo(14,-84);g.lineTo(17,-64);g.closePath();g.fill();
-  ink(g,'rgba(6,6,8,.6)',1.4);
-  g.fillStyle='#8fe36a';ell(g,4,-62,4,3.4);g.fill();ell(g,-6,-61,3.6,3);g.fill();
-  g.fillStyle='#0d1208';ell(g,4.6,-62,1.2,3);g.fill();ell(g,-5.4,-61,1.1,2.6);g.fill();
-  g.fillStyle='#f0d6a8';
-  g.beginPath();g.moveTo(10,-56);g.quadraticCurveTo(20,-54,15,-49);
-  g.quadraticCurveTo(11,-47,9,-51);g.closePath();g.fill();
-  g.fillStyle='#3a2a22';ell(g,17,-53,2.2,1.8);g.fill();
-  g.strokeStyle='rgba(245,225,190,.30)';g.lineWidth=1.2;g.beginPath();g.moveTo(15,-51);g.lineTo(34,-57);g.moveTo(15,-49);g.lineTo(35,-45);g.stroke();
-  g.strokeStyle='rgba(90,35,25,.72)';g.lineWidth=2;g.beginPath();g.moveTo(-8,-68);g.lineTo(-1,-53);g.stroke(); // facial scar
-  g.fillStyle='#68717b';rr(g,-19,-43,12,12,3);g.fill();ink(g,'rgba(6,6,8,.65)',1.2); // shoulder plate
-  var kick=e.timer<12?5:0;
-  g.fillStyle=lin(g,-8,-46,-8,-30,[[0,'#5c636e'],[1,'#191c22']]);
-  rr(g,-8-kick,-44,44,15,3);g.fill();ink(g,'rgba(6,6,8,.8)',1.8);
-  g.fillStyle='#101317';ell(g,38-kick,-36.5,5,8);g.fill();
-  g.fillStyle='#8a2f2a';rr(g,4-kick,-42,8,5,1);g.fill();
-  g.strokeStyle='#b5762e';g.lineWidth=6;g.lineCap='round';
-  g.beginPath();g.moveTo(2,-34);g.lineTo(14-kick,-33);g.stroke();g.lineCap='butt';
+  catFigure(e,k);
   g.restore();
 }
+/* ==================== THE CATMAN ====================
+   Not a machine. A very large cat in a very good suit, who has not had to get
+   up from a chair in years and is getting up now. He is built out of the same
+   parts as everyone else on his payroll — pointed ears, short muzzle, heavy
+   tail — at three times the size and with the tailoring to match.
+
+   His health is on the bar at the top of the screen, so nothing here has to
+   double as a readout; what the drawing does instead is show the fight wearing
+   him down. The cigar goes out, the suit opens, the calm goes out of his face. */
 function drawBoss(){
   if(!boss)return;
-  var x=boss.x+boss.w/2,y=boss.y+boss.h,gl=0.55+Math.sin(boss.anim*3)*0.45;
+  var x=boss.x+boss.w/2,y=boss.y+boss.h;
+  var frac=clamp(boss.hp/boss.maxHp,0,1),hurt=1-frac;
+  var gl=0.55+Math.sin(boss.anim*3)*0.45;
+  var brk=boss.state==='dead'?1:hurt;              // how far gone he is
+  var sw=Math.sin(boss.anim*1.1),bob=Math.abs(Math.cos(boss.anim*1.1))*2.2;
   g.save();g.translate(x,y);g.scale(boss.facing,1);
   if(boss.flash>0)g.globalAlpha=0.8;
-  // treads
-  g.fillStyle=lin(g,0,-38,0,0,[[0,'#3a4049'],[1,'#12151a']]);
-  rr(g,-72,-38,144,38,10);g.fill();ink(g,'rgba(4,4,6,.85)',2.5);
-  g.fillStyle='#4d5561';
-  for(var i=-64;i<64;i+=17){rr(g,i,-32,11,26,3);g.fill();}
-  g.fillStyle='rgba(0,0,0,.35)';rr(g,-72,-38,144,10,6);g.fill();
-  // chassis
-  g.fillStyle=lin(g,-60,-116,60,-36,[[0,'#7a4a62'],[0.5,'#4e2f42'],[1,'#291826']]);
-  g.beginPath();g.moveTo(-58,-36);g.lineTo(-62,-104);g.quadraticCurveTo(-60,-116,-46,-116);
-  g.lineTo(46,-116);g.quadraticCurveTo(60,-116,60,-104);g.lineTo(58,-36);g.closePath();g.fill();
-  ink(g,'rgba(4,4,6,.85)',2.5);
-  g.fillStyle='rgba(255,220,200,.10)';rr(g,-56,-112,110,6,3);g.fill();
-  g.fillStyle='#c9a24a';
-  for(var r2=-52;r2<54;r2+=18){ell(g,r2,-40,2.4,2.4);g.fill();}
-  // core furnace
-  g.fillStyle='#180d14';rr(g,-46,-98,92,26,4);g.fill();
-  g.fillStyle=lin(g,-44,-96,-44+88*(boss.hp/boss.maxHp),-74,[[0,'#ffb43a'],[1,'#ff4a2a']]);
-  rr(g,-44,-96,Math.max(0,88*(boss.hp/boss.maxHp)),22,3);g.fill();
-  // arms
-  g.fillStyle=lin(g,30,-100,30,-72,[[0,'#565d68'],[1,'#1a1e24']]);
-  rr(g,28,-100,64,24,5);g.fill();ink(g,'rgba(4,4,6,.8)',2);
-  g.fillStyle='#101317';ell(g,94,-88,7,12);g.fill();
-  g.fillStyle=lin(g,-92,-88,-92,-66,[[0,'#565d68'],[1,'#1a1e24']]);
-  rr(g,-94,-88,62,20,5);g.fill();ink(g,'rgba(4,4,6,.8)',2);
-  g.fillStyle='#101317';ell(g,-96,-78,6,10);g.fill();
-  // head
-  g.fillStyle=lin(g,-42,-176,44,-112,[[0,'#e0913f'],[0.6,'#b56a24'],[1,'#6d3d12']]);
-  g.beginPath();g.moveTo(-40,-114);g.quadraticCurveTo(-48,-158,-24,-170);
-  g.quadraticCurveTo(6,-182,34,-168);g.quadraticCurveTo(50,-158,44,-120);
-  g.quadraticCurveTo(40,-110,10,-110);g.lineTo(-30,-110);g.closePath();g.fill();
-  ink(g,'rgba(4,4,6,.85)',2.5);
-  g.fillStyle='#8a5218';
-  g.beginPath();g.moveTo(-38,-160);g.lineTo(-46,-196);g.lineTo(-14,-170);g.closePath();g.fill();
-  g.beginPath();g.moveTo(26,-168);g.lineTo(40,-200);g.lineTo(46,-158);g.closePath();g.fill();
-  ink(g,'rgba(4,4,6,.7)',2);
-  g.fillStyle='#2a1a12';rr(g,-34,-192,11,28,4);g.fill();   // battle scar plate
-  g.fillStyle='rgba(255,60,50,'+gl+')';
-  ell(g,12,-146,11,7);g.fill();ell(g,-16,-144,10,6.5);g.fill();
-  g.fillStyle='#2a0808';ell(g,14,-146,3.4,5.4);g.fill();ell(g,-14,-144,3.2,5);g.fill();
-  g.fillStyle=lin(g,10,-134,44,-116,[[0,'#f0c184'],[1,'#b07a34']]);
-  g.beginPath();g.moveTo(12,-134);g.quadraticCurveTo(46,-132,42,-118);
-  g.quadraticCurveTo(30,-110,12,-116);g.closePath();g.fill();ink(g,'rgba(4,4,6,.7)',2);
-  g.fillStyle='#241614';ell(g,42,-126,4,3.2);g.fill();
-  g.fillStyle='#f4f4f0';
-  g.beginPath();g.moveTo(24,-118);g.lineTo(28,-108);g.lineTo(31,-118);g.closePath();g.fill();
+
+  // ---- tail, thick as an arm, sweeping behind him
+  g.strokeStyle='#5c3a12';g.lineWidth=17;g.lineCap='round';
+  g.beginPath();g.moveTo(-34,-44);
+  g.quadraticCurveTo(-118,-70+sw*14,-140,-6+sw*8);g.stroke();
+  g.strokeStyle='#8a5a1e';g.lineWidth=9;g.stroke();
+  g.lineCap='butt';
+
+  // ---- legs: pinstripe trousers into black oxfords
+  var i;
+  for(i=0;i<2;i++){
+    var far=i===0,lx=far?-30:26,off=far?-sw*5:sw*5;
+    g.strokeStyle=far?'#191d26':'#252b36';g.lineWidth=30;g.lineCap='round';
+    g.beginPath();g.moveTo(lx,-70);g.lineTo(lx+off,-17);g.stroke();g.lineCap='butt';
+    g.fillStyle=far?'#0b0d10':'#14171c';
+    rr(g,lx+off-25,-17,50,17,5);g.fill();ink(g,'rgba(3,3,5,.85)',2.2);
+    g.fillStyle='rgba(255,255,255,.09)';rr(g,lx+off-21,-15,42,4,2);g.fill();
+  }
+
+  // ---- the suit
+  g.fillStyle=lin(g,-60,-140,60,-50,[[0,'#3b4152'],[0.55,'#242a36'],[1,'#12151c']]);
+  g.beginPath();
+  g.moveTo(-56,-64);
+  g.quadraticCurveTo(-74,-100,-64,-132);
+  g.quadraticCurveTo(-30,-152,4,-150);
+  g.quadraticCurveTo(44,-150,66,-130);
+  g.quadraticCurveTo(76,-96,56,-64);
+  g.closePath();g.fill();ink(g,'rgba(3,3,5,.88)',2.6);
+  g.strokeStyle='rgba(220,228,245,.13)';g.lineWidth=1.2;g.beginPath();
+  for(i=-4;i<=4;i++){g.moveTo(i*13,-142+Math.abs(i)*3);g.lineTo(i*13,-66);}
+  g.stroke();
+  // shirt and tie in the opening
+  g.fillStyle='#ddd6c4';
+  g.beginPath();g.moveTo(-18,-146);g.lineTo(18,-146);
+  g.lineTo(8,-80);g.lineTo(-8,-80);g.closePath();g.fill();
+  g.fillStyle='#8f2620';
+  g.beginPath();g.moveTo(-9,-140);g.lineTo(9,-140);g.lineTo(6,-86);g.lineTo(-6,-86);
+  g.closePath();g.fill();ink(g,'rgba(3,3,5,.6)',1.6);
+  // lapels
+  g.fillStyle='#1a1f28';
+  g.beginPath();g.moveTo(-20,-148);g.lineTo(-46,-136);g.lineTo(-14,-84);g.closePath();g.fill();
+  g.beginPath();g.moveTo(20,-148);g.lineTo(48,-134);g.lineTo(14,-84);g.closePath();g.fill();
+  ink(g,'rgba(3,3,5,.7)',1.8);
+  g.fillStyle='#c9a24a';ell(g,-38,-128,4,4);g.fill();           // carnation pin
+  // gold watch chain across the waistcoat, and the ring hand
+  g.strokeStyle='#e0b64a';g.lineWidth=2.4;
+  g.beginPath();g.moveTo(-26,-84);g.quadraticCurveTo(-4,-72,22,-86);g.stroke();
+  // as he takes damage the suit opens and the shirt shows
+  if(brk>0.35){
+    g.strokeStyle='rgba(3,3,5,.55)';g.lineWidth=2;
+    g.beginPath();g.moveTo(30,-138);g.lineTo(44,-96);g.moveTo(-40,-120);g.lineTo(-52,-84);g.stroke();
+  }
+
+  // ---- far arm, hanging with the claws out
+  g.strokeStyle='#1c2029';g.lineWidth=22;g.lineCap='round';
+  g.beginPath();g.moveTo(-50,-126);g.lineTo(-70,-80+sw*4);g.stroke();g.lineCap='butt';
+  g.fillStyle='#b07a2c';ell(g,-72,-72+sw*4,12,11);g.fill();ink(g,'rgba(3,3,5,.75)',2);
+  g.strokeStyle='#efe7d2';g.lineWidth=3;g.lineCap='round';
+  g.beginPath();
+  g.moveTo(-78,-66+sw*4);g.lineTo(-90,-56+sw*4);
+  g.moveTo(-74,-63+sw*4);g.lineTo(-84,-48+sw*4);
+  g.moveTo(-68,-63+sw*4);g.lineTo(-72,-47+sw*4);g.stroke();g.lineCap='butt';
+
+  // ---- head
+  g.save();g.translate(6,-150-bob*0.4);
+  // ears
+  g.fillStyle='#7a4d18';
+  g.beginPath();g.moveTo(-36,-14);g.lineTo(-48,-56);g.lineTo(-8,-30);g.closePath();g.fill();
+  ink(g,'rgba(3,3,5,.75)',2);
+  g.fillStyle='#c98a3a';
+  g.beginPath();g.moveTo(20,-30);g.lineTo(38,-64);g.lineTo(44,-14);g.closePath();g.fill();
+  ink(g,'rgba(3,3,5,.75)',2);
+  g.fillStyle='#a2705e';
+  g.beginPath();g.moveTo(24,-30);g.lineTo(35,-52);g.lineTo(38,-20);g.closePath();g.fill();
+  // skull
+  g.fillStyle=lin(g,-40,-40,44,26,[[0,'#e8b566'],[0.6,'#c98a3a'],[1,'#7a4d18']]);
+  g.beginPath();
+  g.moveTo(-38,-4);
+  g.quadraticCurveTo(-40,-40,-2,-42);
+  g.quadraticCurveTo(38,-42,44,-4);
+  g.quadraticCurveTo(48,26,14,32);
+  g.quadraticCurveTo(-32,34,-38,-4);
+  g.closePath();g.fill();ink(g,'rgba(3,3,5,.85)',2.6);
+  // cheek ruffs
+  g.fillStyle='#e8b566';
+  g.beginPath();g.moveTo(2,10);g.quadraticCurveTo(48,12,30,32);
+  g.quadraticCurveTo(2,34,2,10);g.closePath();g.fill();
+  // eyes — narrow and unbothered until they are not
+  var open=0.55+0.45*brk;
+  g.fillStyle='#8fe36a';
+  ell(g,24,-6,10,9*open);g.fill();ell(g,-8,-8,9,8*open);g.fill();
+  g.fillStyle='#0d1208';
+  ell(g,26,-6,2.6,8*open);g.fill();ell(g,-6,-8,2.4,7*open);g.fill();
+  g.strokeStyle='rgba(6,6,8,.85)';g.lineWidth=4;g.lineCap='round';
+  g.beginPath();g.moveTo(8,-20);g.lineTo(36,-14);g.moveTo(-20,-16);g.lineTo(0,-21);g.stroke();
+  g.lineCap='butt';
+  // muzzle, nose, whiskers
+  g.fillStyle='#f0d6a8';ell(g,20,18,18,11);g.fill();
+  g.fillStyle='#3a2a22';
+  g.beginPath();g.moveTo(28,8);g.lineTo(42,10);g.lineTo(35,20);g.closePath();g.fill();
+  g.strokeStyle='rgba(245,235,215,.34)';g.lineWidth=1.6;
+  g.beginPath();
+  g.moveTo(32,18);g.lineTo(74,8);g.moveTo(32,24);g.lineTo(76,30);
+  g.moveTo(-4,18);g.lineTo(-40,10);g.stroke();
+  // the gold tooth, and the old scar
+  g.fillStyle='#f2ede0';
+  g.beginPath();g.moveTo(10,24);g.lineTo(20,24);g.lineTo(15,40);g.closePath();g.fill();
+  g.fillStyle='#e0b64a';
+  g.beginPath();g.moveTo(22,24);g.lineTo(31,24);g.lineTo(27,37);g.closePath();g.fill();
+  g.strokeStyle='rgba(120,40,32,.8)';g.lineWidth=3;
+  g.beginPath();g.moveTo(-14,-34);g.lineTo(-4,-2);g.stroke();
+  // cigar, lit while he is still enjoying himself
+  if(brk<0.7){
+    g.fillStyle='#4a3220';rr(g,34,22,26,7,3);g.fill();ink(g,'rgba(3,3,5,.6)',1.4);
+    g.fillStyle='rgba(255,140,50,'+(0.55+0.45*gl)+')';ell(g,62,25.5,4,3.4);g.fill();
+  }
+  // the hat
+  g.fillStyle='#171b22';
+  g.beginPath();g.ellipse(2,-38,58,11,0,0,6.283);g.fill();ink(g,'rgba(3,3,5,.8)',2.2);
+  g.beginPath();g.moveTo(-30,-40);g.quadraticCurveTo(-22,-84,10,-82);
+  g.quadraticCurveTo(38,-80,34,-40);g.closePath();g.fill();ink(g,'rgba(3,3,5,.8)',2.2);
+  g.fillStyle='#0d1014';rr(g,-30,-54,64,10,3);g.fill();
+  g.fillStyle='#c9a24a';rr(g,26,-54,7,10,2);g.fill();
   g.restore();
-  // eye glow
+
+  // ---- near arm and the tommy gun
+  g.save();
+  g.translate(46,-100);
+  g.rotate(boss.state==='fire'?-0.16:0.06+sw*0.04);
+  g.strokeStyle='rgba(3,3,5,.6)';g.lineWidth=26;g.lineCap='round';
+  g.beginPath();g.moveTo(-6,0);g.lineTo(34,10);g.stroke();
+  g.strokeStyle='#2a3140';g.lineWidth=22;
+  g.beginPath();g.moveTo(-6,0);g.lineTo(34,10);g.stroke();g.lineCap='butt';
+  g.fillStyle='#b07a2c';ell(g,40,12,11,10);g.fill();ink(g,'rgba(3,3,5,.75)',2);
+  g.fillStyle='#e0b64a';ell(g,44,7,3.4,3);g.fill();                 // the ring
+  g.fillStyle=lin(g,44,0,44,24,[[0,'#5a616c'],[1,'#1a1e24']]);
+  rr(g,40,2,58,18,4);g.fill();ink(g,'rgba(3,3,5,.8)',2.2);
+  g.fillStyle='#3a3f47';ell(g,66,26,13,13);g.fill();ink(g,'rgba(3,3,5,.7)',1.8);
+  g.fillStyle='#6b4a2a';rr(g,34,4,16,15,3);g.fill();
+  g.fillStyle='#20242a';rr(g,96,7,14,7,2);g.fill();
+  if(boss.state==='fire'&&Math.floor(tick/3)%2===0){
+    g.globalCompositeOperation='lighter';
+    g.fillStyle='rgba(255,222,120,.95)';
+    g.beginPath();g.moveTo(110,10);g.lineTo(134,-2);g.lineTo(126,10);g.lineTo(136,22);
+    g.closePath();g.fill();
+    g.globalCompositeOperation='source-over';
+  }
+  g.restore();
+  g.restore();
+
+  // the look he gives you, which carries further than he does
   g.globalCompositeOperation='lighter';
-  g.fillStyle=rad(g,x+boss.facing*4,y-146,4,110,[[0,'rgba(255,60,40,'+(0.20*gl)+')'],[1,'rgba(0,0,0,0)']]);
-  g.beginPath();g.arc(x+boss.facing*4,y-146,110,0,6.283);g.fill();
+  g.fillStyle=rad(g,x+boss.facing*10,y-152,4,120,
+    [[0,'rgba(150,240,110,'+(0.16*gl)+')'],[1,'rgba(0,0,0,0)']]);
+  g.beginPath();g.arc(x+boss.facing*10,y-152,120,0,6.283);g.fill();
   g.globalCompositeOperation='source-over';
 }
+
 
 /* ==================== ENTITY PAINT ==================== */
 function drawWeaponIcon(c,x,y,wep,col,scale){
@@ -6145,7 +6367,7 @@ function paintHUD(){
     var missionLine=ob.done?'MISSION COMPLETE — REACH EXTRACTION':
       (ob.taskDone?'FINAL OBJECTIVE — ELIMINATE '+level.miniBossInfo.name:ob.text+prog);
     txt(missionLine,w/2,oy+15,Math.min(13,w*.027),ob.done?'#9be36a':ob.taskDone?'#ffd06a':'#e8d6a8','center');
-    txt(campaign.name+'  //  TRAIL TO P.C.U.-9',w/2,oy+28,Math.min(9,w*.020),'#8a8070','center');
+    txt(campaign.name+'  //  TRAIL TO THE CATMAN',w/2,oy+28,Math.min(9,w*.020),'#8a8070','center');
   }
   var mini=null;
   for(i=0;i<enemies.length;i++)if(enemies[i].miniBoss&&!enemies[i].dead){mini=enemies[i];break;}
@@ -6173,7 +6395,7 @@ function paintHUD(){
     g.fillStyle=lin(g,bx2,0,bx2+bw2,0,[[0,'#ff5a3a'],[1,'#8a1010']]);
     rr(g,bx2+1,by2+1,Math.max(0,(bw2-2)*(boss.hp/boss.maxHp)),10,2);g.fill();
     g.strokeStyle='rgba(201,162,74,.7)';g.lineWidth=1;rr(g,bx2+.5,by2+.5,bw2,12,3);g.stroke();
-    txt('P.C.U.-9',w/2,by2+26,13,'#e8b0a0','center');
+    txt('THE CATMAN',w/2,by2+26,13,'#e8b0a0','center');
   }
 }
 /* Say what actually works on the device in hand — these screens take a tap as
@@ -7164,11 +7386,7 @@ function render(){
       g.font='bold 13px Impact,sans-serif';g.textAlign='center';
       g.fillText(miniRecovering(e)?'RELOADING':e.name,e.x+e.w/2,e.y-18);g.textAlign='left';
     }
-    if(e.t==='thug')drawMouseThug(e);
-    else if(e.t==='prowler')drawBatBomber(e);
-    else if(e.t==='gunner')drawWeasel(e);
-    else if(e.t==='enforcer')drawLizard(e);
-    else drawCatBrute(e);
+    drawCatFoe(e);
   }
   if(boss){shadowBlob(boss.x+boss.w/2,472,boss.w*0.52,0.42);drawBoss();}
   paintAimGuide();
@@ -7236,7 +7454,7 @@ function render(){
       gw/2,bs2[0].y-14,Math.min(12,gw*0.021),tokens>0?'#e8c25a':'#8a6a20','center','Arial,sans-serif');
   }
   if(state==='WIN'){
-    overlay('P.C.U.-9 IS SCRAP','FINAL SCORE '+score,continuePrompt(),'#e8c25a');
+    overlay('THE CATMAN IS FINISHED','FINAL SCORE '+score,continuePrompt(),'#e8c25a');
     txt('the sewer belongs to the brothers again',view.cssW/2,view.cssH*0.44+92,
       Math.min(14,view.cssW*0.034),'#8fbf6a','center');
   }
