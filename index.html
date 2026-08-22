@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Ratatatata! — Rat Bros: Rodent Reckoning</title>
+<title>Ratz &amp; Catz — The Catman Runs These Streets</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   html,body{height:100%;background:#08080a;overflow:hidden;touch-action:none;
@@ -80,7 +80,9 @@ var rotateEl=document.getElementById('rotate'),landscapeAsked=false;
 var mobilePause=document.getElementById('mobilePause'),pauseModal=document.getElementById('pauseModal');
 var gcv=document.getElementById('game'), g=gcv.getContext('2d');
 var pcv=document.getElementById('pad'),  pg=pcv.getContext('2d');
-var titleLogo=new Image();titleLogo.src='assets/images/ui/ratatatata-title-cutout.png';
+/* Drop a painted logo in at this path and the title screen uses it; until one
+   exists the lettering below is drawn instead, which is no worse for it. */
+var titleLogo=new Image();titleLogo.src='assets/images/ui/ratz-catz-title.png';
 var alleyArt=new Image();alleyArt.src='assets/images/ui/alley-start.jpg';
 
 var view={w:520,h:900,scale:1,cssW:360,cssH:640};
@@ -697,9 +699,9 @@ var SFX={
   die:function(){tone(380,0.55,'sawtooth',0.08,55);},
   enemyDeath:function(kind,elite){
     var v=elite?1.28:1;
-    if(kind==='mouse'){tone(920,.16,'square',.045*v,430);setTimeout(function(){tone(610,.12,'triangle',.03*v,260);},45);}
-    else if(kind==='bat'){tone(1450,.22,'sawtooth',.038*v,310);noise(.10,.035*v,3600);}
-    else if(kind==='weasel'){tone(520,.30,'square',.045*v,115);setTimeout(function(){tone(240,.17,'sawtooth',.028*v,75);},55);}
+    if(kind==='thug'){tone(920,.16,'square',.045*v,430);setTimeout(function(){tone(610,.12,'triangle',.03*v,260);},45);}
+    else if(kind==='prowler'){tone(1450,.22,'sawtooth',.038*v,310);noise(.10,.035*v,3600);}
+    else if(kind==='gunner'){tone(520,.30,'square',.045*v,115);setTimeout(function(){tone(240,.17,'sawtooth',.028*v,75);},55);}
     else {tone(205,.38,'sawtooth',.065*v,48);noise(.18,.055*v,620);}
   },
   clear:function(){var n=[392,523,659,784],i;for(i=0;i<4;i++)(function(j){
@@ -979,16 +981,16 @@ function rollHeadshot(){return Math.random()<HEADSHOT_CHANCE;}
    player can always walk out of the fight and come back on their own terms. */
 var MINI_LEASH=430;
 var MINI_BOSSES=[
- {type:'mouse',name:'SILKFANG',title:'THE SEWER RONIN'},
- {type:'cat',name:'CATZILLA',title:'THE NINE-LIFE HEAVY'},
- {type:'weasel',name:'GENERAL LONGTAIL',title:'THE STREET TACTICIAN'},
- {type:'bat',name:'MAJOR BOOMWING',title:'THE AIRBORNE MENACE'},
- {type:'mouse',name:'RAZORWHISKER',title:'THE CARGO SAMURAI'},
- {type:'cat',name:'IRONCLAW',title:'THE WAREHOUSE WALL'},
- {type:'weasel',name:'THE PALE MARSHAL',title:'THE AVENUE COMMANDER'},
- {type:'bat',name:'NIGHT SIREN',title:'THE VENT STALKER'},
- {type:'mouse',name:'NEON BLADE',title:'THE HALLWAY DUELIST'},
- {type:'weasel',name:'COLONEL VERMIN',title:'THE LAST DOORKEEPER'}
+ {type:'thug',name:'SILKFANG',title:'THE SEWER RONIN'},
+ {type:'brute',name:'CATZILLA',title:'THE NINE-LIFE HEAVY'},
+ {type:'gunner',name:'GENERAL LONGTAIL',title:'THE STREET TACTICIAN'},
+ {type:'prowler',name:'MAJOR BOOMWING',title:'THE AIRBORNE MENACE'},
+ {type:'thug',name:'RAZORWHISKER',title:'THE CARGO SAMURAI'},
+ {type:'brute',name:'IRONCLAW',title:'THE WAREHOUSE WALL'},
+ {type:'gunner',name:'THE PALE MARSHAL',title:'THE AVENUE COMMANDER'},
+ {type:'prowler',name:'NIGHT SIREN',title:'THE VENT STALKER'},
+ {type:'thug',name:'NEON BLADE',title:'THE HALLWAY DUELIST'},
+ {type:'gunner',name:'COLONEL VERMIN',title:'THE LAST DOORKEEPER'}
 ];
 
 var STAGES=[
@@ -1092,22 +1094,22 @@ var modeIdx=0, MODES=['LOCAL','CREATE','JOIN','LEVELS'];
 var level=null, cam={x:0,y:0,shake:0,zoom:1}, tick=0, stateT=0,introTypeMark=-1;
 var campaignSeed=1,campaign=null;
 var CAMPAIGNS=[
- {name:'BLACK CHEESE FILE',goal:'P.C.U.-9 poisoned the colony stores',things:['toxin ledger','sealed antidote','shipment manifest','lab access card']},
- {name:'MISSING BROTHER',goal:'P.C.U.-9 took one of our own',things:['snatch order','cage key','transport route','prisoner registry']},
- {name:'BURNT NEST',goal:'P.C.U.-9 torched the family nest',things:['incendiary tag','command tape','tower blueprint','override cipher']}
+ {name:'BLACK CHEESE FILE',goal:'the Catman poisoned the colony stores',things:['poisoned bait ledger','sealed antidote','shipment manifest','back-room key']},
+ {name:'MISSING BROTHER',goal:'the Catman took one of our own',things:['snatch order','cage key','transport route','collection book']},
+ {name:'BURNT NEST',goal:'the Catman torched the family nest',things:['book of matches','wiretap reel','club floor plan','private-lift key']}
 ];
 var STAGE_STORY=[
- ['The brothers return to the tunnels where the first P.C.U. raids began.','Fresh bootprints in the sludge prove the exterminators came back.'],
- ['A marked pest-control van vanished into downtown before dawn.','Rocco and Vinnie follow its chemical stink into hostile streets.'],
- ['A frightened tenant says someone upstairs kept records of the raids.','The building is quiet, but armed silhouettes still cross its windows.'],
- ['The evidence points beneath the block, into forgotten service tunnels.','Whatever P.C.U. moved through here was never meant to see daylight.'],
- ['Crates bearing the P.C.U. seal are stacked behind guarded walls.','One manifest could reveal where the next shipment went.'],
- ['The trail reaches the warehouse floor, where engines idle in the dark.','Dispatch records may finally connect the street crews to their master.'],
- ['Every captured route converges on one tower across Corporate Avenue.','P.C.U. patrols have locked the district down for the night.'],
- ['The tower is sealed, but its steel lungs carry whispers from every floor.','The brothers are inside the machine now—unheard and unforgiven.'],
- ['Beyond the vents lies the executive wing where the raids were ordered.','Security knows something is coming; they just do not know from where.'],
- ['The director waits behind the final line of hired claws and guns.','The truth about what happened to the brothers is finally within reach.'],
- ['P.C.U.-9 has nowhere left to hide and nothing left to bargain with.','Tonight the brothers collect the debt that started this war.']
+ ['The brothers go back down to the tunnels the first raid came through.','Fresh claw marks in the sludge say the Catman’s crews came back.'],
+ ['A long car with tinted glass rolled out of downtown before dawn.','Rocco and Vinnie follow the smell of it into somebody else’s streets.'],
+ ['A frightened tenant says the cats upstairs keep a book on every family.','The block is quiet, but shapes with guns keep crossing its windows.'],
+ ['The book points under the block, into tunnels nobody has walked in years.','Whatever the mob moves through here was never meant to see daylight.'],
+ ['Crates with the Catman’s mark are stacked behind a wall of hired claws.','One manifest would say where the next shipment is going.'],
+ ['The trail reaches the warehouse floor, where engines idle in the dark.','The dispatch book ties every street crew back to one office.'],
+ ['Every route the brothers have taken converges on one block uptown.','The Catman’s people have the district shut for the night.'],
+ ['The club is sealed, but its old service ducts carry every word inside.','The brothers are behind the walls now — unheard, and not invited.'],
+ ['Past the ducts is the floor where the order on their father was given.','The bodyguards know something is coming. They do not know from where.'],
+ ['The Catman waits behind one last line of hired claws and hired guns.','What happened to their father is on the other side of that door.'],
+ ['The Catman has no streets left to hide behind and nothing left to trade.','Tonight the brothers collect the debt that started all of it.']
 ];
 var bullets=[],ebullets=[],enemies=[],items=[],parts=[],nades=[],swings=[],
     decals=[],flashes=[],lights=[],motes=[],marks=[];
@@ -1143,7 +1145,7 @@ function scaleBox(o,bw,bh,centred){
 }
 function applyCharScale(){
   var i,e;
-  for(i=0;i<enemies.length;i++){e=enemies[i];if(e.bw)scaleBox(e,e.bw,e.bh,e.t==='bat');}
+  for(i=0;i<enemies.length;i++){e=enemies[i];if(e.bw)scaleBox(e,e.bw,e.bh,e.t==='prowler');}
   if(P.w)scaleBox(P,P_W,P.prone?P_PRONE:P_STAND,false);
 }
 function setCharScale(v){
@@ -1265,10 +1267,10 @@ function configureMiniBoss(lv,n){
   while(my===null&&mx>lv.length-1000){mx-=35;my=groundYAt(lv,mx);}
   if(my===null)my=500;
   lv.miniBossInfo=m;lv.miniBossDefeated=false;
-  lv.spawns.push({x:Math.round(mx),y:Math.round(my-(m.type==='cat'?52:m.type==='bat'?80:m.type==='weasel'?38:32)),
+  lv.spawns.push({x:Math.round(mx),y:Math.round(my-(m.type==='brute'?52:m.type==='prowler'?80:m.type==='gunner'?38:32)),
     t:m.type,used:false,miniBoss:m});
 }
-function enemySpawnSize(t){var z=t==='cat'?{w:40,h:52}:t==='bat'?{w:34,h:24}:t==='lizard'?{w:28,h:40}:t==='weasel'?{w:26,h:38}:{w:24,h:32};
+function enemySpawnSize(t){var z=t==='brute'?{w:40,h:52}:t==='prowler'?{w:34,h:24}:t==='terminator'?{w:36,h:46}:t==='enforcer'?{w:28,h:40}:t==='gunner'?{w:26,h:38}:{w:24,h:32};
   z.w*=charScale;z.h*=charScale;return z;}
 function enemySpawnBlocked(lv,s,x,y){
   var z=enemySpawnSize(s.t),r={x:x,y:y,w:z.w,h:z.h},i,p;
@@ -1310,7 +1312,7 @@ function sanitizeEnemySpawns(lv){
       if(s.inB){
         if(nx<s.inB.x+16||nx+z.w>s.inB.x+s.inB.w-16)continue;
         if(!interiorSpawnSupported(lv,s,nx,ny,z))continue;
-      } else if(s.t!=='bat'){
+      } else if(s.t!=='prowler'){
         var gy=groundYAt(lv,nx+z.w/2);if(gy===null)continue;ny=gy-z.h;
       }
       if(enemySpawnBlocked(lv,s,nx,ny))continue;
@@ -1772,12 +1774,12 @@ function addGate(lv,rng,x,spec,tight,loose){
   cx+=ww;
   for(k=n-1;k>=0;k--){addDeck(lv,spec.tread,cx,gy-rise[k],tw[k],rise[k],{solid:true,v:rng()});cx+=tw[k];}
   lv.routeSpots.push({x:wallX+ww/2,y:gy-wh});
-  deckSpawn(lv,top,wallX+ww*0.5,lv.n>=6?'lizard':'weasel');
+  deckSpawn(lv,top,wallX+ww*0.5,lv.n>=6?'enforcer':'gunner');
   /* Something hanging over it that you may climb to and need not. */
   if(spec.over&&rng()<0.75){
     var gan=addDeck(lv,spec.over,wallX-60,gy-wh-108,ww+120,14);
     lv.pockets.push({x:wallX+ww/2,y:gy-wh-108,plat:gan});
-    if(rng()<0.6)deckSpawn(lv,gan,wallX+20,'mouse');
+    if(rng()<0.6)deckSpawn(lv,gan,wallX+20,'thug');
   }
   return true;
 }
@@ -1794,8 +1796,8 @@ function addLane(lv,rng,x,spec,tight){
   else stepsBetween(lv,rng,spec.up,x+8,gy,y,84,1);
   stepsBetween(lv,rng,spec.down,x+w-10,gy,y,84,1);
   lv.pockets.push({x:x+w*0.5,y:y,plat:deck});
-  deckSpawn(lv,deck,x+w*0.32,lv.n>=5?'lizard':'weasel');
-  if(rng()<0.6)deckSpawn(lv,deck,x+w*0.74,lv.n>=4?'weasel':'mouse');
+  deckSpawn(lv,deck,x+w*0.32,lv.n>=5?'enforcer':'gunner');
+  if(rng()<0.6)deckSpawn(lv,deck,x+w*0.74,lv.n>=4?'gunner':'thug');
   return true;
 }
 
@@ -1836,10 +1838,10 @@ function addRoofRun(lv,rng,x){
     d=addDeck(lv,'rooftop',rx,ry,rw,22,{solid:true});
     prev=d;
     if(rng()<0.7)addDeck(lv,'watertank',Math.round(rx+rw*0.82),ry-84,64,84,{solid:true});
-    deckSpawn(lv,d,rx+rw*0.28,lv.n>=7?'lizard':'weasel');
-    if(rng()<0.72)deckSpawn(lv,d,rx+rw*0.56,lv.n>=5&&rng()<0.4?'cat':'mouse');
+    deckSpawn(lv,d,rx+rw*0.28,lv.n>=7?'enforcer':'gunner');
+    if(rng()<0.72)deckSpawn(lv,d,rx+rw*0.56,lv.n>=5&&rng()<0.4?'brute':'thug');
     roofs.push({x:rx+rw*0.5,y:ry,plat:d});
-    lv.spawns.push({x:Math.round(rx+rw*0.5),y:Math.round(ry-150),t:'bat',used:false});
+    lv.spawns.push({x:Math.round(rx+rw*0.5),y:Math.round(ry-150),t:'prowler',used:false});
     rx+=rw+Math.round(94+rng()*40);
     made++;
   }
@@ -2081,12 +2083,12 @@ function buildLevel(n){
             kind:rl<0.20?'token':rl<0.50?'cheese':rl<0.75?'nade':'weapon',
             wep:rollWeapon(rng)});
         }
-        var enemySlab=bld.slabs[si],insideType=(n>=4&&rng()<0.55)?'weasel':'mouse';
-        lv.spawns.push({x:Math.round(enemySlab.x+enemySlab.w*.55),y:enemySlab.y-(insideType==='weasel'?38:32),
+        var enemySlab=bld.slabs[si],insideType=(n>=4&&rng()<0.55)?'gunner':'thug';
+        lv.spawns.push({x:Math.round(enemySlab.x+enemySlab.w*.55),y:enemySlab.y-(insideType==='gunner'?38:32),
           t:insideType,used:false,inB:bld});
       }
-      var groundType=n>=5&&rng()<0.35?'cat':(rng()<0.55?'weasel':'mouse');
-      lv.spawns.push({x:Math.round(bld.x+bld.w-72),y:bld.gy-(groundType==='cat'?52:groundType==='weasel'?38:32),
+      var groundType=n>=5&&rng()<0.35?'brute':(rng()<0.55?'gunner':'thug');
+      lv.spawns.push({x:Math.round(bld.x+bld.w-72),y:bld.gy-(groundType==='brute'?52:groundType==='gunner'?38:32),
         t:groundType,used:false,inB:bld});
     }
     /* The upper lane goes in once the buildings are down, so it can be routed
@@ -2094,17 +2096,18 @@ function buildLevel(n){
     addTerrain(lv,rng,routeStart);
     var gapStep=Math.max(125,235-n*10);
     for(px=500;px<lv.length-220;px+=gapStep+rng()*160){
-      var r=rng(),type='mouse';
-      if(n>=2&&r>0.55)type='bat';
-      if(n>=2&&r>0.70)type='weasel';
-      if(n>=4&&r>0.78)type='lizard';
-      if(n>=3&&r>0.91)type='cat';
+      var r=rng(),type='thug';
+      if(n>=2&&r>0.55)type='prowler';
+      if(n>=2&&r>0.70)type='gunner';
+      if(n>=4&&r>0.78)type='enforcer';
+      if(n>=3&&r>0.91)type='brute';
+      if(n>=5&&r>0.965)type='terminator';
       var gyy=groundYAt(lv,px);
-      if(type==='bat')lv.spawns.push({x:Math.round(px),y:Math.round(120+rng()*150),t:'bat',used:false});
+      if(type==='prowler')lv.spawns.push({x:Math.round(px),y:Math.round(120+rng()*150),t:'prowler',used:false});
       else if(gyy!==null)lv.spawns.push({x:Math.round(px),y:gyy-40,t:type,used:false});
       if(n>=3&&rng()<0.5){
         var ex=px+70+rng()*90,egy=groundYAt(lv,ex);
-        if(egy!==null)lv.spawns.push({x:Math.round(ex),y:egy-36,t:'mouse',used:false});
+        if(egy!==null)lv.spawns.push({x:Math.round(ex),y:egy-36,t:'thug',used:false});
       }
     }
     for(px=520;px<lv.length-200;px+=620+rng()*380){
@@ -2138,7 +2141,7 @@ function buildLevel(n){
       var oy=ot==='lowbeam'?ogy-59:ogy-oh;
       var ob={x:Math.round(px),y:oy,w:ow,h:oh,type:ot,hp:ot==='gate'?115:ot==='dumpster'?85:ot==='trashcan'?35:22,dead:false};
       ob.platform={x:ob.x,y:ob.y,w:ob.w,h:ob.h,obstacle:ob};lv.obstacles.push(ob);lv.plats.push(ob.platform);
-      if(rng()<.62){var ax=px+130+rng()*80,agy=groundYAt(lv,ax);if(agy!==null)lv.spawns.push({x:Math.round(ax),y:agy-38,t:n>=3&&rng()<.65?'weasel':'mouse',used:false});}
+      if(rng()<.62){var ax=px+130+rng()*80,agy=groundYAt(lv,ax);if(agy!==null)lv.spawns.push({x:Math.round(ax),y:agy-38,t:n>=3&&rng()<.65?'gunner':'thug',used:false});}
     }
     /* ---- themed props: run last so they can avoid everything already placed ---- */
     var pset=PROP_SETS[propSetFor(lv.theme)];
@@ -2219,25 +2222,37 @@ function spawnEnemy(t,x,y){
          flash:0,anim:Math.random()*6,state:'patrol',touchCd:0,baseX:x,baseY:y,dmg:12,squash:0,
          engaged:false,climbCd:0,recoverT:0,retreatT:0,evadeCd:0,patrolDir:Math.random()<0.5?-1:1,patrolTimer:55+Math.random()*75,
          patrolPause:0,patrolRadius:90+Math.random()*80};
-  /* Health is graded by kind so nothing pops on a single swipe, but the rank
-     and file stay quick to clear. Reference point is Rocco's opening claw,
-     now 25 x 1.35 x 1.5 = 51 damage: bat and mouse take 2 hits, weasel and
-     lizard 3, cat 5 — before the 15% headshot roll, which drops any of them
-     outright. Each kind still hardens as the stages climb. */
-  if(t==='mouse'){e.hp=66+stage*5;e.w=24;e.h=32;e.vx=-1.3-stage*0.05;e.dmg=12;}
-  if(t==='bat'){e.hp=52+stage*4;e.w=34;e.h=24;e.dmg=10;e.timer=40+Math.random()*70;}
-  if(t==='cat'){e.hp=205+stage*16;e.w=40;e.h=52;e.dmg=18;e.timer=60+Math.random()*60;e.vx=-0.6;}
-  if(t==='weasel'){e.hp=104+stage*8;e.w=26;e.h=38;e.dmg=12;e.timer=50+Math.random()*50;e.shots=0;e.vx=0;}
-  if(t==='lizard'){e.hp=140+stage*11;e.w=28;e.h=40;e.dmg=13;e.timer=35+Math.random()*35;e.shots=3;e.vx=0;}
+  /* The Catman's payroll, by what each of them is for.
+
+     thug       street cat, all claws and no patience — runs you down
+     prowler    lean roof cat working the skyline, drops bottles on your head
+     gunner     gangster in a hat, keeps its distance and plinks at you
+     enforcer   bodyguard, heavier, works in bursts and does not back off
+     brute      club doorman, twice anyone's size, closes and swings
+     terminator armoured, rare, and carrying a rocket
+
+     Health is graded so nothing pops on a single swipe while the rank and file
+     stay quick to clear. Reference point is Rocco's opening claw, 25 x 1.35 x
+     1.5 = 51 damage: prowler and thug take 2 hits, gunner 3, enforcer 3, brute
+     5, terminator 7 — before the 15% headshot roll, which drops any of them
+     outright. Each kind hardens as the stages climb. */
+  if(t==='thug'){e.hp=66+stage*5;e.w=24;e.h=32;e.vx=-1.3-stage*0.05;e.dmg=12;}
+  if(t==='prowler'){e.hp=52+stage*4;e.w=34;e.h=24;e.dmg=10;e.timer=40+Math.random()*70;}
+  if(t==='brute'){e.hp=205+stage*16;e.w=40;e.h=52;e.dmg=18;e.timer=60+Math.random()*60;e.vx=-0.6;}
+  if(t==='gunner'){e.hp=104+stage*8;e.w=26;e.h=38;e.dmg=12;e.timer=50+Math.random()*50;e.shots=0;e.vx=0;}
+  if(t==='enforcer'){e.hp=140+stage*11;e.w=28;e.h=40;e.dmg=13;e.timer=35+Math.random()*35;e.shots=3;e.vx=0;}
+  /* Slower than anything else on its feet, and it telegraphs — a rocket you
+     cannot see coming is not a fight, it is a coin toss. */
+  if(t==='terminator'){e.hp=300+stage*20;e.w=36;e.h=46;e.dmg=16;e.timer=90+Math.random()*40;e.shots=1;e.vx=0;e.rocketeer=true;}
   e.maxHp=e.hp;
   /* Remember the authored footprint so the live size knob can rescale from it. */
-  e.bw=e.w;e.bh=e.h;scaleBox(e,e.bw,e.bh,t==='bat');
-  if(t==='bat')e.territory={air:true,x1:x-e.patrolRadius,x2:x+e.patrolRadius,y1:y-70,y2:y+70};
+  e.bw=e.w;e.bh=e.h;scaleBox(e,e.bw,e.bh,t==='prowler');
+  if(t==='prowler')e.territory={air:true,x1:x-e.patrolRadius,x2:x+e.patrolRadius,y1:y-70,y2:y+70};
   else assignEnemyTerritory(e);
   enemies.push(e);return e;
 }
 function assignEnemyTerritory(e){
-  if(!level||e.t==='bat')return;
+  if(!level||e.t==='prowler')return;
   var cx=e.x+e.w/2,foot=e.y+e.h,best=null,bestD=999,i,p;
   if(e.inB&&Math.abs(e.inB.gy-foot)<24){
     e.territory={air:false,x1:e.inB.x+9,x2:e.inB.x+e.inB.w-9,y:e.inB.gy,platform:null};return;
@@ -2259,10 +2274,10 @@ function holdEnemyTerritory(e){
       var same=original&&!original.air&&Math.abs(foot-original.y)<4&&e.x+e.w>original.x1&&e.x<original.x2;
       if(same){e.y=original.y-e.h;e.vy=0;e.blastLoose=0;}
       else e.fallDead=true;
-    } else if(e.t==='bat'&&e.blastLoose<=0){
+    } else if(e.t==='prowler'&&e.blastLoose<=0){
       e.baseX=e.x;e.baseY=e.y;
       e.territory={air:true,x1:e.x-e.patrolRadius,x2:e.x+e.patrolRadius,y1:e.y-70,y2:e.y+70};
-    } else if(e.t!=='bat'&&e.blastLoose<=0){
+    } else if(e.t!=='prowler'&&e.blastLoose<=0){
       e.blastLoose=1; // remain in fall physics until landing or leaving the world
     }
     return;
@@ -2322,7 +2337,7 @@ function explode(x,y,radius,dmg,fromPlayer){
       if(ed<radius){
         damageEnemy(e,dmg);
         if(!e.dead){
-          var falloff=1-ed/radius,invD=1/Math.max(1,ed),mass=e.t==='cat'?.62:e.t==='weasel'?.82:1;
+          var falloff=1-ed/radius,invD=1/Math.max(1,ed),mass=e.t==='brute'?.62:e.t==='terminator'?.68:e.t==='gunner'?.82:1;
           var blast=(4.2+falloff*6.8)*mass;
           e.vx+=dx*invD*blast;e.vy=(-3.8-falloff*5.4)*mass;e.onGround=false;
           e.blastLoose=85;
@@ -2358,23 +2373,25 @@ function damageEnemy(e,d){
   if(e.miniBoss&&e.hp>0)updateMiniBossPhase(e,P.x+P.w/2,P.y+P.h/2);
   addPart(e.x+e.w/2,e.y+e.h/2,rnd(-2,2),rnd(-3,-0.5),'#c8202c',22,3,0.3);
   if(e.hp<=0){
-    e.dead=true;score+=(e.t==='cat'?300:e.t==='bat'?150:100);
+    e.dead=true;score+=(e.t==='brute'?300:e.t==='terminator'?420:e.t==='prowler'?150:100);
     countObjectiveElimination(e);
-    gore(e.x+e.w/2,e.y+e.h/2,e.t==='cat'?18:11);
-    burst(e.x+e.w/2,e.y+e.h/2,e.t==='cat'?'#e0954a':e.t==='bat'?'#7b57a8':'#a6a6b0',9,4);
+    gore(e.x+e.w/2,e.y+e.h/2,e.t==='brute'?18:e.t==='terminator'?16:11);
+    burst(e.x+e.w/2,e.y+e.h/2,e.t==='brute'?'#e0954a':e.t==='prowler'?'#7b57a8':'#a6a6b0',9,4);
     SFX.enemyDeath(e.t,!!e.miniBoss);
     // What a mini-boss is really carrying is its token.
     if(e.miniBoss)items.push({x:e.x+e.w/2-ITEM_D/2,y:e.y-6,w:ITEM_D,h:ITEM_D,kind:'token',bob:0});
     /* What falls off a body. The bigger the thing you killed the better the odds
        of a gun rather than a clip for one you already carry; a mouse is worth a
        handful of rounds and not much else. */
-    var gunOdds=e.t==='cat'?0.55:e.t==='lizard'?0.34:e.t==='weasel'?0.24:0.10;
+    /* A cat carrying a rocket is carrying a rocket. */
+    var gunOdds=e.t==='terminator'?0.85:e.t==='brute'?0.55:e.t==='enforcer'?0.34:e.t==='gunner'?0.24:0.10;
     var roll=Math.random();
     if(roll<gunOdds)
-      items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'weapon',wep:rollWeapon(),bob:0});
+      items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'weapon',
+                  wep:e.t==='terminator'?'bazooka':rollWeapon(),bob:0});
     else if(roll<gunOdds+0.30)
       items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'ammo',wep:rollWeapon(),bob:0});
-    else if(e.t==='bat')items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
+    else if(e.t==='prowler')items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
     else if(roll<gunOdds+0.43)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'cheese',bob:0});
     else if(roll<gunOdds+0.50)items.push({x:e.x,y:e.y,w:ITEM_D,h:ITEM_D,kind:'nade',bob:0});
   }
@@ -3060,7 +3077,7 @@ function doStomp(e){
        reloading, which is the fast way to take one down with him. */
     d=(e.maxHp*(miniRecovering(e)?0.20:0.11))/MINI_ARMOUR;
   }
-  else if(e.t!=='mouse')d=playerDmg(d);                      // Rocco lands heavier
+  else if(e.t!=='thug')d=playerDmg(d);                      // Rocco lands heavier
   var lethal=(e.hp-d<=0);
   damageEnemy(e,d);
   e.squash=10;e.touchCd=26;e.vx*=0.3;
@@ -3149,7 +3166,7 @@ function miniTactics(e,pcx,pcy){
     e.miniMove=-0.85;
     return;
   }
-  if(e.t!=='bat'&&e.onGround&&e.evadeCd<=0&&incomingShot(e)){
+  if(e.t!=='prowler'&&e.onGround&&e.evadeCd<=0&&incomingShot(e)){
     // A round on the way in gets jumped, and an enraged boss jumps sideways out of the lane.
     e.vy=miniEnraged(e)?-8.4:-7.2;e.onGround=false;
     e.evadeCd=miniEnraged(e)?52:78;
@@ -3158,7 +3175,7 @@ function miniTactics(e,pcx,pcy){
   }
 }
 function miniClimb(e,pcx,pcy){
-  if(!miniHunting(e)||e.t==='bat')return;
+  if(!miniHunting(e)||e.t==='prowler')return;
   if(e.climbCd>0)e.climbCd--;
   var ecy=e.y+e.h/2,rise=ecy-pcy,dx=Math.abs(pcx-(e.x+e.w/2));
   if(e.onGround&&rise>34&&dx<420&&e.climbCd<=0){
@@ -3256,12 +3273,12 @@ function updateMiniBossPhase(e,pcx,pcy){
   e.specialCd--;
   if(e.specialCd>0)return;
   e.specialCd=105;e.specialT=32;var cx=e.x+e.w/2,cy=e.y+e.h/2,dir=pcx<cx?-1:1;
-  if(e.t==='mouse'){
+  if(e.t==='thug'){
     e.vx=dir*7.2;e.vy=-3.5;e.onGround=false;burst(cx,cy,'#ffcf55',16,4);tone(190,.18,'sawtooth',.05,70);
-  } else if(e.t==='bat'){
+  } else if(e.t==='prowler'){
     for(var bn=-1;bn<=1;bn++)nades.push({x:cx,y:cy,vx:dir*(2.4+Math.abs(bn)),vy:-4.8+bn*1.5,life:145,r:8,mine:false,sp:0});
     tone(270,.16,'square',.055,95);
-  } else if(e.t==='weasel'){
+  } else if(e.t==='gunner'){
     aimedShot(cx+dir*18,cy,pcx,pcy-58,7.2,{dmg:16,r:5,life:155,pistol:true});
     aimedShot(cx+dir*18,cy,pcx,pcy,7.5,{dmg:16,r:5,life:155,pistol:true});
     aimedShot(cx+dir*18,cy,pcx,pcy+58,7.2,{dmg:16,r:5,life:155,pistol:true});noise(.12,.08,2500);
@@ -3272,7 +3289,7 @@ function updateMiniBossPhase(e,pcx,pcy){
   }
   /* Everything that empties a magazine has to fill it again. Rockets take the
      longest, which is exactly why rolling through them pays. */
-  e.recoverT=e.t==='cat'?96:e.t==='bat'?78:72;
+  e.recoverT=e.t==='brute'?96:e.t==='terminator'?104:e.t==='prowler'?78:72;
   e.retreatT=0;
   tone(120,.18,'triangle',.03,90);
 }
@@ -3293,10 +3310,10 @@ function updateEnemies(){
            longer exists, so the health has to carry the whole duel on its own. */
         ne.hp=Math.max(Math.round(ne.hp*12),1500+stage*110);ne.dmg=Math.round(ne.dmg*1.85);
         ne.bw=Math.round(ne.bw*1.28);ne.bh=Math.round(ne.bh*1.28);
-        scaleBox(ne,ne.bw,ne.bh,s.t==='bat');
+        scaleBox(ne,ne.bw,ne.bh,s.t==='prowler');
         ne.patrolRadius*=1.35;
         ne.baseY=ne.y;ne.miniPhase=1;ne.specialCd=75;ne.specialT=0;ne.maxHp=ne.hp;
-        if(s.t!=='bat')assignEnemyTerritory(ne);
+        if(s.t!=='prowler')assignEnemyTerritory(ne);
         /* A mini-boss owns the ground it spawned on and nothing beyond it. The
            leash caps both the chase and the patrol, so backing out of the zone
            is always a way to disengage, heal up and come back. */
@@ -3323,7 +3340,7 @@ function updateEnemies(){
     miniClimb(e,pcx,pcy);
     miniTactics(e,pcx,pcy);
     if(e.blastLoose>0){
-      e.vy+=e.t==='bat'?0.18:0.55;e.vx*=0.992;
+      e.vy+=e.t==='prowler'?0.18:0.55;e.vx*=0.992;
       collidePlatforms(e,true,true);holdEnemyTerritory(e);
       if(e.fallDead||e.y>640){
         if(e.miniBoss){e.fallDead=false;e.blastLoose=0;recoverEnemyTerritory(e);continue;}
@@ -3332,7 +3349,7 @@ function updateEnemies(){
       }
       continue;
     }
-    if(e.t==='mouse'){
+    if(e.t==='thug'){
       var dir=pcx<ecx?-1:1,dist=Math.abs(pcx-ecx);
       if(setEnemyEngaged(e,dist,e.miniBoss?520:190,e.miniBoss?650:270,e.miniBoss?180:90)){
         e.facing=dir;
@@ -3344,7 +3361,7 @@ function updateEnemies(){
       } else {e.state='patrol';patrolGround(e,1.05+stage*0.025);}
       e.vy+=0.55;moveGroundEnemy(e,true,true);
       if(e.y>640){recoverEnemyTerritory(e);continue;}
-    } else if(e.t==='bat'){
+    } else if(e.t==='prowler'){
       var tx=pcx-ecx,ty=(P.y-70)-e.y;
       var batDist=Math.hypot(tx,pcy-ecy);
       if(setEnemyEngaged(e,batDist,e.miniBoss?560:330,e.miniBoss?680:430,300)){
@@ -3366,7 +3383,7 @@ function updateEnemies(){
         nades.push({x:ecx,y:e.y+e.h,vx:e.vx*0.6,vy:1.2,life:150,r:7,mine:false,sp:0});
         tone(290,0.06,'triangle',0.03,170);
       }
-    } else if(e.t==='weasel'||e.t==='lizard'){
+    } else if(e.t==='gunner'||e.t==='enforcer'||e.t==='terminator'){
       var dw=pcx-ecx, adw=Math.abs(dw);
       e.facing=dw<0?-1:1;
       if(e.perch){
@@ -3395,6 +3412,13 @@ function updateEnemies(){
           if(e.miniBoss&&miniEnraged(e)){
             if(adw>105)e.vx=e.facing*2.05*e.miniMove;
             else e.vx*=.55;
+          } else if(e.rocketeer){
+            /* Heavy and deliberate. It backs off if you crowd it and otherwise
+               plants itself — it is the one thing on the street that does not
+               chase, because it does not have to. */
+            if(adw<210)e.vx=-e.facing*0.95;
+            else if(adw>430)e.vx=e.facing*0.8;
+            else e.vx*=0.6;
           } else if(adw<150)e.vx=-e.facing*1.7*(e.miniMove||1);
           else if(adw>300)e.vx=e.facing*1.7*(e.miniMove||1);
           else e.vx*=0.72;
@@ -3403,13 +3427,26 @@ function updateEnemies(){
         e.timer--;
         if(e.engaged&&e.timer<=0&&adw<440&&Math.abs(pcy-ecy)<170){
           if(e.shots>0){
-            e.shots--;e.timer=10;
-            aimedShot(ecx+e.facing*15,e.y+13,pcx,pcy-4,6.4,{dmg:12,r:4,life:150,pistol:true});
-            addLight(ecx+e.facing*20,e.y+13,72,'#ffe08a',7);
-            tone(700,0.05,'square',0.035,260);noise(0.05,0.05,2400);
+            e.shots--;
+            if(e.rocketeer){
+              /* One rocket, slow enough to run out from under, and the wind-up
+                 before it is what makes that possible — see the art, which
+                 lights the tube while e.timer is inside the last stretch. */
+              e.timer=170+Math.random()*70;
+              aimedShot(ecx+e.facing*22,e.y+16,pcx,pcy-6,4.5,
+                        {dmg:26,r:7,life:220,rocket:true});
+              addLight(ecx+e.facing*28,e.y+16,130,'#ffb15a',12);
+              tone(150,0.16,'sawtooth',0.05,60);noise(0.18,0.06,900);
+              e.vx-=e.facing*1.4;                                  // the launch shoves it back
+            } else {
+              e.timer=10;
+              aimedShot(ecx+e.facing*15,e.y+13,pcx,pcy-4,6.4,{dmg:12,r:4,life:150,pistol:true});
+              addLight(ecx+e.facing*20,e.y+13,72,'#ffe08a',7);
+              tone(700,0.05,'square',0.035,260);noise(0.05,0.05,2400);
+            }
           } else {
-            e.shots=e.t==='lizard'?5:e.miniBoss&&miniEnraged(e)?4:stage>5?3:2;
-            e.timer=(e.t==='lizard'?48:64+Math.random()*46)*(e.miniAttackRate||1);
+            e.shots=e.rocketeer?1:e.t==='enforcer'?5:e.miniBoss&&miniEnraged(e)?4:stage>5?3:2;
+            e.timer=(e.rocketeer?96+Math.random()*50:e.t==='enforcer'?48:64+Math.random()*46)*(e.miniAttackRate||1);
             if(e.miniBoss){e.retreatT=28;e.recoverT=Math.max(e.recoverT||0,34);}   // shoot, then break off
           }
         }
@@ -3503,9 +3540,9 @@ function updateBoss(){
       if(boss.timer<=0){
         var alive=0,z;for(z=0;z<enemies.length;z++)if(!enemies[z].dead)alive++;
         if(alive<7){
-          spawnEnemy('mouse',cam.x+40,380);
-          spawnEnemy('mouse',cam.x+view.w-60,380);
-          spawnEnemy('bat',bcx,140);
+          spawnEnemy('thug',cam.x+40,380);
+          spawnEnemy('thug',cam.x+view.w-60,380);
+          spawnEnemy('prowler',bcx,140);
         }
         tone(500,0.2,'square',0.05,210);
         boss.state='idle';boss.timer=50;
@@ -5163,9 +5200,41 @@ function drawBrotherPaths(x,y,face,broIdx,aim,walk,prone,inAir,alpha,wep,fireT,m
 
 // Front-facing portraits are used only on character select. Keeping this separate
 // preserves the readable side silhouettes used by gameplay and the title scene.
-function drawBrotherPortrait(x,y,broIdx,scale){
+function drawBrotherPortrait(x,y,broIdx,scale,band,cardW){
   /* The card shows the same front view the game turns to when he stands still,
      so choosing a rat and playing one look like the same rat. */
+  /* The painted figure if it is here, the drawn one if it is not. Scale is set
+     from the card's own height so both brothers fill the same box whatever
+     their pictures happen to measure, and Rocco keeps his edge in width
+     because he is the wider of the two. */
+  if(selectReady(broIdx)){
+    /* Fill the gap between the HP line and the name, leaving a little air top
+       and bottom. Rocco is drawn to the full height of it and Vinnie to a bit
+       under, because Rocco is the bigger brother and the cards are the one
+       place the two of them are seen side by side.
+
+       They also need different width room. Both pictures are cropped tight, so
+       matching their heights alone would say nothing about build — but Rocco is
+       posed with his arms out and Vinnie is not, so his cap is far wider and
+       his picture is allowed to be the broad one. */
+    var pic=selectArt[broIdx];
+    var bandH=band||126*scale, pad=bandH*0.07;
+    var ph=(bandH-pad*2)*(broIdx===0?1:0.86);
+    var pw=pic.naturalWidth/pic.naturalHeight*ph;
+    var cap=(cardW||96*scale)*(broIdx===0?0.80:0.52);
+    if(pw>cap){ph*=cap/pw;pw=cap;}
+    g.save();g.translate(x,y);
+    /* Light behind him and shadow beneath: the two things that stop a cut-out
+       floating in front of whatever it was pasted onto. */
+    g.fillStyle=rad(g,0,-ph*0.52,pw*0.10,pw*0.86,
+      [[0,'rgba(255,214,150,.16)'],[0.55,'rgba(255,190,120,.05)'],[1,'rgba(0,0,0,0)']]);
+    g.beginPath();g.arc(0,-ph*0.52,pw*0.86,0,6.283);g.fill();
+    g.fillStyle='rgba(0,0,0,.42)';ell(g,0,-pad,pw*0.40,pw*0.095);g.fill();
+    g.fillStyle='rgba(0,0,0,.26)';ell(g,0,-pad,pw*0.56,pw*0.14);g.fill();
+    g.drawImage(pic,-pw/2,-ph-pad,pw,ph);
+    g.restore();
+    return;
+  }
   var front=RIG_VIEWS[broIdx].front;
   if(USE_RIG_ART&&rigReady(front)){
     var A=RIG_ANCHOR[front],im=rigArt[front];
@@ -5987,6 +6056,15 @@ var avatarArt=[new Image(),new Image()];
 avatarArt[0].src=RIG_DIR+'rocco-avatar.png';
 avatarArt[1].src=RIG_DIR+'vinnie-avatar.png';
 function avatarReady(i){var a=avatarArt[i];return !!(a&&a.complete&&a.naturalWidth);}
+/* The painted full-body figures, for the character-select cards. Same reasoning
+   as the avatars: this is a still picture on a menu, not the rig — it never
+   moves and never aims, so it does not wait on USE_RIG_ART. Produced by
+   scripts/cut-select.py, which takes the white paper edge off them and grades
+   them down to sit in the game's palette rather than on top of it. */
+var selectArt=[new Image(),new Image()];
+selectArt[0].src=RIG_DIR+'rocco-select.png';
+selectArt[1].src=RIG_DIR+'vinnie-select.png';
+function selectReady(i){var a=selectArt[i];return !!(a&&a.complete&&a.naturalWidth);}
 /* The pause button is a DOM element pinned to the top-right corner, and only on
    a touch device in landscape — the same condition the stylesheet shows it on.
    The HUD asks here how much of that corner is spoken for. matchMedia keeps its
@@ -6456,9 +6534,9 @@ function drawTitle(){
     g.strokeStyle='#160b0a';g.lineWidth=Math.max(5,w*0.009);g.lineJoin='round';g.stroke();
     var ts=Math.min(w*0.125,72);
     g.save();g.translate(w/2,logoY+ts*0.18);g.rotate(-0.035);
-    txt('RATATATATA!',3,4,ts,'#160b0a','center');txt('RATATATATA!',0,0,ts,'#d63825','center');g.restore();
+    txt('RATZ & CATZ',3,4,ts,'#160b0a','center');txt('RATZ & CATZ',0,0,ts,'#d63825','center');g.restore();
   }
-  comicCaption('RAT BROS: RODENT RECKONING',w/2,logoY+ry+26,Math.min(20,w*0.034),false);
+  comicCaption('THE CATMAN RUNS THESE STREETS',w/2,logoY+ry+26,Math.min(20,w*0.034),false);
   /* The story goes at the bottom, over the cobbles, where nobody is standing. */
   if(lit){
     g.fillStyle=lin(g,0,h*0.70,0,h,[[0,'rgba(4,6,10,0)'],[1,'rgba(4,6,10,.88)']]);
@@ -6483,9 +6561,9 @@ function drawTitle(){
     g.restore();
     P.bro=savedBro;P.weapon=savedWeapon;P.fireT=savedFire;
   }
-  comicCaption('A RUTHLESS EXTERMINATION COMPANY TOOK THEIR FATHER.',w/2,h*0.845,
+  comicCaption('THE CATMAN’S MOB TOOK THEIR FATHER OFF THIS STREET.',w/2,h*0.845,
     Math.min(13,w*0.019),true);
-  comicCaption('NOW THE RAT BROS ARE COMING FOR PAYBACK.',w/2,h*0.878,
+  comicCaption('TONIGHT THE RATZ COME TO COLLECT.',w/2,h*0.878,
     Math.min(13,w*0.019),true);
   if(Math.floor(tick/26)%2===0)
     txt('PRESS ANY KEY TO CONTINUE',w/2,h*0.945,Math.min(22,w*0.052),'#efe6d2','center');
@@ -6539,10 +6617,24 @@ function modeBoxes(){
   for(i=0;i<n;i++)out.push({x:x0+i*(bw+gap),y:y,w:bw,h:bh});
   return out;
 }
+/* The alley plate behind a menu. Darker than on the title screen, because a
+   menu is a wall of type and the picture is there to place you, not to be
+   looked at. Falls back to the flat gradient the screens always had. */
+function menuBackdrop(w,h,dim){
+  if(alleyArt.complete&&alleyArt.naturalWidth){
+    drawCover(alleyArt,0,0,w,h,0.5,0.40);
+    g.fillStyle='rgba(5,7,11,'+(dim===undefined?0.74:dim)+')';
+    g.fillRect(0,0,w,h);
+    g.fillStyle=lin(g,0,0,0,h,[[0,'rgba(4,6,10,.55)'],[0.45,'rgba(4,6,10,.10)'],[1,'rgba(4,6,10,.72)']]);
+    g.fillRect(0,0,w,h);
+  } else {
+    g.fillStyle=lin(g,0,0,0,h,[[0,'#0c1014'],[1,'#05080a']]);g.fillRect(0,0,w,h);
+  }
+}
 function drawMode(){
   var w=view.cssW,h=view.cssH,i,mobile=matchMedia('(pointer:coarse)').matches;
-  g.fillStyle=lin(g,0,0,0,h,[[0,'#0c1014'],[1,'#05080a']]);g.fillRect(0,0,w,h);
-  txt('RAT BROS',w/2,h*0.17,Math.min(38,w*0.082),'#e8c25a','center');
+  menuBackdrop(w,h,0.72);
+  txt('RATZ & CATZ',w/2,h*0.17,Math.min(38,w*0.082),'#e8c25a','center');
   txt('ONE RAT, OR TWO?',w/2,h*0.17+26,Math.min(14,w*0.032),'#7d8a70','center');
   var boxes=modeBoxes();
   var label=['PLAY LOCAL','CREATE GAME','JOIN GAME','SELECT LEVEL'];
@@ -6585,7 +6677,7 @@ function leaveSelect(){
 }
 function drawSelect(){
   var w=view.cssW,h=view.cssH,i,mobile=matchMedia('(pointer:coarse)').matches;
-  g.fillStyle=lin(g,0,0,0,h,[[0,'#0c1014'],[1,'#05080a']]);g.fillRect(0,0,w,h);
+  menuBackdrop(w,h,0.82);
   txt('CHOOSE YOUR RAT',w/2,h*0.13,Math.min(34,w*0.078),'#e8c25a','center');
   txt(mobile?'TAP A RAT TO CHOOSE':'joystick \u2190 \u2192 to pick \u2022 B to deploy',w/2,h*0.13+22,Math.min(13,w*0.032),'#7d8a70','center');
   if(Net.on()){if(lobbyCopied>0)lobbyCopied--;drawLobbyBanner();}
@@ -6598,24 +6690,40 @@ function drawSelect(){
   for(i=0;i<2;i++){
     var cx=w*0.05+i*(w*0.48),sel=(selIdx===i),B=BROS[i];
     var peerOn=Net.on()&&Net.peerHere&&Net.peerBro===i;
+    /* A heavy frame, and the card darkened at its own edges. A picture dropped
+       onto a flat panel reads as a sticker; give the panel some depth and a
+       thick surround and the figure is standing inside it instead. */
+    var hue=sel?seatHue[mySeat]:(peerOn?seatHue[peerSeat]:'#2c3230');
+    g.fillStyle='rgba(7,9,13,.86)';rr(g,cx,cy,cw,ch,10);g.fill();
     g.fillStyle=sel?hexA(seatHue[mySeat],0.15):(peerOn?hexA(seatHue[peerSeat],0.10):'rgba(255,255,255,.03)');
-    rr(g,cx,cy,cw,ch,8);g.fill();
-    g.strokeStyle=sel?seatHue[mySeat]:(peerOn?seatHue[peerSeat]:'#2c3230');g.lineWidth=sel||peerOn?3:1.5;
-    rr(g,cx,cy,cw,ch,8);g.stroke();
+    rr(g,cx,cy,cw,ch,10);g.fill();
+    // inner shadow, so the middle of the card sits forward of its corners
+    g.save();rr(g,cx,cy,cw,ch,10);g.clip();
+    g.fillStyle=rad(g,cx+cw/2,cy+ch*0.46,Math.min(cw,ch)*0.22,Math.max(cw,ch)*0.62,
+      [[0,'rgba(0,0,0,0)'],[1,'rgba(0,0,0,.55)']]);
+    g.fillRect(cx,cy,cw,ch);
+    g.restore();
+    g.strokeStyle=hexA(hue,sel||peerOn?0.30:0.16);g.lineWidth=sel||peerOn?9:6;
+    rr(g,cx,cy,cw,ch,10);g.stroke();
+    g.strokeStyle=hue;g.lineWidth=sel||peerOn?3.5:2;
+    rr(g,cx,cy,cw,ch,10);g.stroke();
+    g.strokeStyle=hexA(sel||peerOn?'#f2dfad':'#7d8a70',sel||peerOn?0.42:0.20);g.lineWidth=1;
+    rr(g,cx+6,cy+6,cw-12,ch-12,6);g.stroke();
     if(peerOn&&!sel){rr(g,cx-4,cy-4,cw+8,ch+8,10);g.strokeStyle=hexA(seatHue[peerSeat],0.45);g.lineWidth=2;g.stroke();}
     if(Net.on()){
       if(sel)seatTag('P'+mySeat,cx+12,cy+12,seatHue[mySeat],cw);
       if(peerOn)seatTag('P'+peerSeat,cx+cw-12,cy+12,seatHue[peerSeat],cw,true);
     }
     // Portrait artwork occupies only the safe area between HP and the name block.
-    var portraitTop=cy+ch*.13,portraitBottom=cy+ch*.76;
-    var portraitScale=Math.min(cw*.76/96,(portraitBottom-portraitTop)/126);
-    drawBrotherPortrait(cx+cw/2,portraitBottom,i,portraitScale);
-    txt(B.name,cx+cw/2,cy+ch*0.80,Math.min(24,cw*0.16),sel?'#e8c25a':'#a8a08e','center');
-    txt(B.full.replace(B.name,'').trim()||B.name,cx+cw/2,cy+ch*0.855,Math.min(11,cw*0.075),
+    /* Name, nickname and what he does — the three things you choose on. The
+       wardrobe line is gone, and the picture has taken the room it was using. */
+    var portraitTop=cy+ch*.115,portraitBottom=cy+ch*.815;
+    var portraitScale=Math.min(cw*.90/96,(portraitBottom-portraitTop)/126);
+    drawBrotherPortrait(cx+cw/2,portraitBottom,i,portraitScale,portraitBottom-portraitTop,cw);
+    txt(B.name,cx+cw/2,cy+ch*0.862,Math.min(26,cw*0.17),sel?'#e8c25a':'#a8a08e','center');
+    txt(B.full.replace(B.name,'').trim()||B.name,cx+cw/2,cy+ch*0.917,Math.min(11.5,cw*0.078),
       sel?'#cfc4ad':'#7d8a70','center');
-    txt(B.tag,cx+cw/2,cy+ch*0.915,Math.min(10.5,cw*0.072),'#7d8a70','center');
-    txt(B.perk,cx+cw/2,cy+ch*0.975,Math.min(10.5,cw*0.072),sel?'#8fbf6a':'#5c6b4a','center');
+    txt(B.perk,cx+cw/2,cy+ch*0.972,Math.min(10.5,cw*0.072),sel?'#8fbf6a':'#5c6b4a','center');
     txt('HP '+B.maxHp,cx+cw/2,cy+20,Math.min(15,cw*0.10),'#cfc4ad','center');
   }
   if(mobile){
@@ -6755,7 +6863,7 @@ function drawPad(){
   // branding
   pg.fillStyle='rgba(255,255,255,.92)';
   pg.font='italic '+Math.min(15,h*0.13)+'px Impact,sans-serif';pg.textAlign='left';
-  pg.fillText('RATATATATA!',fx+fw*0.055,fy+fh*0.26);
+  pg.fillText('RATZ & CATZ',fx+fw*0.055,fy+fh*0.26);
   pg.fillStyle='rgba(255,255,255,.55)';
   pg.font=Math.min(9,h*0.075)+'px Impact,sans-serif';
   pg.fillText('SEWER ASSAULT',fx+fw*0.055,fy+fh*0.38);
@@ -7042,7 +7150,7 @@ function render(){
     var e=enemies[i];
     if(e.x-cam.x<-90||e.x-cam.x>view.w+90)continue;
     if((e.inB||null)!==(P.inB||null))continue;
-    if(e.t!=='bat'){var gy=groundYAt(level,e.x+e.w/2);if(gy!==null&&Math.abs(gy-(e.y+e.h))<60)shadowBlob(e.x+e.w/2,gy+2,e.w*0.55,0.32);}
+    if(e.t!=='prowler'){var gy=groundYAt(level,e.x+e.w/2);if(gy!==null&&Math.abs(gy-(e.y+e.h))<60)shadowBlob(e.x+e.w/2,gy+2,e.w*0.55,0.32);}
     if(e.hidden)continue;
     if(e.objective&&level.objective&&!level.objective.taskDone){
       g.fillStyle='#e8c25a';g.font='bold 17px Impact,sans-serif';g.textAlign='center';
@@ -7056,10 +7164,10 @@ function render(){
       g.font='bold 13px Impact,sans-serif';g.textAlign='center';
       g.fillText(miniRecovering(e)?'RELOADING':e.name,e.x+e.w/2,e.y-18);g.textAlign='left';
     }
-    if(e.t==='mouse')drawMouseThug(e);
-    else if(e.t==='bat')drawBatBomber(e);
-    else if(e.t==='weasel')drawWeasel(e);
-    else if(e.t==='lizard')drawLizard(e);
+    if(e.t==='thug')drawMouseThug(e);
+    else if(e.t==='prowler')drawBatBomber(e);
+    else if(e.t==='gunner')drawWeasel(e);
+    else if(e.t==='enforcer')drawLizard(e);
     else drawCatBrute(e);
   }
   if(boss){shadowBlob(boss.x+boss.w/2,472,boss.w*0.52,0.42);drawBoss();}
